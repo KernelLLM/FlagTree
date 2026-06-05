@@ -77,4 +77,3 @@ def Dsa_RemotePointersOp : Dsa_Op<"remote_pointers", [Pure]> {
 }
 
 #endif // TLE_DSA_OPS
-

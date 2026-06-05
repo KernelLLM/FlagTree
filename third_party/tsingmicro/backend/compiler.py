@@ -32,6 +32,7 @@ def _get_libc_root() -> str:
         raise Exception("LIB_C_ROOT is not set.")
     return path
 
+
 def _get_core_dialects_to_mk_pass_arg() -> str:
     value = os.getenv("PRECISION_MODE", "0").strip()
     if value not in ("0", "1", "2"):
@@ -79,30 +80,28 @@ def compile_accelerator(src, metadata, o_path):
             tx8_lib = txda_tools.get_tx8_deps_path("rcs1fw-rtt/lib")
             # Build shared library for simulator or hardware
             if os.getenv("USE_SIM_MODE", "0").lower() in ("1", "true", "yes"):
-                subprocess.check_call(
-                    [
-                        clang_path,
-                        "-shared",
-                        "-O2",
-                        f"-fuse-ld={lld_path}",
-                        "-nostdlib",
-                        "-nostartfiles",
-                        "-Wl,--allow-shlib-undefined",
-                        "-Wl,--no-dynamic-linker",
-                        # FIXME: Hardcoded path
-                        f"{o_path}",
-                        f"-L{libvr_path}",
-                        f"-L{tx8_lib}",
-                        "-Wl,--whole-archive",
-                        "-lvr",  # Wrapper API of Tx81 intrinsic
-                        "-ltriton_cmodel",
-                        "-ltx8be_op_cmodel",
-                        "-Wl,--no-whole-archive",
-                        "-lm",
-                        "-o",
-                        dst_path,
-                    ]
-                )
+                subprocess.check_call([
+                    clang_path,
+                    "-shared",
+                    "-O2",
+                    f"-fuse-ld={lld_path}",
+                    "-nostdlib",
+                    "-nostartfiles",
+                    "-Wl,--allow-shlib-undefined",
+                    "-Wl,--no-dynamic-linker",
+                    # FIXME: Hardcoded path
+                    f"{o_path}",
+                    f"-L{libvr_path}",
+                    f"-L{tx8_lib}",
+                    "-Wl,--whole-archive",
+                    "-lvr",  # Wrapper API of Tx81 intrinsic
+                    "-ltriton_cmodel",
+                    "-ltx8be_op_cmodel",
+                    "-Wl,--no-whole-archive",
+                    "-lm",
+                    "-o",
+                    dst_path,
+                ])
             else:
                 # Link wrapper, kernel with Tx81 crt and intrinsics(libinstr_rcs1.a)
                 gcc_args = [
@@ -500,7 +499,7 @@ class TXDAOptions:
     cluster_dims: tuple = (1, 1, 1)
     shared: bool = False
     allow_fp8e4nv: bool = False
-    allowed_dot_input_precisions: Tuple[str] = ("ieee",)
+    allowed_dot_input_precisions: Tuple[str] = ("ieee", )
     sanitize_overflow: bool = True
     supported_fp8_dtypes: Tuple[str] = ("fp8e5", "fp8e4b15", "fp8e4nv")
     deprecated_fp8_dtypes: Tuple[str] = ()
@@ -514,6 +513,7 @@ class TXDAOptions:
 
 
 class TXDABackend(BaseBackend):
+
     @staticmethod
     def supports_target(target: GPUTarget):
         return target.backend == "txda"

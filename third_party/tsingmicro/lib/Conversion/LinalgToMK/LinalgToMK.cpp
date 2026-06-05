@@ -49,7 +49,7 @@ static bool preservesIntegerPrecision(Type elementType, int precisionMode) {
   }
 }
 
-bool isConstantValue(Value &v, double targetValue, bool isApprox=false) {
+bool isConstantValue(Value &v, double targetValue, bool isApprox = false) {
   auto constOp = v.getDefiningOp<arith::ConstantOp>();
   if (!constOp) {
     return false;
@@ -2225,8 +2225,7 @@ struct CastElementwiseOpIOToFloatPattern
       if (inputType.getNumElements() < 8)
         return failure();
 
-      if (preservesIntegerPrecision(inputType.getElementType(),
-                                    precisionMode))
+      if (preservesIntegerPrecision(inputType.getElementType(), precisionMode))
         return failure();
 
       auto outputType =
@@ -2318,8 +2317,7 @@ struct CastElementwiseOpIOToFloatPattern
     return failure();
   }
 
-  CastElementwiseOpIOToFloatPattern(MLIRContext *context,
-                                    int precisionMode)
+  CastElementwiseOpIOToFloatPattern(MLIRContext *context, int precisionMode)
       : OpRewritePattern<linalg::GenericOp>(context),
         precisionMode(precisionMode) {}
 
@@ -2718,9 +2716,9 @@ struct GeluFusionPattern : OpRewritePattern<linalg::GenericOp> {
     } else {
       // Match the mul op: (extf(x) * scale)
       auto extfInput = isErfScaleTensor(mulErfRhs) ? mulErfLhs : mulErfRhs;
-      auto extfInputGenericOp =
-        extfInput.getDefiningOp<linalg::GenericOp>();
-      if (!extfInputGenericOp || !checkGenericOp<arith::ExtFOp>(extfInputGenericOp)) {
+      auto extfInputGenericOp = extfInput.getDefiningOp<linalg::GenericOp>();
+      if (!extfInputGenericOp ||
+          !checkGenericOp<arith::ExtFOp>(extfInputGenericOp)) {
         return false;
       } else {
         Value nestedInput1 = extfInputGenericOp.getInputs()[0];
@@ -2787,7 +2785,8 @@ struct GeluFusionPattern : OpRewritePattern<linalg::GenericOp> {
         if (!isAddAndMulOp(lhsGenericOp, rhsGenericOp)) {
           return linalg::GenericOp();
         } else {
-          // match case : mul (mul(lhs * rhs) * add (lhs1 *rhs1)), extf already done at before.
+          // match case : mul (mul(lhs * rhs) * add (lhs1 *rhs1)), extf already
+          // done at before.
           return checkGenericOp<arith::MulFOp>(lhsGenericOp) ? lhsGenericOp
                                                              : rhsGenericOp;
         }
@@ -2859,10 +2858,11 @@ struct GeluFusionPattern : OpRewritePattern<linalg::GenericOp> {
     if (input1 != input) {
       // If the inputs of the mul ops are not the same, we cannot match the gelu
       // pattern.
-      auto extfInput = isTanhScaledTensor(nestedMulInput1) ? nestedMulInput2 : nestedMulInput1;
-      auto extfInputGenericOp =
-        extfInput.getDefiningOp<linalg::GenericOp>();
-      if (!extfInputGenericOp || !checkGenericOp<arith::ExtFOp>(extfInputGenericOp)) {
+      auto extfInput = isTanhScaledTensor(nestedMulInput1) ? nestedMulInput2
+                                                           : nestedMulInput1;
+      auto extfInputGenericOp = extfInput.getDefiningOp<linalg::GenericOp>();
+      if (!extfInputGenericOp ||
+          !checkGenericOp<arith::ExtFOp>(extfInputGenericOp)) {
         return false;
       } else {
         Value nestedInput1 = extfInputGenericOp.getInputs()[0];
@@ -3073,8 +3073,7 @@ struct TanhOpRewrite : public OpRewritePattern<linalg::GenericOp> {
   bool matchFixedTanh(linalg::GenericOp op) const {
     // match addVV
     auto addOfTanh = op.getInputs()[0];
-    auto addOfTanhGenericOp =
-        addOfTanh.getDefiningOp<linalg::GenericOp>();
+    auto addOfTanhGenericOp = addOfTanh.getDefiningOp<linalg::GenericOp>();
     if (!addOfTanhGenericOp ||
         !checkGenericOp<arith::AddFOp>(addOfTanhGenericOp)) {
       return false;
@@ -3098,8 +3097,7 @@ struct TanhOpRewrite : public OpRewritePattern<linalg::GenericOp> {
     // match LessThenVS(x, 44.3)
     Value lessThenVSInput1 = lessThenVSGenericOp.getInput();
     auto lessThenVSInput2 = lessThenVSGenericOp.getValue();
-    if (!isTanhMaxScale(lessThenVSInput2) ||
-        (lessThenVSInput1 != input)) {
+    if (!isTanhMaxScale(lessThenVSInput2) || (lessThenVSInput1 != input)) {
       return false;
     }
     // match mulVS(LessThenVS, 44.3)
@@ -3112,8 +3110,10 @@ struct TanhOpRewrite : public OpRewritePattern<linalg::GenericOp> {
     // match LessThenVS(LessThenVS, 1.0)
     auto lessThenVS2Input1 = lessThenVS2GenericOp.getInput();
     auto lessThenVS2Input2 = lessThenVS2GenericOp.getValue();
-    auto lessThenVS1GenericOp = lessThenVS2Input1.getDefiningOp<mk::LessThenVS>();
-    if ((lessThenVS1GenericOp != lessThenVSGenericOp) || !isOneScale(lessThenVS2Input2)) {
+    auto lessThenVS1GenericOp =
+        lessThenVS2Input1.getDefiningOp<mk::LessThenVS>();
+    if ((lessThenVS1GenericOp != lessThenVSGenericOp) ||
+        !isOneScale(lessThenVS2Input2)) {
       return false;
     }
     return true;
@@ -3149,7 +3149,8 @@ public:
 
     auto isInputGreaterMaxVal =
         rewriter
-            .create<mk::LessThenVS>(loc, resultType, isInputLessMaxVal, oneVal, emptyTensor)
+            .create<mk::LessThenVS>(loc, resultType, isInputLessMaxVal, oneVal,
+                                    emptyTensor)
             ->getResult(0);
 
     auto inputMulMask = buildLinalgElementwise<arith::MulFOp>(
@@ -3157,7 +3158,8 @@ public:
 
     auto maxTensorWithMask =
         rewriter
-            .create<mk::MulVS>(loc, resultType, isInputGreaterMaxVal, maxVal, emptyTensor)
+            .create<mk::MulVS>(loc, resultType, isInputGreaterMaxVal, maxVal,
+                               emptyTensor)
             ->getResult(0);
 
     auto inputMulMaskAddMax = buildLinalgElementwise<arith::AddFOp>(
@@ -3953,8 +3955,8 @@ struct DenseConstantToFillPattern
     auto splatValue = denseAttr.getSplatValue<Attribute>();
     Value scalar = rewriter.create<arith::ConstantOp>(
         loc, elemType, cast<TypedAttr>(splatValue));
-    Value empty = rewriter.create<tensor::EmptyOp>(
-        loc, resultType.getShape(), elemType);
+    Value empty =
+        rewriter.create<tensor::EmptyOp>(loc, resultType.getShape(), elemType);
     Value fill =
         rewriter.create<linalg::FillOp>(loc, scalar, empty).getResult(0);
     rewriter.replaceOp(op, fill);
@@ -3962,12 +3964,12 @@ struct DenseConstantToFillPattern
   }
 };
 
-struct DenseConstantToInsertPattern
-    : OpConversionPattern<arith::ConstantOp> {
+struct DenseConstantToInsertPattern : OpConversionPattern<arith::ConstantOp> {
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(arith::ConstantOp op, OpAdaptor /*adaptor*/,
-                                ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(arith::ConstantOp op, OpAdaptor /*adaptor*/,
+                  ConversionPatternRewriter &rewriter) const override {
     auto tensorType = dyn_cast<RankedTensorType>(op.getType());
     if (!tensorType)
       return failure();
@@ -3988,8 +3990,8 @@ struct DenseConstantToInsertPattern
 
     Location loc = op.getLoc();
 
-    Value result = rewriter.create<tensor::EmptyOp>(
-        loc, tensorType.getShape(), elemType);
+    Value result =
+        rewriter.create<tensor::EmptyOp>(loc, tensorType.getShape(), elemType);
 
     SmallVector<int64_t> shape(tensorType.getShape());
     int64_t rank = tensorType.getRank();
@@ -4008,15 +4010,13 @@ struct DenseConstantToInsertPattern
       Value scalar;
       if (isa<IndexType>(elemType)) {
         auto intAttr = cast<IntegerAttr>(attr);
-        scalar = rewriter.create<arith::ConstantIndexOp>(
-            loc, intAttr.getInt());
+        scalar = rewriter.create<arith::ConstantIndexOp>(loc, intAttr.getInt());
       } else {
-        scalar = rewriter.create<arith::ConstantOp>(
-            loc, elemType, cast<TypedAttr>(attr));
+        scalar = rewriter.create<arith::ConstantOp>(loc, elemType,
+                                                    cast<TypedAttr>(attr));
       }
 
-      result = rewriter.create<tensor::InsertOp>(
-          loc, scalar, result, indices);
+      result = rewriter.create<tensor::InsertOp>(loc, scalar, result, indices);
 
       ++linear;
     }

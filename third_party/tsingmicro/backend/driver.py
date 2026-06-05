@@ -1176,8 +1176,8 @@ class TXDALauncher(object):
         log_level = logger_to_custom_level_number(logger)
         logger.info(f"{self.func_name} launch card:{device_id} begin")
         launchRes = self.launch(device_id, self.metadata.so_key, self.metadata.kernel_path, self.func_name,
-                                txda_tools.is_dump_args_profile(), txda_tools.get_dump_dir(), log_level, 
-                                gridX, gridY, gridZ, stream, function, *args, **kwargs)
+                                txda_tools.is_dump_args_profile(), txda_tools.get_dump_dir(), log_level, gridX, gridY,
+                                gridZ, stream, function, *args, **kwargs)
         if launchRes.res != 0:
             logger.error(f"launch error code:{launchRes.res}")
         logger.info(f"{self.func_name} launch card:{device_id} end")

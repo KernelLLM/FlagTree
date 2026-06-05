@@ -173,15 +173,13 @@ static LogicalResult getCoordsFromShardIdValue(PatternRewriter &rewriter,
   return success();
 }
 
-static LogicalResult extractRemoteInfoFromPtr(PatternRewriter &rewriter,
-                                              Location loc, Value ptrLike,
-                                              SmallVector<Value, 4> &coords,
-                                              Value &basePtrLike,
-                                              DenseI32ArrayAttr *meshPhysicalIdsOut = nullptr) {
-  if (auto remotePtrOp =
-          ptrLike.getDefiningOp<mlir::dsa::RemotePointersOp>()) {
-    if (failed(getCoordsFromShardIdValue(rewriter, loc, remotePtrOp.getShardId(),
-                                         coords)))
+static LogicalResult
+extractRemoteInfoFromPtr(PatternRewriter &rewriter, Location loc, Value ptrLike,
+                         SmallVector<Value, 4> &coords, Value &basePtrLike,
+                         DenseI32ArrayAttr *meshPhysicalIdsOut = nullptr) {
+  if (auto remotePtrOp = ptrLike.getDefiningOp<mlir::dsa::RemotePointersOp>()) {
+    if (failed(getCoordsFromShardIdValue(rewriter, loc,
+                                         remotePtrOp.getShardId(), coords)))
       return failure();
     basePtrLike = remotePtrOp.getSrc();
     if (meshPhysicalIdsOut)
@@ -213,12 +211,11 @@ struct DsaDistributedBarrierToMkPattern
     DenseI32ArrayAttr meshPhysicalIds = op.getGroupMaskAttr();
     DenseI32ArrayAttr meshShape = op.getGroupShapeAttr();
 
-    if (meshPhysicalIds && meshShape &&
-        !meshPhysicalIds.asArrayRef().empty()) {
+    if (meshPhysicalIds && meshShape && !meshPhysicalIds.asArrayRef().empty()) {
       // Subgroup barrier: carry mesh topology through the pipeline via a
       // dedicated DistributeBarrierOp, leaving the plain BarrierOp untouched.
-      rewriter.create<mlir::mk::DistributeBarrierOp>(
-          loc, meshPhysicalIds, meshShape);
+      rewriter.create<mlir::mk::DistributeBarrierOp>(loc, meshPhysicalIds,
+                                                     meshShape);
     } else {
       // No group attributes → plain full-cluster barrier.
       rewriter.create<mlir::mk::BarrierOp>(loc);
@@ -248,10 +245,12 @@ struct DsaRemoteLoadToMkPattern : public OpRewritePattern<triton::LoadOp> {
 
     auto resultType = dyn_cast<RankedTensorType>(loadOp.getResult().getType());
     if (!resultType)
-      return loadOp->emitRemark("remote load currently expects ranked tensor result");
+      return loadOp->emitRemark(
+          "remote load currently expects ranked tensor result");
     for (int64_t s : resultType.getShape()) {
       if (ShapedType::isDynamic(s))
-        return loadOp->emitRemark("remote load with dynamic shape not supported");
+        return loadOp->emitRemark(
+            "remote load with dynamic shape not supported");
     }
 
     Value dstBuffer = rewriter.create<tensor::EmptyOp>(
@@ -275,15 +274,15 @@ struct DsaRemoteStoreToMkPattern : public OpRewritePattern<triton::StoreOp> {
     Value basePtrLike = storeOp.getPtr();
     DenseI32ArrayAttr meshPhysicalIds;
     if (failed(extractRemoteInfoFromPtr(rewriter, loc, storeOp.getPtr(),
-                                        sendCoords, basePtrLike, &meshPhysicalIds)))
+                                        sendCoords, basePtrLike,
+                                        &meshPhysicalIds)))
       return failure();
 
     if (storeOp.getMask())
       return storeOp->emitRemark("masked remote store not supported");
 
-    Value dstAddrI64 =
-        getOrCreatePtrLikeAddrI64(rewriter, loc, basePtrLike,
-                                  storeOp.getOperation());
+    Value dstAddrI64 = getOrCreatePtrLikeAddrI64(rewriter, loc, basePtrLike,
+                                                 storeOp.getOperation());
     rewriter.create<mk::RemoteStoreOp>(loc, sendCoords[0], sendCoords[1],
                                        sendCoords[2], sendCoords[3], dstAddrI64,
                                        storeOp.getValue(), meshPhysicalIds);
@@ -412,7 +411,8 @@ struct DsaRemotePointersToTritonPattern
       if (!shardTy || shardTy.getShape() != srcTy.getShape()) {
         auto offsetTy =
             RankedTensorType::get(srcTy.getShape(), offset.getType());
-        offset = rewriter.create<triton::SplatOp>(op.getLoc(), offsetTy, offset);
+        offset =
+            rewriter.create<triton::SplatOp>(op.getLoc(), offsetTy, offset);
       }
     }
     auto addPtr = rewriter.create<triton::AddPtrOp>(op.getLoc(), op.getType(),
@@ -428,15 +428,16 @@ struct DsaRemotePointersToTritonPattern
 void mlir::triton::populateTLEToMKConversionPatterns(
     RewritePatternSet &patterns) {
   // Highest benefit (3): local load/store → memref ops.
-    // These MUST fire before any pattern that would produce !tt.ptr types.
-    patterns.add<DsaLocalLoadToMemrefPattern, DsaLocalStoreToMemrefPattern>(
-        patterns.getContext());
+  // These MUST fire before any pattern that would produce !tt.ptr types.
+  patterns.add<DsaLocalLoadToMemrefPattern, DsaLocalStoreToMemrefPattern>(
+      patterns.getContext());
 
-    // Benefit 2: remote load/store → mk ops.
-    patterns.add<DsaRemoteLoadToMkPattern, DsaRemoteStoreToMkPattern>(
-        patterns.getContext());
+  // Benefit 2: remote load/store → mk ops.
+  patterns.add<DsaRemoteLoadToMkPattern, DsaRemoteStoreToMkPattern>(
+      patterns.getContext());
 
-    // Benefit 1: remaining remote_pointers / barrier.
-    patterns.add<DsaRemotePointersToTritonPattern,
-                 DsaDistributedBarrierToMkPattern>(patterns.getContext());
+  // Benefit 1: remaining remote_pointers / barrier.
+  patterns
+      .add<DsaRemotePointersToTritonPattern, DsaDistributedBarrierToMkPattern>(
+          patterns.getContext());
 }

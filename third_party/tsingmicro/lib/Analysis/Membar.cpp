@@ -18,8 +18,7 @@ using namespace mlir;
 
 static bool isIntersectedMap(const BlockInfo::IntervalMapT &lhsIntervalSet,
                              const BlockInfo::IntervalMapT &rhsIntervalSet,
-                             MembarFilterFn filter,
-                             MembarHazardKind kind) {
+                             MembarFilterFn filter, MembarHazardKind kind) {
   for (auto &lhs : lhsIntervalSet)
     for (auto &rhs : rhsIntervalSet)
       if (lhs.first.intersects(rhs.first))
@@ -170,8 +169,7 @@ bool isPureAddressOp(Operation *op) {
   return false;
 }
 
-static void collectTx81Accesses(Operation *op,
-                                SmallVector<Value> &reads,
+static void collectTx81Accesses(Operation *op, SmallVector<Value> &reads,
                                 SmallVector<Value> &writes) {
   // Prefer MemoryEffectOpInterface if present.
   if (auto iface = dyn_cast<MemoryEffectOpInterface>(op)) {
