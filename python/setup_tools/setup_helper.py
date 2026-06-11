@@ -421,7 +421,7 @@ cache.store(
     file="tsingmicro-llvm21-glibc2.30-glibcxx3.4.28-python3.10-x64",
     condition=("tsingmicro" == flagtree_backend),
     url=
-    "https://baai-cp-web.ks3-cn-beijing.ksyuncs.com/trans/tsingmicro-llvm21-glibc2.30-glibcxx3.4.28-python3.10-x64_v0.4.0.tar.gz",
+    "https://baai-cp-web.ks3-cn-beijing.ksyuncs.com/trans/tsingmicro-llvm21-glibc2.30-glibcxx3.4.28-python3.10-x64_v0.6.0.tar.gz",
     pre_hook=lambda: check_env('LLVM_SYSPATH'),
     post_hook=set_llvm_env,
 )
@@ -429,7 +429,7 @@ cache.store(
 cache.store(
     file="tx8_deps",
     condition=("tsingmicro" == flagtree_backend),
-    url="https://baai-cp-web.ks3-cn-beijing.ksyuncs.com/trans/tx8_depends_dev_20260309_173649_v0.5.0.tar.gz",
+    url="https://baai-cp-web.ks3-cn-beijing.ksyuncs.com/trans/tx8_depends_dev_20260507_104051_v0.6.0.tar.gz",
     pre_hook=lambda: check_env('TX8_DEPS_ROOT'),
     post_hook=lambda path: set_env({
         'TX8_DEPS_ROOT': path,
