@@ -125,6 +125,14 @@ def _ttir_to_coreir(mod, num_stages=2):
             "--one-shot-bufferize", "--convert-bufferization-to-memref", "--materialize-strided-linalg-inputs", "--cse",
             "--canonicalize"
         ]
+        if pipeline_flag is not None:
+            args.append(pipeline_flag)
+            args.append("--mk-loop-bound-canonicalize")
+            args.append("--cse")
+            args.append("--canonicalize")
+        	global GATHER_SCATTER_ASYNC_ENABLE
+        	GATHER_SCATTER_ASYNC_ENABLE = True
+
         if os.getenv("TRITON_DEBUG", "0") == "1":
             args.append("--mlir-print-debuginfo")
         if os.getenv("MLIR_ENABLE_DUMP", "0") == "1":
