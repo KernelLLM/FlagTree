@@ -36,6 +36,7 @@ def dsa_shift_n_gemm_kernel(
     BLOCK_K: tl.constexpr,
     SUB_N: tl.constexpr,
     TILE_NUM: tl.constexpr,
+    MESH: tl.constexpr,
 ):
     # Use tle.shard_id() to obtain the current tile's physical id.
     pid = tle.shard_id(MESH, axis=0)
@@ -131,6 +132,7 @@ def run():
         BLOCK_K=BLOCK_K,
         SUB_N=SUB_N,
         TILE_NUM=TILE_NUM,
+        MESH=MESH,
     )
     a_f32 = a.cpu().float()
     b_f32 = b.cpu().float()
