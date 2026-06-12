@@ -43,7 +43,7 @@ def _get_core_dialects_to_mk_pass_arg() -> str:
 # Build a accelerator controller ELF
 def compile_accelerator(src, metadata, o_path):
     # TODO : cache mechanism
-    name = f"kernel"
+    name = "kernel"
     key = hashlib.sha256(src.encode("utf-8")).hexdigest()
     cache = get_cache_manager(key)
     cache_path = cache.get_file(f"{name}.so")
@@ -130,8 +130,8 @@ def _ttir_to_coreir(mod, num_stages=2):
             args.append("--mk-loop-bound-canonicalize")
             args.append("--cse")
             args.append("--canonicalize")
-        	global GATHER_SCATTER_ASYNC_ENABLE
-        	GATHER_SCATTER_ASYNC_ENABLE = True
+            global GATHER_SCATTER_ASYNC_ENABLE
+            GATHER_SCATTER_ASYNC_ENABLE = True
 
         if os.getenv("TRITON_DEBUG", "0") == "1":
             args.append("--mlir-print-debuginfo")
