@@ -11,7 +11,7 @@ flagtree_submodules = {
                  dst_path=os.path.join(flagtree_configs.flagtree_submodule_dir, "triton_shared")),
     "flir":
     tools.Module(name="flir", url="https://github.com/tsingmicro-public-e/flir.git",
-                 commit_id="bfcf3a72b956ad8229b4c345a46ea629885b17e5",  # branch: feature/tsingmicro-sync
+                 commit_id="4b83be6aa31fdba28fc1d8e927479ca68281c035",  # branch: feature/tsingmicro-sync
                  dst_path=os.path.join(flagtree_configs.flagtree_submodule_dir, "flir")),
 }
 
