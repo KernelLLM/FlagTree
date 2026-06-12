@@ -4,17 +4,6 @@ import triton
 import triton.language as tl
 from triton.experimental import tle
 
-# 1. 确认 triton 版本
-print(triton.__version__)
-
-# 2. 确认 tle 模块是否存在
-print(dir(triton.experimental))
-
-# 3. 如果 tle 存在，看它里面有什么
-import triton.experimental.tle as tle
-
-print(dir(tle))
-
 TILE_NUM = 16
 M = 4096
 K = 1024
