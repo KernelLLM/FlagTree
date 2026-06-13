@@ -75,7 +75,7 @@ def get_hook_instance(hook_name):
 
 
 def enable_flagtree_third_party(name):
-    if name in ["triton_shared"]:
+    if name in ["triton_shared", "flagcx"]:
         return os.environ.get(f"USE_{name.upper()}", 'OFF') == 'ON'
     else:
         return os.environ.get(f"USE_{name.upper()}", 'ON') == 'ON'
@@ -468,6 +468,13 @@ cache.store(
     pre_hook=lambda: check_env('LLVM_SYSPATH'),
     post_hook=set_llvm_env,
 )
+
+cache.store(file="mthreads_local_binary", condition=("mthreads" == flagtree_backend),
+            url="https://baai-cp-web.ks3-cn-beijing.ksyuncs.com/trans/mthreads_local_binary_v0.6.0.tar.gz")
+
+cache.store(files=("ld.lld", "llc"), condition=("mthreads" == flagtree_backend),
+            copy_src_path=f"{cache.dir_path}/{flagtree_backend}/mthreads_local_binary",
+            copy_dst_path=f"third_party/{flagtree_backend}/bin")
 
 # ascend
 cache.store(
