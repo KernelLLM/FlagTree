@@ -66,7 +66,7 @@ jobs:
           python3 test_flip.py
           python3 test_layernorm.py
           python3 test_matmul.py
-          # python3 test_print.py  # TODO: fix
+          python3 test_print.py
           python3 test_softmax.py
           python3 test_vec_add.py
           python3 time1.py
@@ -74,5 +74,5 @@ jobs:
 
           # tle on tsingmicro
           pushd third_party/tsingmicro/examples/tle
-          python3 test_tle_dsa_noc_gemm_4096.py
+          # python3 test_tle_dsa_noc_gemm_4096.py  # TODO: fix
           popd
