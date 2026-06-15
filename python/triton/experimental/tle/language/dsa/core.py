@@ -233,10 +233,10 @@ def local_ptr(
     # Preferred metadata source: buffered_tensor.type (survives JIT value
     # reconstruction). Keep value attrs as backward-compatibility fallback.
     remote_shard_id = getattr(buffer.type, "_tle_remote_shard_id", None)
-    _ = getattr(buffer.type, "_tle_remote_scope", None)
+    remote_scope = getattr(buffer.type, "_tle_remote_scope", None)
     if remote_shard_id is None:
         remote_shard_id = getattr(buffer, "_tle_remote_shard_id", None)
-        _ = getattr(buffer, "_tle_remote_scope", None)
+        remote_scope = getattr(buffer, "_tle_remote_scope", None)
     remote_buffer_marker = remote_shard_id is not None
 
     indices = tl._unwrap_if_constexpr(indices)
@@ -304,7 +304,8 @@ def local_ptr(
             raise RuntimeError("builder missing create_dsa_remote_pointers for remote buffers")
         shard_val = (remote_shard_id.handle if isinstance(remote_shard_id, tl.tensor) else semantic.to_tensor(
             remote_shard_id, _builder).handle)
-        remote_op = _builder.create_dsa_remote_pointers(result_ir, result_tensor.handle, shard_val)
+        remote_op = _builder.create_dsa_remote_pointers(result_ir, result_tensor.handle, shard_val,
+                                                        scope=remote_scope)
         result_tensor = tl.tensor(remote_op.get_result(0), result_ty)
 
     return result_tensor
