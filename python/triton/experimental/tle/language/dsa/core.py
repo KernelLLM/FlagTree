@@ -304,8 +304,7 @@ def local_ptr(
             raise RuntimeError("builder missing create_dsa_remote_pointers for remote buffers")
         shard_val = (remote_shard_id.handle if isinstance(remote_shard_id, tl.tensor) else semantic.to_tensor(
             remote_shard_id, _builder).handle)
-        remote_op = _builder.create_dsa_remote_pointers(result_ir, result_tensor.handle, shard_val,
-                                                        scope=remote_scope)
+        remote_op = _builder.create_dsa_remote_pointers(result_ir, result_tensor.handle, shard_val, scope=remote_scope)
         result_tensor = tl.tensor(remote_op.get_result(0), result_ty)
 
     return result_tensor
