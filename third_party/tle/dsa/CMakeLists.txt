@@ -2,15 +2,26 @@
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/dialect/include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/dialect/include)
+# TileIR dialect (FLIR) headers — tle_ir.cc creates tile.* ops
+include_directories(${CMAKE_SOURCE_DIR}/third_party/flir/include)
+include_directories(${CMAKE_BINARY_DIR}/third_party/flir/include)
 add_subdirectory(dialect)
 
 if (TRITON_BUILD_PYTHON_MODULE)
   add_triton_plugin(TritonTLE
     ${CMAKE_CURRENT_SOURCE_DIR}/tle_ir.cc
 
+    DEPENDS
+    TileIRTableGen
+    TileIRAttrDefsIncGen
+    TileIRTypesIncGen
+
     LINK_LIBS
     TleIR
+    TileIRIR
     TritonIR
+    BiShengIRHIVMDialect
+    MLIRMeshDialect
   )
 
   find_package(Python3 REQUIRED COMPONENTS Development Interpreter)
