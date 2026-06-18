@@ -26,6 +26,14 @@ from pathlib import Path
 
 import triton.runtime as runtime
 
+try:
+    from triton._C.clear_l2 import do_bench_clear
+except ImportError:
+    def do_bench_clear(*args, **kwargs):
+        raise RuntimeError(
+            "triton._C.clear_l2 is not available; ClearL2Cache was skipped at build time. "
+            "Rebuild with ASC support to use clear_l2_cache=True.")
+
 
 def get_home_dir():
     return os.getenv("TRITON_HOME", Path.home())
