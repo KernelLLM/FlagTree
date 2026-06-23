@@ -12,13 +12,13 @@ if (TRITON_BUILD_PYTHON_MODULE)
     ${CMAKE_CURRENT_SOURCE_DIR}/tle_ir.cc
 
     DEPENDS
-    TileIRTableGen
-    TileIRAttrDefsIncGen
-    TileIRTypesIncGen
+    #TileIRTableGen
+    #TileIRAttrDefsIncGen
+    #TileIRTypesIncGen
 
     LINK_LIBS
-    TleIR
-    TileIRIR
+    #TleIR
+    #TileIRIR
     TritonIR
     BiShengIRHIVMDialect
     MLIRMeshDialect
