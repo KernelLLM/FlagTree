@@ -24,7 +24,6 @@ import triton.language as tl
 # =============================================================================
 import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
 from triton.experimental.tle.language.dsa.core import (
-    tile_alloc,
     tile_copy,
     tile_to_tensor,
     tile_pipe_barrier,
@@ -77,7 +76,7 @@ PP = 2                  # ping-pong GM buffers (taskId % 2)
 #  The single-stream 3-task scheduler kernel (TileIR / tle.dsa form)
 #
 #  grid = (NUM_CORES,). Each program drives one Cube + one Vector engine.
-#  On-chip staging (L1 / L0A / L0B / L0C) is allocated with tile.alloc; DMA uses
+#  On-chip staging (L1 / L0A / L0B / L0C) is allocated with tle.dsa.alloc; DMA uses
 #  tile.copy; cross-engine ordering uses tile.set_flag / tile.wait_flag /
 #  tile.pipe_barrier. The Vector-side online-softmax state stays in registers
 #  (plain tl.* ops) since it is pure compute.
@@ -105,20 +104,20 @@ def flash_attention_fwd_3task_kernel(
     n_sub = my_count * n_iters            # flattened (output-tile x KV-block) sub-tasks
 
     # =========================================================================
-    #  ① on-chip working set  (tile.alloc -> explicit memory hierarchy)
+    #  ① on-chip working set  (tle.dsa.alloc -> explicit memory hierarchy)
     # =========================================================================
     # -- Cube side: L1 staging + L0 double buffer (slot 0 = Bmm1, slot 1 = Bmm2) --
-    q_l1 = tile_alloc([BLOCK_M, DIM], Q.dtype.element_ty, L1)
-    k_l1 = tile_alloc([BLOCK_N, DIM], Q.dtype.element_ty, L1)
-    v_l1 = tile_alloc([BLOCK_N, DIM], Q.dtype.element_ty, L1)
-    p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
+    q_l1 = tle.dsa.alloc([BLOCK_M, DIM], Q.dtype.element_ty, mem_addr_space=tle.dsa.ascend.L1)
+    k_l1 = tle.dsa.alloc([BLOCK_N, DIM], Q.dtype.element_ty, mem_addr_space=tle.dsa.ascend.L1)
+    v_l1 = tle.dsa.alloc([BLOCK_N, DIM], Q.dtype.element_ty, mem_addr_space=tle.dsa.ascend.L1)
+    p_l1 = tle.dsa.alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, mem_addr_space=tle.dsa.ascend.L1)
     # two separate L0 slots (no buffer indexing in tile-DSA): 0 = Bmm1, 1 = Bmm2
-    l0a0 = tile_alloc([BLOCK_M, DIM], Q.dtype.element_ty, L0A)
-    l0b0 = tile_alloc([DIM, BLOCK_N], Q.dtype.element_ty, L0B)
-    l0c0 = tile_alloc([BLOCK_M, BLOCK_N], tl.float32, L0C)
-    l0a1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)
-    l0b1 = tile_alloc([BLOCK_N, DIM], Q.dtype.element_ty, L0B)
-    l0c1 = tile_alloc([BLOCK_M, DIM], tl.float32, L0C)
+    l0a0 = tle.dsa.alloc([BLOCK_M, DIM], Q.dtype.element_ty, mem_addr_space=tle.dsa.ascend.L0A)
+    l0b0 = tle.dsa.alloc([DIM, BLOCK_N], Q.dtype.element_ty, mem_addr_space=tle.dsa.ascend.L0B)
+    l0c0 = tle.dsa.alloc([BLOCK_M, BLOCK_N], tl.float32, mem_addr_space=tle.dsa.ascend.L0C)
+    l0a1 = tle.dsa.alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, mem_addr_space=tle.dsa.ascend.L0A)
+    l0b1 = tle.dsa.alloc([BLOCK_N, DIM], Q.dtype.element_ty, mem_addr_space=tle.dsa.ascend.L0B)
+    l0c1 = tle.dsa.alloc([BLOCK_M, DIM], tl.float32, mem_addr_space=tle.dsa.ascend.L0C)
 
     # -- Vector side: O accumulator in registers (loop-carried). NOTE: the
     #    running-max / denominator / per-sub-task ring carry of the real 3-task
