@@ -28,7 +28,7 @@ from triton.experimental.tle.language.dsa.core import (
     tensor_to_tile,
 )
 from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
-    L1, L0A, L0B, L0C, UB, PIPE, sync_block_set, sync_block_wait,
+    PIPE, sync_block_set, sync_block_wait,
 )
 
 # ---- TileIR Pipe ids (== TileIRAttrDefs.td TileIR_Pipe) ---------------------
