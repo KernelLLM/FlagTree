@@ -84,11 +84,11 @@ SEM_WS3_FREE  = 5   # V->C : ws3 slot  free
 @triton.jit
 def flash_attention_fwd_3task_kernel(
     Q, K, V, Out,
-    workspace_1,   # [NUM_CORES, RING, NR, BLOCK_M, BLOCK_N]  fp16   S
-    workspace_2,   # [NUM_CORES, RING, NR, BLOCK_M, BLOCK_N]  fp16   P
-    workspace_3,   # [NUM_CORES, RING, NR, BLOCK_M, DIM]      fp16   P*V
-    workspace_4,   # [NUM_CORES, RING, NR, 2, HALF_M, 1]      fp32   r_fac (Vec1->Vec2)
-    workspace_5,   # [NUM_CORES, RING, NR, 2, HALF_M, 1]      fp32   row_sum (Vec1->Vec2)
+    workspace_s,    # [NUM_CORES, RING, NR, BLOCK_M, BLOCK_N]  fp16  S        (MM1 out)
+    workspace_p,    # [NUM_CORES, RING, NR, BLOCK_M, BLOCK_N]  fp16  P        (Vec1 out)
+    workspace_pv,   # [NUM_CORES, RING, NR, BLOCK_M, DIM]      fp16  P*V      (MM2 out)
+    workspace_rescale, # [NUM_CORES, RING, NR, 2, HALF_M, 1]      fp32  exp(m_old-m_new) (Vec1->Vec2)
+    workspace_expsum,  # [NUM_CORES, RING, NR, 2, HALF_M, 1]      fp32  sum(exp(s-m))    (Vec1->Vec2)
     sm_scale,
     B, Hq, Hkv, S,
     sQb, sQh, sQs, sQd,
@@ -155,7 +155,7 @@ def flash_attention_fwd_3task_kernel(
 
         for g in range(GT + 1):
 
-            # ===== MM1(g): S = Q*K^T for NR KV blocks -> workspace_1[cid, g%RING, :] =====
+            # ===== MM1(g): S = Q*K^T for NR KV blocks -> workspace_s[cid, g%RING, :] =====
             if g < GT:
                 tit     = g % tpt
                 tl_idx  = g // tpt
@@ -208,7 +208,7 @@ def flash_attention_fwd_3task_kernel(
 
                     tile_pipe_barrier(PIPE_M)      # wait SIG_L0C+s1
                     ws1_bp = tl.make_block_ptr(
-                        workspace_1 + (cid * (RING * NR * BLOCK_M * BLOCK_N)
+                        workspace_s + (cid * (RING * NR * BLOCK_M * BLOCK_N)
                                        + r1  * (NR * BLOCK_M * BLOCK_N)
                                        + nr  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
@@ -222,7 +222,7 @@ def flash_attention_fwd_3task_kernel(
                 if tit == tpt - 1:
                     tile_pipe_barrier(PIPE_MTE1)   # set SIG_Q free
 
-            # ===== MM2(g-1): O_part = P*V for NR blocks -> workspace_3[cid,(g-1)%RING,:] =====
+            # ===== MM2(g-1): O_part = P*V for NR blocks -> workspace_pv[cid,(g-1)%RING,:] =====
             if g >= 1:
                 gm       = g - 1
                 tit2     = gm % tpt
@@ -249,7 +249,7 @@ def flash_attention_fwd_3task_kernel(
 
                     tile_pipe_barrier(PIPE_MTE1)   # wait SIG_P_L1 free
                     ws2_bp = tl.make_block_ptr(
-                        workspace_2 + (cid * (RING * NR * BLOCK_M * BLOCK_N)
+                        workspace_p + (cid * (RING * NR * BLOCK_M * BLOCK_N)
                                        + r2  * (NR * BLOCK_M * BLOCK_N)
                                        + nr  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
@@ -276,7 +276,7 @@ def flash_attention_fwd_3task_kernel(
 
                     tile_pipe_barrier(PIPE_M)      # wait SIG_L0C+s2
                     ws3_bp = tl.make_block_ptr(
-                        workspace_3 + (cid * (RING * NR * BLOCK_M * DIM)
+                        workspace_pv + (cid * (RING * NR * BLOCK_M * DIM)
                                        + r2  * (NR * BLOCK_M * DIM)
                                        + nr  * (BLOCK_M * DIM)),
                         (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
@@ -349,7 +349,7 @@ def flash_attention_fwd_3task_kernel(
                     # load S[vid*HALF_M:(vid+1)*HALF_M, :] from ws1 GM -> UB (MTE2)
                     tile_pipe_barrier(PIPE_V)      # wait SIG_IO_UB free
                     ws1r_bp = tl.make_block_ptr(
-                        workspace_1 + (cid * (RING * NR * BLOCK_M * BLOCK_N)
+                        workspace_s + (cid * (RING * NR * BLOCK_M * BLOCK_N)
                                        + r1  * (NR * BLOCK_M * BLOCK_N)
                                        + nr  * (BLOCK_M * BLOCK_N)
                                        + vid * HALF_M * BLOCK_N),
@@ -401,11 +401,11 @@ def flash_attention_fwd_3task_kernel(
                                     + nr  * (2 * HALF_M)
                                     + vid * HALF_M)
                     rfac_bp = tl.make_block_ptr(
-                        workspace_4 + ws_rfac_base,
+                        workspace_rescale + ws_rfac_base,
                         (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
                     tl.store(rfac_bp, r_fac)
                     rsum_bp = tl.make_block_ptr(
-                        workspace_5 + ws_rfac_base,
+                        workspace_expsum + ws_rfac_base,
                         (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
                     tl.store(rsum_bp, row_sum)
 
@@ -418,12 +418,12 @@ def flash_attention_fwd_3task_kernel(
                     # P -> ws2 GM (MTE3): sub-core owns HALF_M rows
                     tile_pipe_barrier(PIPE_MTE3)   # wait SIG_S_HALF free
                     ws2w_bp = tl.make_block_ptr(
-                        workspace_2 + (cid * (RING * NR * BLOCK_M * BLOCK_N)
+                        workspace_p + (cid * (RING * NR * BLOCK_M * BLOCK_N)
                                        + r1  * (NR * BLOCK_M * BLOCK_N)
                                        + nr  * (BLOCK_M * BLOCK_N)
                                        + vid * HALF_M * BLOCK_N),
                         (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
-                    tl.store(ws2w_bp, p_tile.to(workspace_2.dtype.element_ty))
+                    tl.store(ws2w_bp, p_tile.to(workspace_p.dtype.element_ty))
                     tile_pipe_barrier(PIPE_V)      # set SIG_S_HALF
                     tile_pipe_barrier(PIPE_V)      # wait SIG_S_HALF ack
                     tile_pipe_barrier(PIPE_MTE3)   # set SIG_S_HALF free
@@ -452,7 +452,7 @@ def flash_attention_fwd_3task_kernel(
                     # load P*V[vid*HALF_M:(vid+1)*HALF_M, :] from ws3 (MTE2)
                     tile_pipe_barrier(PIPE_V)      # wait SIG_IO_UB free
                     ws3r_bp = tl.make_block_ptr(
-                        workspace_3 + (cid * (RING * NR * BLOCK_M * DIM)
+                        workspace_pv + (cid * (RING * NR * BLOCK_M * DIM)
                                        + r2  * (NR * BLOCK_M * DIM)
                                        + nr  * (BLOCK_M * DIM)
                                        + vid * HALF_M * DIM),
@@ -468,11 +468,11 @@ def flash_attention_fwd_3task_kernel(
                                      + nr  * (2 * HALF_M)
                                      + vid * HALF_M)
                     rfac_r_bp = tl.make_block_ptr(
-                        workspace_4 + ws_rfac_base2,
+                        workspace_rescale + ws_rfac_base2,
                         (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
                     r_fac = tl.load(rfac_r_bp).to(tl.float32)
                     rsum_r_bp = tl.make_block_ptr(
-                        workspace_5 + ws_rfac_base2,
+                        workspace_expsum + ws_rfac_base2,
                         (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
                     row_sum = tl.load(rsum_r_bp).to(tl.float32)
 
@@ -523,8 +523,8 @@ class _DumpOptions:
 
 def _dump_signature(nr):
     ptr = {"Q": "*fp16", "K": "*fp16", "V": "*fp16", "Out": "*fp16",
-           "workspace_1": "*fp16", "workspace_2": "*fp16", "workspace_3": "*fp16",
-           "workspace_4": "*fp32", "workspace_5": "*fp32"}
+           "workspace_s": "*fp16", "workspace_p": "*fp16", "workspace_pv": "*fp16",
+           "workspace_rescale": "*fp32", "workspace_expsum": "*fp32"}
     i32s = ["B", "Hq", "Hkv", "S",
             "sQb", "sQh", "sQs", "sQd",
             "sKb", "sKh", "sKs", "sKd",
@@ -734,23 +734,23 @@ def flash_attention_fwd(q, k, v, is_causal=False, n_ratio=8):
 
     out = torch.empty_like(q)
     # GM workspaces
-    workspace_1 = torch.empty((NUM_CORES, RING, NR, BLOCK_M, BLOCK_N),
+    workspace_s = torch.empty((NUM_CORES, RING, NR, BLOCK_M, BLOCK_N),
                               dtype=q.dtype, device=q.device)   # S
-    workspace_2 = torch.empty((NUM_CORES, RING, NR, BLOCK_M, BLOCK_N),
+    workspace_p = torch.empty((NUM_CORES, RING, NR, BLOCK_M, BLOCK_N),
                               dtype=q.dtype, device=q.device)   # P
-    workspace_3 = torch.empty((NUM_CORES, RING, NR, BLOCK_M, DIM),
+    workspace_pv = torch.empty((NUM_CORES, RING, NR, BLOCK_M, DIM),
                               dtype=q.dtype, device=q.device)   # P*V
-    # [NUM_CORES, RING, NR, 2 sub-cores, HALF_M, 1]  — r_fac and row_sum from Vec1
-    workspace_4 = torch.empty((NUM_CORES, RING, NR, 2, HALF_M, 1),
-                              dtype=torch.float32, device=q.device)  # r_fac
-    workspace_5 = torch.empty((NUM_CORES, RING, NR, 2, HALF_M, 1),
-                              dtype=torch.float32, device=q.device)  # row_sum
+    # [NUM_CORES, RING, NR, 2 sub-cores, HALF_M, 1] — written by Vec1, read by Vec2
+    workspace_rescale = torch.empty((NUM_CORES, RING, NR, 2, HALF_M, 1),
+                              dtype=torch.float32, device=q.device)  # exp(m_old - m_new)
+    workspace_expsum = torch.empty((NUM_CORES, RING, NR, 2, HALF_M, 1),
+                              dtype=torch.float32, device=q.device)  # sum(exp(s - m))
     sm_scale = (1.0 / D) ** 0.5
 
     grid = (NUM_CORES,)
     flash_attention_fwd_3task_kernel[grid](
         q, k, v, out,
-        workspace_1, workspace_2, workspace_3, workspace_4, workspace_5,
+        workspace_s, workspace_p, workspace_pv, workspace_rescale, workspace_expsum,
         sm_scale,
         B, Hq, Hkv, S,
         q.stride(0), q.stride(1), q.stride(2), q.stride(3),
