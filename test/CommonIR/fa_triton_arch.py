@@ -29,6 +29,7 @@ from triton.experimental.tle.language.dsa.core import (
 )
 from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
     PIPE, sync_block_set, sync_block_wait,
+    L1, L0A, L0B, L0C,
 )
 import triton.language.extra.cann.extension as al
 
@@ -112,17 +113,17 @@ def flash_attention_fwd_3task_kernel(
     #  On-chip buffers  (tile.alloc -> explicit memory hierarchy)
     # =========================================================================
     # -- Cube side: L1 staging + L0 double-buffer (slot 0=MM1, slot 1=MM2) --
-    q_l1 = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, "L1")
-    k_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, "L1")
-    v_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, "L1")
-    p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, "L1")
+    q_l1 = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L1)
+    k_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
+    v_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
+    p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
 
-    l0a0 = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, "L0A")  # MM1 Q
-    l0b0 = tile_alloc([DIM,     BLOCK_N], Q.dtype.element_ty, "L0B")  # MM1 K
-    l0c0 = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,         "L0C")  # MM1 out
-    l0a1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, "L0A")  # MM2 P
-    l0b1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, "L0B")  # MM2 V
-    l0c1 = tile_alloc([BLOCK_M, DIM],     tl.float32,         "L0C")  # MM2 out
+    l0a0 = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L0A)  # MM1 Q
+    l0b0 = tile_alloc([DIM,     BLOCK_N], Q.dtype.element_ty, L0B)  # MM1 K
+    l0c0 = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
+    l0a1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)  # MM2 P
+    l0b1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)  # MM2 V
+    l0c1 = tile_alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
 
     # -- Vector side (UB registers): full online-softmax state ---------------
     # acc_o uses HALF_M rows; state per (ring_slot, nr) stored as flat GM-backed
