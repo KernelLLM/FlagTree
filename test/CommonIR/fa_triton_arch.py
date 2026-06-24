@@ -84,9 +84,11 @@ SEM_WS3_FREE  = 5   # V->C : ws3 slot  free
 @triton.jit
 def flash_attention_fwd_3task_kernel(
     Q, K, V, Out,
-    workspace_1,   # [NUM_CORES, RING, NR, BLOCK_M, BLOCK_N]  fp16  S
-    workspace_2,   # [NUM_CORES, RING, NR, BLOCK_M, BLOCK_N]  fp16  P
-    workspace_3,   # [NUM_CORES, RING, NR, BLOCK_M, DIM]      fp16  P*V
+    workspace_1,   # [NUM_CORES, RING, NR, BLOCK_M, BLOCK_N]  fp16   S
+    workspace_2,   # [NUM_CORES, RING, NR, BLOCK_M, BLOCK_N]  fp16   P
+    workspace_3,   # [NUM_CORES, RING, NR, BLOCK_M, DIM]      fp16   P*V
+    workspace_4,   # [NUM_CORES, RING, NR, 2, HALF_M, 1]      fp32   r_fac (Vec1->Vec2)
+    workspace_5,   # [NUM_CORES, RING, NR, 2, HALF_M, 1]      fp32   row_sum (Vec1->Vec2)
     sm_scale,
     B, Hq, Hkv, S,
     sQb, sQh, sQs, sQd,
@@ -393,11 +395,19 @@ def flash_attention_fwd_3task_kernel(
                 tl.store(m2_bp, o)
 
                     # store r_fac and row_sum into GM ring-buffers for Vec2
+                    # layout: [NUM_CORES, RING, NR, 2, HALF_M, 1]  (dim-3: vid 0/1)
+                    ws_rfac_base = (cid * (RING * NR * 2 * HALF_M)
+                                    + r1  * (NR * 2 * HALF_M)
+                                    + nr  * (2 * HALF_M)
+                                    + vid * HALF_M)
                     rfac_bp = tl.make_block_ptr(
-                        workspace_1 + 0,   # placeholder: use separate GM ptr in real impl
+                        workspace_4 + ws_rfac_base,
                         (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-                    # (r_fac and row_sum passed to Vec2 via GM ws; for TileIR dump
-                    #  purposes they are carried as register scalars below.)
+                    tl.store(rfac_bp, r_fac)
+                    rsum_bp = tl.make_block_ptr(
+                        workspace_5 + ws_rfac_base,
+                        (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+                    tl.store(rsum_bp, row_sum)
 
                     # update running max ping-pong
                     if cur == 0:
