@@ -108,6 +108,7 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
     pm.enable_debug()
 
     # Add pass here.
+    ascend.passes.ttir.add_tileir_to_hivm(pm)
     ascend.passes.ttir.add_triton_to_structure_incubated(pm, enable_mask_fallback_conversion, optimize_dynamic_offset,
                                                          compile_on_910_95)
     ascend.passes.ttir.add_discrete_mask_access_conversion(pm, compile_on_910_95, force_simt_template)
