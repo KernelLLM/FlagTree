@@ -106,9 +106,9 @@ def flash_attention_fwd_3task_kernel(
     vid = al.sub_vec_id()   # 0 or 1 — vector sub-core index, used in both scopes
 
     # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
-    my_start = cid * q_tasks + tl.where(cid < r_tasks, cid, r_tasks)
-    my_count = q_tasks + tl.where(cid < r_tasks, 1, 0)
-    GT = my_count * tpt   # total global tasks on this core
+    my_start          = cid * q_tasks + tl.where(cid < r_tasks, cid, r_tasks)
+    my_count          = q_tasks + tl.where(cid < r_tasks, 1, 0)
+    num_global_tasks  = my_count * tpt   # total pipelined tasks on this core
 
     # =========================================================================
     #  On-chip buffers  (tile.alloc -> explicit memory hierarchy)
@@ -119,21 +119,21 @@ def flash_attention_fwd_3task_kernel(
     v_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
     p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
 
-    l0a0 = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L0A)  # MM1 Q
-    l0b0 = tile_alloc([DIM,     BLOCK_N], Q.dtype.element_ty, L0B)  # MM1 K
-    l0c0 = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
-    l0a1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)  # MM2 P
-    l0b1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)  # MM2 V
-    l0c1 = tile_alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
+    mm1_l0a = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L0A)  # MM1 Q
+    mm1_l0b = tile_alloc([DIM,     BLOCK_N], Q.dtype.element_ty, L0B)  # MM1 K
+    mm1_l0c = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
+    mm2_l0a = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)  # MM2 P
+    mm2_l0b = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)  # MM2 V
+    mm2_l0c = tile_alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
 
     # -- Vector side (UB registers): full online-softmax state ---------------
     # acc_o uses HALF_M rows; state per (ring_slot, nr) stored as flat GM-backed
     # workspaces; running max uses a ping-pong register pair (one per kv parity).
     acc_o  = tl.zeros((HALF_M, DIM), tl.float32)
-    sumexp = tl.zeros((HALF_M, 1),   tl.float32)  # running denominator l
-    # neg_sm[0/1]: running -m*scale for even/odd kv, reset each tile
-    neg_sm_0 = tl.full((HALF_M, 1), 2**30, tl.float32)
-    neg_sm_1 = tl.full((HALF_M, 1), 2**30, tl.float32)
+    softmax_denom = tl.zeros((HALF_M, 1), tl.float32)   # running denominator l
+    # neg_max_even/odd: running -max*scale for even/odd kv index, reset each tile
+    neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
+    neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
 
     # =========================================================================
     #  CUBE scope: MM1(g) and MM2(g-1) dual-issued; each task = NR MMAs.
@@ -153,137 +153,137 @@ def flash_attention_fwd_3task_kernel(
         tile_pipe_barrier(PIPE_FIX)    # SIG_L0C  slot 1 free
         tile_pipe_barrier(PIPE_MTE1)   # SIG_Q free
 
-        for g in range(GT + 1):
+        for g in range(num_global_tasks + 1):
 
             # ===== MM1(g): S = Q*K^T for NR KV blocks -> workspace_s[cid, g%RING, :] =====
-            if g < GT:
-                tit     = g % tpt
-                tl_idx  = g // tpt
-                task_id = my_start + tl_idx
-                bx      = task_id % num_seq_blocks
-                by      = (task_id // num_seq_blocks) % heads_q
-                bz      = task_id // (num_seq_blocks * heads_q)
-                kv_by   = by // gqa_group
-                r1      = g % RING
+            if g < num_global_tasks:
+                task_in_tile   = g % tpt
+                tile_idx       = g // tpt
+                output_tile_id = my_start + tile_idx
+                tile_row       = output_tile_id % num_seq_blocks
+                head_idx       = (output_tile_id // num_seq_blocks) % heads_q
+                batch_idx      = output_tile_id // (num_seq_blocks * heads_q)
+                kv_head_idx    = head_idx // gqa_group
+                ring_slot      = g % RING
 
-                # wait ws1[r1] task slot free (Vector released after Vec1)
+                # wait workspace_s[ring_slot] task slot free (Vector released after Vec1)
                 sync_block_wait("vector", "cube", SEM_WS1_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
                 # reload resident Q at the first task of each output tile
-                if tit == 0:
+                if task_in_tile == 0:
                     tile_pipe_barrier(PIPE_MTE1)   # wait SIG_Q
                     q_bp = tl.make_block_ptr(
-                        Q + bz * sQb + by * sQh, (S, DIM), (sQs, sQd),
-                        (bx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
+                        Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
+                        (tile_row * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
                     tile_copy(q_bp, q_l1, [CBM, CD])
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_Q  (Q in L1)
                     tile_pipe_barrier(PIPE_MTE2)   # wait SIG_Q ack
 
                 for nr in range(NR):
-                    kv = tit * NR + nr
-                    s1 = nr % 2
+                    kv_block_idx = task_in_tile * NR + nr
+                    l0_slot      = nr % 2
 
                     tile_pipe_barrier(PIPE_MTE1)   # wait SIG_K_L1 free
                     k_bp = tl.make_block_ptr(
-                        K + bz * sKb + kv_by * sKh, (S, DIM), (sKs, sKd),
-                        (kv * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
+                        K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
+                        (kv_block_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
                     tile_copy(k_bp, k_l1, [CBN, CD])
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_K_L1
 
-                    tile_pipe_barrier(PIPE_M)      # wait SIG_L0AB+s1
-                    tile_copy(q_l1, l0a0, [CBM, CD])
+                    tile_pipe_barrier(PIPE_M)      # wait SIG_L0AB+l0_slot
+                    tile_copy(q_l1, mm1_l0a, [CBM, CD])
 
                     tile_pipe_barrier(PIPE_MTE2)   # wait SIG_K_L1 ack
-                    tile_copy(k_l1, l0b0, [CBN, CD])  # NOTE: no transpose flag yet
+                    tile_copy(k_l1, mm1_l0b, [CBN, CD])  # NOTE: no transpose flag yet
                     tile_pipe_barrier(PIPE_MTE1)   # set SIG_K_L1 free
-                    tile_pipe_barrier(PIPE_MTE1)   # set SIG_L0AB+s1
+                    tile_pipe_barrier(PIPE_MTE1)   # set SIG_L0AB+l0_slot
 
-                    tile_pipe_barrier(PIPE_MTE1)   # wait SIG_L0AB+s1
-                    tile_pipe_barrier(PIPE_FIX)    # wait SIG_L0C+s1
-                    # S = Q*K^T  (synchronous MMA stand-in for tile.cube_launch)
-                    s_mat = tl.dot(tile_to_tensor(l0a0, writable=False),
-                                   tile_to_tensor(l0b0, writable=False))
-                    tile_pipe_barrier(PIPE_M)      # set SIG_L0AB+s1 free
-                    tile_pipe_barrier(PIPE_M)      # set SIG_L0C+s1
+                    tile_pipe_barrier(PIPE_MTE1)   # wait SIG_L0AB+l0_slot
+                    tile_pipe_barrier(PIPE_FIX)    # wait SIG_L0C+l0_slot
+                    # attn_score = Q * K^T  (synchronous MMA stand-in for tile.cube_launch)
+                    attn_score = tl.dot(tile_to_tensor(mm1_l0a, writable=False),
+                                        tile_to_tensor(mm1_l0b, writable=False))
+                    tile_pipe_barrier(PIPE_M)      # set SIG_L0AB+l0_slot free
+                    tile_pipe_barrier(PIPE_M)      # set SIG_L0C+l0_slot
 
-                    tile_pipe_barrier(PIPE_M)      # wait SIG_L0C+s1
-                    ws1_bp = tl.make_block_ptr(
+                    tile_pipe_barrier(PIPE_M)      # wait SIG_L0C+l0_slot
+                    score_store_bp = tl.make_block_ptr(
                         workspace_s + (cid * (RING * NR * BLOCK_M * BLOCK_N)
-                                       + r1  * (NR * BLOCK_M * BLOCK_N)
+                                       + ring_slot  * (NR * BLOCK_M * BLOCK_N)
                                        + nr  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                    tl.store(ws1_bp, s_mat)
-                    tile_pipe_barrier(PIPE_FIX)    # set SIG_L0C+s1 free
+                    tl.store(score_store_bp, attn_score)
+                    tile_pipe_barrier(PIPE_FIX)    # set SIG_L0C+l0_slot free
 
                 # all NR S-blocks written -> notify Vec1
                 sync_block_set("cube", "vector", SEM_WS1_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
                 # release resident Q at the last task of the tile
-                if tit == tpt - 1:
+                if task_in_tile == tpt - 1:
                     tile_pipe_barrier(PIPE_MTE1)   # set SIG_Q free
 
             # ===== MM2(g-1): O_part = P*V for NR blocks -> workspace_pv[cid,(g-1)%RING,:] =====
             if g >= 1:
-                gm       = g - 1
-                tit2     = gm % tpt
-                tl_idx2  = gm // tpt
-                task_id2 = my_start + tl_idx2
-                by2      = (task_id2 // num_seq_blocks) % heads_q
-                bz2      = task_id2 // (num_seq_blocks * heads_q)
-                kv_by2   = by2 // gqa_group
-                r2       = gm % RING
+                prev_g           = g - 1
+                task_in_tile2    = prev_g % tpt
+                tile_idx2        = prev_g // tpt
+                output_tile_id2  = my_start + tile_idx2
+                head_idx2        = (output_tile_id2 // num_seq_blocks) % heads_q
+                batch_idx2       = output_tile_id2 // (num_seq_blocks * heads_q)
+                kv_head_idx2     = head_idx2 // gqa_group
+                ring_slot2       = prev_g % RING
 
-                # wait ws2[r2] (P from Vec1) ready
+                # wait workspace_p[ring_slot2] (P from Vec1) ready
                 sync_block_wait("vector", "cube", SEM_WS2_READY, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
                 for nr in range(NR):
-                    kv2 = tit2 * NR + nr
-                    s2  = nr % 2
+                    kv_block_idx2 = task_in_tile2 * NR + nr
+                    l0_slot2      = nr % 2
 
                     tile_pipe_barrier(PIPE_MTE1)   # wait SIG_V_L1 free
                     v_bp = tl.make_block_ptr(
-                        V + bz2 * sKb + kv_by2 * sKh, (S, DIM), (sKs, sKd),
-                        (kv2 * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
+                        V + batch_idx2 * sKb + kv_head_idx2 * sKh, (S, DIM), (sKs, sKd),
+                        (kv_block_idx2 * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
                     tile_copy(v_bp, v_l1, [CBN, CD])
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_V_L1
 
                     tile_pipe_barrier(PIPE_MTE1)   # wait SIG_P_L1 free
-                    ws2_bp = tl.make_block_ptr(
+                    prob_load_bp = tl.make_block_ptr(
                         workspace_p + (cid * (RING * NR * BLOCK_M * BLOCK_N)
-                                       + r2  * (NR * BLOCK_M * BLOCK_N)
+                                       + ring_slot2  * (NR * BLOCK_M * BLOCK_N)
                                        + nr  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                    tile_copy(ws2_bp, p_l1, [CBM, CBN])
+                    tile_copy(prob_load_bp, p_l1, [CBM, CBN])
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_P_L1
 
                     tile_pipe_barrier(PIPE_MTE2)   # wait SIG_V_L1 ack
-                    tile_pipe_barrier(PIPE_M)      # wait SIG_L0AB+s2
-                    tile_copy(v_l1, l0b1, [CBN, CD])
+                    tile_pipe_barrier(PIPE_M)      # wait SIG_L0AB+l0_slot2
+                    tile_copy(v_l1, mm2_l0b, [CBN, CD])
                     tile_pipe_barrier(PIPE_MTE1)   # set SIG_V_L1 free
 
                     tile_pipe_barrier(PIPE_MTE2)   # wait SIG_P_L1 ack
-                    tile_copy(p_l1, l0a1, [CBM, CBN])
+                    tile_copy(p_l1, mm2_l0a, [CBM, CBN])
                     tile_pipe_barrier(PIPE_MTE1)   # set SIG_P_L1 free
-                    tile_pipe_barrier(PIPE_MTE1)   # set SIG_L0AB+s2
+                    tile_pipe_barrier(PIPE_MTE1)   # set SIG_L0AB+l0_slot2
 
-                    tile_pipe_barrier(PIPE_MTE1)   # wait SIG_L0AB+s2
-                    tile_pipe_barrier(PIPE_FIX)    # wait SIG_L0C+s2
-                    # O_part = P*V  (synchronous MMA stand-in)
-                    o_mat = tl.dot(tile_to_tensor(l0a1, writable=False),
-                                   tile_to_tensor(l0b1, writable=False))
-                    tile_pipe_barrier(PIPE_M)      # set SIG_L0AB+s2 free
-                    tile_pipe_barrier(PIPE_M)      # set SIG_L0C+s2
+                    tile_pipe_barrier(PIPE_MTE1)   # wait SIG_L0AB+l0_slot2
+                    tile_pipe_barrier(PIPE_FIX)    # wait SIG_L0C+l0_slot2
+                    # pv_part = P * V  (synchronous MMA stand-in for tile.cube_launch)
+                    pv_part = tl.dot(tile_to_tensor(mm2_l0a, writable=False),
+                                     tile_to_tensor(mm2_l0b, writable=False))
+                    tile_pipe_barrier(PIPE_M)      # set SIG_L0AB+l0_slot2 free
+                    tile_pipe_barrier(PIPE_M)      # set SIG_L0C+l0_slot2
 
-                    tile_pipe_barrier(PIPE_M)      # wait SIG_L0C+s2
-                    ws3_bp = tl.make_block_ptr(
+                    tile_pipe_barrier(PIPE_M)      # wait SIG_L0C+l0_slot2
+                    pv_store_bp = tl.make_block_ptr(
                         workspace_pv + (cid * (RING * NR * BLOCK_M * DIM)
-                                       + r2  * (NR * BLOCK_M * DIM)
-                                       + nr  * (BLOCK_M * DIM)),
+                                        + ring_slot2  * (NR * BLOCK_M * DIM)
+                                        + nr  * (BLOCK_M * DIM)),
                         (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-                    tl.store(ws3_bp, o_mat)
-                    tile_pipe_barrier(PIPE_FIX)    # set SIG_L0C+s2 free
+                    tl.store(pv_store_bp, pv_part)
+                    tile_pipe_barrier(PIPE_FIX)    # set SIG_L0C+l0_slot2 free
 
-                # all NR P*V blocks done -> notify Vec2; release ws2[r2]
+                # all NR P*V blocks done -> notify Vec2; release workspace_p[ring_slot2]
                 sync_block_set("cube", "vector", SEM_WS3_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
                 sync_block_set("cube", "vector", SEM_WS2_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
@@ -311,7 +311,7 @@ def flash_attention_fwd_3task_kernel(
         tile_pipe_barrier(PIPE_V)      # SIG_IO_UB free
         tile_pipe_barrier(PIPE_MTE3)   # SIG_S_HALF free
 
-        for g in range(GT + 1):
+        for g in range(num_global_tasks + 1):
 
             q_bp = tl.make_block_ptr(Q + bz * sQb + by * sQh, (S, DIM), (sQs, sQd),
                                      (bx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
@@ -333,49 +333,49 @@ def flash_attention_fwd_3task_kernel(
             # s = tl.dot(tl.load(q_bp), tl.trans(tl.load(k_bp)))
             tl.store(m1_bp, s)
 
-                # wait ws1[r1] (all NR S-blocks) ready from MM1
+                # wait workspace_s[ring_slot] (all NR score blocks) ready from MM1
                 sync_block_wait("cube", "vector", SEM_WS1_READY, PIPE.PIPE_V, PIPE.PIPE_V)
 
                 # reset running max at the first task of each output tile
-                if tit == 0:
-                    neg_sm_0 = tl.full((HALF_M, 1), 2**30, tl.float32)
-                    neg_sm_1 = tl.full((HALF_M, 1), 2**30, tl.float32)
+                if task_in_tile == 0:
+                    neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
+                    neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
 
                 for nr in range(NR):
-                    kv  = tit * NR + nr
-                    cur = kv % 2
-                    prv = 1 - cur
+                    kv_block_idx = task_in_tile * NR + nr
+                    cur_parity   = kv_block_idx % 2
+                    prv_parity   = 1 - cur_parity
 
-                    # load S[vid*HALF_M:(vid+1)*HALF_M, :] from ws1 GM -> UB (MTE2)
+                    # load score[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_s GM -> UB
                     tile_pipe_barrier(PIPE_V)      # wait SIG_IO_UB free
-                    ws1r_bp = tl.make_block_ptr(
+                    score_load_bp = tl.make_block_ptr(
                         workspace_s + (cid * (RING * NR * BLOCK_M * BLOCK_N)
-                                       + r1  * (NR * BLOCK_M * BLOCK_N)
+                                       + ring_slot  * (NR * BLOCK_M * BLOCK_N)
                                        + nr  * (BLOCK_M * BLOCK_N)
                                        + vid * HALF_M * BLOCK_N),
                         (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
-                    s_tile = tl.load(ws1r_bp).to(tl.float32)
+                    attn_score_tile = tl.load(score_load_bp).to(tl.float32)
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_IO_UB
                     tile_pipe_barrier(PIPE_MTE2)   # wait SIG_IO_UB ack
                     tile_pipe_barrier(PIPE_V)      # set SIG_IO_UB free
 
                     if IS_CAUSAL:
-                        t1  = g // tpt
-                        tid = my_start + t1
-                        bx1 = tid % num_seq_blocks
-                        q_idx  = bx1 * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
-                        kv_idx = kv * BLOCK_N + tl.arange(0, BLOCK_N)
-                        valid  = q_idx[:, None] >= kv_idx[None, :]
-                        s_tile = tl.where(valid, s_tile, float("-inf"))
+                        tile_seq_idx   = g // tpt
+                        global_tile_id = my_start + tile_seq_idx
+                        q_tile_row     = global_tile_id % num_seq_blocks
+                        q_row_idx  = q_tile_row * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
+                        kv_col_idx = kv_block_idx * BLOCK_N + tl.arange(0, BLOCK_N)
+                        causal_mask    = q_row_idx[:, None] >= kv_col_idx[None, :]
+                        attn_score_tile = tl.where(causal_mask, attn_score_tile, float("-inf"))
 
-                    # online softmax: compute new running -m*scale (ping-pong)
-                    row_max = tl.max(s_tile, axis=-1, keep_dims=True)
-                    neg_m_new = tl.minimum(-row_max * sm_scale,
-                                           tl.where(cur == 0, neg_sm_0, neg_sm_1))
-                    neg_m_prv = tl.where(cur == 0, neg_sm_1, neg_sm_0)
+                    # online softmax: compute new running -max*scale (ping-pong)
+                    block_row_max = tl.max(attn_score_tile, axis=-1, keep_dims=True)
+                    neg_max_new = tl.minimum(-block_row_max * sm_scale,
+                                             tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
+                    neg_max_prv = tl.where(cur_parity == 0, neg_max_odd, neg_max_even)
 
-                    # P = exp(sm_scale * S + neg_m_new)
-                    p_tile = tl.exp(sm_scale * s_tile + neg_m_new)
+                    # softmax_p = exp(sm_scale * score + neg_max_new)
+                    softmax_p = tl.exp(sm_scale * attn_score_tile + neg_max_new)
 
                 # P from stage1Res[pp1] -> p_l1 -> L0 slot 1
                 sync_block_wait(EVT_MTE3_MTE2[0], EVT_MTE3_MTE2[1], EVT_MTE3_MTE2[2], EVT_MTE3_MTE2[3], EVT_MTE3_MTE2[4])
@@ -394,110 +394,111 @@ def flash_attention_fwd_3task_kernel(
                 o = tl.dot(tile_to_tensor(l0a1, writable=False), tile_to_tensor(l0b1, writable=False))
                 tl.store(m2_bp, o)
 
-                    # store r_fac and row_sum into GM ring-buffers for Vec2
-                    # layout: [NUM_CORES, RING, NR, 2, HALF_M, 1]  (dim-3: vid 0/1)
-                    ws_rfac_base = (cid * (RING * NR * 2 * HALF_M)
-                                    + r1  * (NR * 2 * HALF_M)
-                                    + nr  * (2 * HALF_M)
-                                    + vid * HALF_M)
-                    rfac_bp = tl.make_block_ptr(
-                        workspace_rescale + ws_rfac_base,
+                    # store rescale and block_expsum into GM ring-buffers for Vec2
+                    # layout: [NUM_CORES, RING, NR, 2 sub-cores, HALF_M]
+                    rescale_offset = (cid * (RING * NR * 2 * HALF_M)
+                                      + ring_slot  * (NR * 2 * HALF_M)
+                                      + nr  * (2 * HALF_M)
+                                      + vid * HALF_M)
+                    rescale_store_bp = tl.make_block_ptr(
+                        workspace_rescale + rescale_offset,
                         (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-                    tl.store(rfac_bp, r_fac)
-                    rsum_bp = tl.make_block_ptr(
-                        workspace_expsum + ws_rfac_base,
+                    tl.store(rescale_store_bp, rescale)
+                    expsum_store_bp = tl.make_block_ptr(
+                        workspace_expsum + rescale_offset,
                         (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-                    tl.store(rsum_bp, row_sum)
+                    tl.store(expsum_store_bp, block_expsum)
 
                     # update running max ping-pong
-                    if cur == 0:
-                        neg_sm_0 = neg_m_new
+                    if cur_parity == 0:
+                        neg_max_even = neg_max_new
                     else:
-                        neg_sm_1 = neg_m_new
+                        neg_max_odd = neg_max_new
 
-                    # P -> ws2 GM (MTE3): sub-core owns HALF_M rows
+                    # softmax_p -> workspace_p GM (MTE3): sub-core owns HALF_M rows
                     tile_pipe_barrier(PIPE_MTE3)   # wait SIG_S_HALF free
-                    ws2w_bp = tl.make_block_ptr(
+                    prob_store_bp = tl.make_block_ptr(
                         workspace_p + (cid * (RING * NR * BLOCK_M * BLOCK_N)
-                                       + r1  * (NR * BLOCK_M * BLOCK_N)
+                                       + ring_slot  * (NR * BLOCK_M * BLOCK_N)
                                        + nr  * (BLOCK_M * BLOCK_N)
                                        + vid * HALF_M * BLOCK_N),
                         (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
-                    tl.store(ws2w_bp, p_tile.to(workspace_p.dtype.element_ty))
+                    tl.store(prob_store_bp, softmax_p.to(workspace_p.dtype.element_ty))
                     tile_pipe_barrier(PIPE_V)      # set SIG_S_HALF
                     tile_pipe_barrier(PIPE_V)      # wait SIG_S_HALF ack
                     tile_pipe_barrier(PIPE_MTE3)   # set SIG_S_HALF free
 
-                # all NR P-blocks written -> release ws1[r1]; notify MM2 ws2[r1] ready
+                # all NR P-blocks written -> release workspace_s[ring_slot]; notify MM2
                 sync_block_set("vector", "cube", SEM_WS1_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
                 sync_block_set("vector", "cube", SEM_WS2_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
             # ===== Vec2(g-1): acc_o = acc_o*r + P*V; finalize at last KV block =====
+            # ===== Vec2(g-1): acc_o = acc_o*rescale + pv_acc; finalize at last KV block =====
             if g >= 1:
-                gm   = g - 1
-                tit2 = gm % tpt
-                tl_idx2  = gm // tpt
-                task_id2 = my_start + tl_idx2
-                bx2  = task_id2 % num_seq_blocks
-                by2  = (task_id2 // num_seq_blocks) % heads_q
-                bz2  = task_id2 // (num_seq_blocks * heads_q)
-                r2   = gm % RING
+                prev_g           = g - 1
+                task_in_tile2    = prev_g % tpt
+                tile_idx2        = prev_g // tpt
+                output_tile_id2  = my_start + tile_idx2
+                tile_row2        = output_tile_id2 % num_seq_blocks
+                head_idx2        = (output_tile_id2 // num_seq_blocks) % heads_q
+                batch_idx2       = output_tile_id2 // (num_seq_blocks * heads_q)
+                ring_slot2       = prev_g % RING
 
-                # wait ws3[r2] (all NR P*V blocks) ready from MM2
+                # wait workspace_pv[ring_slot2] (all NR P*V blocks) ready from MM2
                 sync_block_wait("cube", "vector", SEM_WS3_READY, PIPE.PIPE_V, PIPE.PIPE_V)
 
                 for nr in range(NR):
-                    kv2 = tit2 * NR + nr
+                    kv_block_idx2 = task_in_tile2 * NR + nr
 
-                    # load P*V[vid*HALF_M:(vid+1)*HALF_M, :] from ws3 (MTE2)
+                    # load pv_acc[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_pv (MTE2)
                     tile_pipe_barrier(PIPE_V)      # wait SIG_IO_UB free
-                    ws3r_bp = tl.make_block_ptr(
+                    pv_load_bp = tl.make_block_ptr(
                         workspace_pv + (cid * (RING * NR * BLOCK_M * DIM)
-                                       + r2  * (NR * BLOCK_M * DIM)
-                                       + nr  * (BLOCK_M * DIM)
-                                       + vid * HALF_M * DIM),
+                                        + ring_slot2  * (NR * BLOCK_M * DIM)
+                                        + nr  * (BLOCK_M * DIM)
+                                        + vid * HALF_M * DIM),
                         (HALF_M, DIM), (DIM, 1), (0, 0), (HALF_M, DIM), (1, 0))
-                    pv_tile = tl.load(ws3r_bp).to(tl.float32)
+                    pv_acc = tl.load(pv_load_bp).to(tl.float32)
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_IO_UB
                     tile_pipe_barrier(PIPE_MTE2)   # wait SIG_IO_UB ack
                     tile_pipe_barrier(PIPE_V)      # set SIG_IO_UB free
 
-                    # load r_fac and row_sum written by Vec1 for this (r2, nr, vid) slot
-                    ws_rfac_base2 = (cid * (RING * NR * 2 * HALF_M)
-                                     + r2  * (NR * 2 * HALF_M)
-                                     + nr  * (2 * HALF_M)
-                                     + vid * HALF_M)
-                    rfac_r_bp = tl.make_block_ptr(
-                        workspace_rescale + ws_rfac_base2,
+                    # load rescale and block_expsum written by Vec1 for this slot
+                    rescale_offset2 = (cid * (RING * NR * 2 * HALF_M)
+                                       + ring_slot2  * (NR * 2 * HALF_M)
+                                       + nr  * (2 * HALF_M)
+                                       + vid * HALF_M)
+                    rescale_load_bp = tl.make_block_ptr(
+                        workspace_rescale + rescale_offset2,
                         (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-                    r_fac = tl.load(rfac_r_bp).to(tl.float32)
-                    rsum_r_bp = tl.make_block_ptr(
-                        workspace_expsum + ws_rfac_base2,
+                    rescale = tl.load(rescale_load_bp).to(tl.float32)
+                    expsum_load_bp = tl.make_block_ptr(
+                        workspace_expsum + rescale_offset2,
                         (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-                    row_sum = tl.load(rsum_r_bp).to(tl.float32)
+                    block_expsum = tl.load(expsum_load_bp).to(tl.float32)
 
-                    if kv2 == 0:
-                        # first KV block: init acc_o and sumexp directly
-                        acc_o  = pv_tile
-                        sumexp = row_sum
+                    if kv_block_idx2 == 0:
+                        # first KV block: init acc_o and softmax_denom directly
+                        acc_o         = pv_acc
+                        softmax_denom = block_expsum
                     else:
                         # rescale acc_o and accumulate
-                        r_fac_bc = tl.broadcast_to(r_fac, (HALF_M, DIM))
-                        acc_o    = acc_o * r_fac_bc + pv_tile
-                        sumexp   = sumexp * r_fac + row_sum
+                        rescale_bc    = tl.broadcast_to(rescale, (HALF_M, DIM))
+                        acc_o         = acc_o * rescale_bc + pv_acc
+                        softmax_denom = softmax_denom * rescale + block_expsum
 
-                    if kv2 == NUM_ITERS - 1:
-                        # last KV block: divide by l and write Output
-                        l_bc    = tl.broadcast_to(sumexp, (HALF_M, DIM))
-                        out_tile = (acc_o / l_bc).to(Out.dtype.element_ty)
+                    if kv_block_idx2 == NUM_ITERS - 1:
+                        # last KV block: divide by softmax denominator and write output
+                        denom_bc    = tl.broadcast_to(softmax_denom, (HALF_M, DIM))
+                        output_tile = (acc_o / denom_bc).to(Out.dtype.element_ty)
                         o_bp = tl.make_block_ptr(
-                            Out + bz2 * sOb + by2 * sOh, (S, DIM), (sOs, sOd),
-                            (bx2 * BLOCK_M + vid * HALF_M, 0), (HALF_M, DIM), (1, 0))
+                            Out + batch_idx2 * sOb + head_idx2 * sOh, (S, DIM), (sOs, sOd),
+                            (tile_row2 * BLOCK_M + vid * HALF_M, 0), (HALF_M, DIM), (1, 0))
                         tile_pipe_barrier(PIPE_V)      # wait SIG_IO_UB free (MTE3)
-                        tl.store(o_bp, out_tile)
+                        tl.store(o_bp, output_tile)
                         tile_pipe_barrier(PIPE_MTE3)   # set done
 
-                # all NR blocks consumed -> release ws3[r2]
+                # all NR blocks consumed -> release workspace_pv[ring_slot2]
                 sync_block_set("vector", "cube", SEM_WS3_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
         # ---- destroy: consume outstanding init-direction signals ----
@@ -812,9 +813,9 @@ if __name__ == "__main__":
     if not args.no_check:
         def ref(q, k, v):
             if k.shape[1] != q.shape[1]:
-                n_rep = q.shape[1] // k.shape[1]
-                k = k.repeat_interleave(n_rep, dim=1)
-                v = v.repeat_interleave(n_rep, dim=1)
+                gqa_rep = q.shape[1] // k.shape[1]
+                k = k.repeat_interleave(gqa_rep, dim=1)
+                v = v.repeat_interleave(gqa_rep, dim=1)
             return torch.nn.functional.scaled_dot_product_attention(
                 q.float(), k.float(), v.float(), is_causal=args.causal).to(torch.float16)
 
