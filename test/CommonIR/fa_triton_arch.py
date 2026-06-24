@@ -101,8 +101,7 @@ def flash_attention_fwd_3task_kernel(
     IS_CAUSAL: tl.constexpr,
 ):
     cid = tl.program_id(0)
-    with al.scope(core_mode="vector"):
-        vid = al.sub_vec_id()   # 0 or 1
+    vid = al.sub_vec_id()   # 0 or 1 — vector sub-core index, used in both scopes
 
     # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
     my_start = cid * q_tasks + tl.where(cid < r_tasks, cid, r_tasks)
@@ -174,7 +173,7 @@ def flash_attention_fwd_3task_kernel(
                     q_bp = tl.make_block_ptr(
                         Q + bz * sQb + by * sQh, (S, DIM), (sQs, sQd),
                         (bx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-                    tile_copy(tl.load(q_bp), q_l1, [CBM, CD])
+                    tile_copy(q_bp, q_l1, [CBM, CD])
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_Q  (Q in L1)
                     tile_pipe_barrier(PIPE_MTE2)   # wait SIG_Q ack
 
@@ -186,7 +185,7 @@ def flash_attention_fwd_3task_kernel(
                     k_bp = tl.make_block_ptr(
                         K + bz * sKb + kv_by * sKh, (S, DIM), (sKs, sKd),
                         (kv * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-                    tile_copy(tl.load(k_bp), k_l1, [CBN, CD])
+                    tile_copy(k_bp, k_l1, [CBN, CD])
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_K_L1
 
                     tile_pipe_barrier(PIPE_M)      # wait SIG_L0AB+s1
@@ -243,7 +242,7 @@ def flash_attention_fwd_3task_kernel(
                     v_bp = tl.make_block_ptr(
                         V + bz2 * sKb + kv_by2 * sKh, (S, DIM), (sKs, sKd),
                         (kv2 * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-                    tile_copy(tl.load(v_bp), v_l1, [CBN, CD])
+                    tile_copy(v_bp, v_l1, [CBN, CD])
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_V_L1
 
                     tile_pipe_barrier(PIPE_MTE1)   # wait SIG_P_L1 free
@@ -252,7 +251,7 @@ def flash_attention_fwd_3task_kernel(
                                        + r2  * (NR * BLOCK_M * BLOCK_N)
                                        + nr  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                    tile_copy(tl.load(ws2_bp), p_l1, [CBM, CBN])
+                    tile_copy(ws2_bp, p_l1, [CBM, CBN])
                     tile_pipe_barrier(PIPE_MTE2)   # set SIG_P_L1
 
                     tile_pipe_barrier(PIPE_MTE2)   # wait SIG_V_L1 ack
