@@ -395,6 +395,7 @@ if(TRITON_BUILD_PYTHON_MODULE)
     MLIRIndexToLLVM
     MLIRGPUToROCDLTransforms
     MLIRUBToLLVM
+    MLIRFuncInlinerExtension
 
     # LLVM
     LLVMPasses
