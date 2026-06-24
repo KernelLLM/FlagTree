@@ -733,19 +733,24 @@ def flash_attention_fwd(q, k, v, is_causal=False, n_ratio=8):
     r_tasks = block_num % NUM_CORES
 
     out = torch.empty_like(q)
-    # GM workspaces: [NUM_CORES, RING, NR, BLOCK_M, BLOCK_N / DIM]
+    # GM workspaces
     workspace_1 = torch.empty((NUM_CORES, RING, NR, BLOCK_M, BLOCK_N),
-                              dtype=q.dtype, device=q.device)  # S
+                              dtype=q.dtype, device=q.device)   # S
     workspace_2 = torch.empty((NUM_CORES, RING, NR, BLOCK_M, BLOCK_N),
-                              dtype=q.dtype, device=q.device)  # P
+                              dtype=q.dtype, device=q.device)   # P
     workspace_3 = torch.empty((NUM_CORES, RING, NR, BLOCK_M, DIM),
-                              dtype=q.dtype, device=q.device)  # P*V
+                              dtype=q.dtype, device=q.device)   # P*V
+    # [NUM_CORES, RING, NR, 2 sub-cores, HALF_M, 1]  — r_fac and row_sum from Vec1
+    workspace_4 = torch.empty((NUM_CORES, RING, NR, 2, HALF_M, 1),
+                              dtype=torch.float32, device=q.device)  # r_fac
+    workspace_5 = torch.empty((NUM_CORES, RING, NR, 2, HALF_M, 1),
+                              dtype=torch.float32, device=q.device)  # row_sum
     sm_scale = (1.0 / D) ** 0.5
 
     grid = (NUM_CORES,)
     flash_attention_fwd_3task_kernel[grid](
         q, k, v, out,
-        workspace_1, workspace_2, workspace_3,
+        workspace_1, workspace_2, workspace_3, workspace_4, workspace_5,
         sm_scale,
         B, Hq, Hkv, S,
         q.stride(0), q.stride(1), q.stride(2), q.stride(3),
