@@ -24,6 +24,7 @@ import triton.language as tl
 # =============================================================================
 import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
 from triton.experimental.tle.language.dsa.core import (
+    tile_copy,
     tile_to_tensor,
     tile_pipe_barrier,
     tensor_to_tile,
