@@ -24,6 +24,7 @@ import triton.language as tl
 # =============================================================================
 import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
 from triton.experimental.tle.language.dsa.core import (
+    tile_to_tensor,
     tile_pipe_barrier,
     tensor_to_tile,
 )
@@ -161,7 +162,7 @@ def flash_attention_fwd_3task_kernel(
             # tensors loaded from GM, not on the !tile.* staging buffers above.
             m1_bp = tl.make_block_ptr(mm1Res + cid * (PP * BLOCK_M * BLOCK_N) + cur_pp * (BLOCK_M * BLOCK_N),
                                       (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-            s = tl.dot(tle.dsa.to_tensor(l0a0, writable=False), tle.dsa.to_tensor(l0b0, writable=False))
+            s = tl.dot(tile_to_tensor(l0a0, writable=False), tile_to_tensor(l0b0, writable=False))                           
             # s = tl.dot(tl.load(q_bp), tl.trans(tl.load(k_bp)))
             tl.store(m1_bp, s)
 
@@ -229,7 +230,7 @@ def flash_attention_fwd_3task_kernel(
                 # O_part = P·V : mma -> l0c1 -> FIX -> mm2Res[pp1]  (synchronous stand-in).
                 m2_bp = tl.make_block_ptr(mm2Res + cid * (PP * BLOCK_M * DIM) + pp1 * (BLOCK_M * DIM),
                                           (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-                o = tl.dot(tle.dsa.to_tensor(l0a1, writable=False), tle.dsa.to_tensor(l0b1, writable=False))
+                o = tl.dot(tile_to_tensor(l0a1, writable=False), tile_to_tensor(l0b1, writable=False))
                 tl.store(m2_bp, o)
 
         # ─── 6) ProcessVec2(k-2): rescale acc_o + add mm2Res[prev2], finalize ─
