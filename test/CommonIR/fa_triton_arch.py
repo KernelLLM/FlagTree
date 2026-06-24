@@ -462,16 +462,24 @@ def flash_attention_fwd_3task_kernel(
                     tile_pipe_barrier(PIPE_MTE2)   # wait SIG_IO_UB ack
                     tile_pipe_barrier(PIPE_V)      # set SIG_IO_UB free
 
+                    # load r_fac and row_sum written by Vec1 for this (r2, nr, vid) slot
+                    ws_rfac_base2 = (cid * (RING * NR * 2 * HALF_M)
+                                     + r2  * (NR * 2 * HALF_M)
+                                     + nr  * (2 * HALF_M)
+                                     + vid * HALF_M)
+                    rfac_r_bp = tl.make_block_ptr(
+                        workspace_4 + ws_rfac_base2,
+                        (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+                    r_fac = tl.load(rfac_r_bp).to(tl.float32)
+                    rsum_r_bp = tl.make_block_ptr(
+                        workspace_5 + ws_rfac_base2,
+                        (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+                    row_sum = tl.load(rsum_r_bp).to(tl.float32)
+
                     if kv2 == 0:
-                        # first KV block: init acc_o and sumexp
+                        # first KV block: init acc_o and sumexp directly
                         acc_o  = pv_tile
-                        sumexp = tl.sum(
-                            tl.exp(sm_scale * tl.zeros((HALF_M, BLOCK_N), tl.float32)),
-                            axis=-1, keep_dims=True)
-                        # NOTE: real r_fac/row_sum come from Vec1 ring-buffers;
-                        # here we use local register carries for TileIR dump.
-                        r_fac   = tl.full((HALF_M, 1), 1.0, tl.float32)
-                        row_sum = tl.full((HALF_M, 1), 1.0, tl.float32)
+                        sumexp = row_sum
                     else:
                         # rescale acc_o and accumulate
                         r_fac_bc = tl.broadcast_to(r_fac, (HALF_M, DIM))
@@ -515,7 +523,8 @@ class _DumpOptions:
 
 def _dump_signature(nr):
     ptr = {"Q": "*fp16", "K": "*fp16", "V": "*fp16", "Out": "*fp16",
-           "workspace_1": "*fp16", "workspace_2": "*fp16", "workspace_3": "*fp16"}
+           "workspace_1": "*fp16", "workspace_2": "*fp16", "workspace_3": "*fp16",
+           "workspace_4": "*fp32", "workspace_5": "*fp32"}
     i32s = ["B", "Hq", "Hkv", "S",
             "sQb", "sQh", "sQs", "sQd",
             "sKb", "sKh", "sKs", "sKd",
