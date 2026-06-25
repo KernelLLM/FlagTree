@@ -2,6 +2,11 @@ get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 get_property(triton_libs GLOBAL PROPERTY TRITON_LIBS)
 
+include_directories(
+  ${CMAKE_SOURCE_DIR}/third_party/flir/include
+  ${CMAKE_BINARY_DIR}/third_party/flir/include
+)
+
 add_llvm_executable(triton-opt triton-opt.cpp PARTIAL_SOURCES_INTENDED)
 
 # TODO: what's this?
