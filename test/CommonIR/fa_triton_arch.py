@@ -174,7 +174,7 @@ def _mm2_pv(
     MMA and writes the partial output to workspace_pv for Vec2.
     """
     # wait workspace_p[ring_slot2] (P from Vec1) ready
-    sync_block_wait("vector", "cube", SEM_WS2_READY, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    sync_block_wait("vector", "cube", SEM_WS2_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
     for nr in range(NR):
         kv_block_idx2 = task_in_tile2 * NR + nr
@@ -249,7 +249,7 @@ def _vec1_softmax(
     Returns updated (neg_max_even, neg_max_odd).
     """
     # wait workspace_s[ring_slot] (all NR score blocks) ready from MM1
-    sync_block_wait("cube", "vector", SEM_WS1_READY, PIPE.PIPE_V, PIPE.PIPE_V)
+    sync_block_wait("cube", "vector", SEM_WS1_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
     # reset running max at the first task of each output tile
     if task_in_tile == 0:
@@ -358,7 +358,7 @@ def _vec2_accumulate(
     Returns updated (acc_o, softmax_denom).
     """
     # wait workspace_pv[ring_slot2] (all NR P*V blocks) ready from MM2
-    sync_block_wait("cube", "vector", SEM_WS3_READY, PIPE.PIPE_V, PIPE.PIPE_V)
+    sync_block_wait("cube", "vector", SEM_WS3_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
     for nr in range(NR):
         kv_block_idx2 = task_in_tile2 * NR + nr
@@ -567,7 +567,6 @@ def flash_attention_fwd_3task_kernel(
 
         for g in range(num_global_tasks + 1):
 
-<<<<<<< HEAD
             q_bp = tl.make_block_ptr(Q + bz * sQb + by * sQh, (S, DIM), (sQs, sQd),
                                      (bx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
             if j == 0:                              # new output tile: (re)load Q into L1
@@ -587,12 +586,6 @@ def flash_attention_fwd_3task_kernel(
             s = tl.dot(tile_to_tensor(l0a0, writable=False), tile_to_tensor(l0b0, writable=False))                           
             # s = tl.dot(tl.load(q_bp), tl.trans(tl.load(k_bp)))
             tl.store(m1_bp, s)
-=======
-            # ===== Vec1(g): softmax(workspace_s[g%RING]) -> workspace_p[g%RING] =====
-            if g < num_global_tasks:
-                task_in_tile = g % tpt
-                ring_slot    = g % RING
->>>>>>> 6d6adbb73 (feat(test): use sub function)
 
                 neg_max_even, neg_max_odd = _vec1_softmax(
                     workspace_s, workspace_p, workspace_rescale, workspace_expsum,
@@ -603,7 +596,6 @@ def flash_attention_fwd_3task_kernel(
                     g, NR,
                 )
 
-<<<<<<< HEAD
                 # reset running max at the first task of each output tile
                 if task_in_tile == 0:
                     neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
@@ -700,9 +692,6 @@ def flash_attention_fwd_3task_kernel(
                 sync_block_set("vector", "cube", SEM_WS1_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
                 sync_block_set("vector", "cube", SEM_WS2_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
-            # ===== Vec2(g-1): acc_o = acc_o*r + P*V; finalize at last KV block =====
-=======
->>>>>>> 6d6adbb73 (feat(test): use sub function)
             # ===== Vec2(g-1): acc_o = acc_o*rescale + pv_acc; finalize at last KV block =====
             if g >= 1:
                 prev_g           = g - 1
