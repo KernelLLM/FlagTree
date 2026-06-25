@@ -51,7 +51,6 @@ EVT_V_MTE3    = ("vector", "cube", 2, PIPE.PIPE_V, PIPE.PIPE_MTE3)     # Vector 
 # synchronous tl.dot + tl.store until the final cube token semantics and
 # TileIRToHIVM lowering pipeline are confirmed.
 
-
 # =============================================================================
 #  Compile-time configuration
 # =============================================================================
@@ -147,33 +146,18 @@ def flash_attention_fwd_3task_kernel(
             bz = task_id // (num_seq_blocks * heads_q)
             kv_by = by // gqa_group
 
-            q_bp = tl.make_block_ptr(Q + bz * sQb + by * sQh, (S, DIM), (sQs, sQd),
-                                     (bx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-            if j == 0:                              # new output tile: (re)load Q into L1
-                tile_copy(tensor_to_tile(q_bp), q_l1, [CBM, CD])
-            # K[j] -> k_l1 -> L0 slot 0
-            k_bp = tl.make_block_ptr(K + bz * sKb + kv_by * sKh, (S, DIM), (sKs, sKd),
-                                     (j * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-            tile_copy(tensor_to_tile(k_bp), k_l1, [CBN, CD])
-            #tile_copy(q_l1, l0a0, [CBM, CD])
-            #tile_copy(k_l1, l0b0, [CBN, CD])   # NOTE: tile.copy has no transpose flag yet
-            # S = Q·Kᵀ : matmul stand-in for tile.cube_launch while cube token
-            # semantics and backend lowering are still being confirmed.
-            # NOTE: tt.dot requires standard ranked tensors — a !tile.tensor (from
-            # tile.to_tensor) is rejected by the verifier — so the dot runs on tt
-            # tensors loaded from GM, not on the !tile.* staging buffers above.
-            m1_bp = tl.make_block_ptr(mm1Res + cid * (PP * BLOCK_M * BLOCK_N) + cur_pp * (BLOCK_M * BLOCK_N),
-                                      (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-            s = tl.dot(tile_to_tensor(q_l1, writable=False), tile_to_tensor(k_l1, writable=False))
-            # s = tl.dot(tl.load(q_bp), tl.trans(tl.load(k_bp)))
-            tl.store(m1_bp, s)
-
-        # ─── 3) ProcessVec1(k-1): softmax(mm1Res[prev]) -> stage1Res[prev] ───
-        if g >= 1:
-            g1 = g - 1
-            if g1 < n_sub:
-                j1   = g1 % n_iters
-                pp1  = g1 % PP
+            # ===== Vec1(g): softmax(workspace_s[g%RING]) -> workspace_p[g%RING] =====
+            if g < num_global_tasks:
+                task_in_tile = g % tasks_per_tile
+                ring_slot    = g % RING
+                neg_max_even, neg_max_odd = _vec1_softmax(
+                    workspace_s, workspace_p, workspace_rescale, workspace_expsum,
+                    cid, vid, task_in_tile, ring_slot,
+                    neg_max_even, neg_max_odd,
+                    sm_scale,
+                    IS_CAUSAL, tile_start, tasks_per_tile, num_seq_blocks,
+                    g, CB,
+                )
 
                 # GM mm1Res[pp1] -> registers (MTE2)
                 m1r_bp = tl.make_block_ptr(mm1Res + cid * (PP * BLOCK_M * BLOCK_N) + pp1 * (BLOCK_M * BLOCK_N),
