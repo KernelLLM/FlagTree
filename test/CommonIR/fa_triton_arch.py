@@ -143,8 +143,8 @@ def _mm2_pv(
     v_l1, p_l1, mm2_l0a, mm2_l0b,
     workspace_p, workspace_pv,
     # task geometry
-    cid, task_in_tile2, batch_idx2, kv_head_idx2,
-    ring_slot2,
+    cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
+    prev_ring_slot,
     # strides
     sKb, sKh, sKs, sKd,
     S, NR: tl.constexpr,
@@ -154,21 +154,21 @@ def _mm2_pv(
     Loads P from workspace_p (written by Vec1), loads V from GM, performs
     MMA and writes the partial output to workspace_pv for Vec2.
     """
-    # wait workspace_p[ring_slot2] (P from Vec1) ready
+    # wait workspace_p[prev_ring_slot] (P from Vec1) ready
     sync_block_wait("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
     for nr in range(NR):
-        kv_block_idx2 = task_in_tile2 * NR + nr
-        l0_slot2      = nr % 2
+        prev_kv_block_idx = prev_task_in_tile * NR + nr
+        prev_l0_slot      = nr % 2
 
         v_bp = tl.make_block_ptr(
-            V + batch_idx2 * sKb + kv_head_idx2 * sKh, (S, DIM), (sKs, sKd),
-            (kv_block_idx2 * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
+            V + prev_batch_idx * sKb + kv_prev_head_idx * sKh, (S, DIM), (sKs, sKd),
+            (prev_kv_block_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
         tile_copy(v_bp, v_l1, [CBN, CD])
 
         prob_load_bp = tl.make_block_ptr(
             workspace_p + (cid * (RING * NR * BLOCK_M * BLOCK_N)
-                           + ring_slot2  * (NR * BLOCK_M * BLOCK_N)
+                           + prev_ring_slot  * (NR * BLOCK_M * BLOCK_N)
                            + nr  * (BLOCK_M * BLOCK_N)),
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
         tile_copy(prob_load_bp, p_l1, [CBM, CBN])
@@ -183,12 +183,12 @@ def _mm2_pv(
 
         pv_store_bp = tl.make_block_ptr(
             workspace_pv + (cid * (RING * NR * BLOCK_M * DIM)
-                            + ring_slot2  * (NR * BLOCK_M * DIM)
+                            + prev_ring_slot  * (NR * BLOCK_M * DIM)
                             + nr  * (BLOCK_M * DIM)),
             (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
         tl.store(pv_store_bp, pv_part)
 
-    # all NR P*V blocks done -> notify Vec2; release workspace_p[ring_slot2]
+    # all NR P*V blocks done -> notify Vec2; release workspace_p[prev_ring_slot]
     sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
     sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
@@ -300,8 +300,8 @@ def _vec2_accumulate(
     Out,
     workspace_pv, workspace_rescale, workspace_expsum,
     cid, vid,
-    task_in_tile2, tile_row2, batch_idx2, head_idx2,
-    ring_slot2,
+    prev_task_in_tile, prev_tile_row, prev_batch_idx, prev_head_idx,
+    prev_ring_slot,
     acc_o, softmax_denom,
     sOb, sOh, sOs, sOd,
     S, NR: tl.constexpr, NUM_ITERS: tl.constexpr,
@@ -314,36 +314,36 @@ def _vec2_accumulate(
 
     Returns updated (acc_o, softmax_denom).
     """
-    # wait workspace_pv[ring_slot2] (all NR P*V blocks) ready from MM2
+    # wait workspace_pv[prev_ring_slot] (all NR P*V blocks) ready from MM2
     sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
     for nr in range(NR):
-        kv_block_idx2 = task_in_tile2 * NR + nr
+        prev_kv_block_idx = prev_task_in_tile * NR + nr
 
         # load pv_acc[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_pv (MTE2)
         pv_load_bp = tl.make_block_ptr(
             workspace_pv + (cid * (RING * NR * BLOCK_M * DIM)
-                            + ring_slot2  * (NR * BLOCK_M * DIM)
+                            + prev_ring_slot  * (NR * BLOCK_M * DIM)
                             + nr  * (BLOCK_M * DIM)
                             + vid * HALF_M * DIM),
             (HALF_M, DIM), (DIM, 1), (0, 0), (HALF_M, DIM), (1, 0))
         pv_acc = tl.load(pv_load_bp).to(tl.float32)
 
         # load rescale and block_expsum written by Vec1 for this slot
-        rescale_offset2 = (cid * (RING * NR * 2 * HALF_M)
-                           + ring_slot2  * (NR * 2 * HALF_M)
+        prev_rescale_offset = (cid * (RING * NR * 2 * HALF_M)
+                           + prev_ring_slot  * (NR * 2 * HALF_M)
                            + nr  * (2 * HALF_M)
                            + vid * HALF_M)
         rescale_load_bp = tl.make_block_ptr(
-            workspace_rescale + rescale_offset2,
+            workspace_rescale + prev_rescale_offset,
             (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
         rescale = tl.load(rescale_load_bp).to(tl.float32)
         expsum_load_bp = tl.make_block_ptr(
-            workspace_expsum + rescale_offset2,
+            workspace_expsum + prev_rescale_offset,
             (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
         block_expsum = tl.load(expsum_load_bp).to(tl.float32)
 
-        if kv_block_idx2 == 0:
+        if prev_kv_block_idx == 0:
             # first KV block: init acc_o and softmax_denom directly
             acc_o         = pv_acc
             softmax_denom = block_expsum
@@ -353,16 +353,16 @@ def _vec2_accumulate(
             acc_o         = acc_o * rescale_bc + pv_acc
             softmax_denom = softmax_denom * rescale + block_expsum
 
-        if kv_block_idx2 == NUM_ITERS - 1:
+        if prev_kv_block_idx == NUM_ITERS - 1:
             # last KV block: divide by softmax denominator and write output
             denom_bc    = tl.broadcast_to(softmax_denom, (HALF_M, DIM))
             output_tile = (acc_o / denom_bc).to(Out.dtype.element_ty)
             o_bp = tl.make_block_ptr(
-                Out + batch_idx2 * sOb + head_idx2 * sOh, (S, DIM), (sOs, sOd),
-                (tile_row2 * BLOCK_M + vid * HALF_M, 0), (HALF_M, DIM), (1, 0))
+                Out + prev_batch_idx * sOb + prev_head_idx * sOh, (S, DIM), (sOs, sOd),
+                (prev_tile_row * BLOCK_M + vid * HALF_M, 0), (HALF_M, DIM), (1, 0))
             tl.store(o_bp, output_tile)
 
-    # all NR blocks consumed -> release workspace_pv[ring_slot2]
+    # all NR blocks consumed -> release workspace_pv[prev_ring_slot]
     sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
     return acc_o, softmax_denom
@@ -466,20 +466,20 @@ def flash_attention_fwd_3task_kernel(
             # ===== MM2(g-1): O_part = P*V for NR blocks -> workspace_pv[cid,(g-1)%RING,:] =====
             if g >= 1:
                 prev_g           = g - 1
-                task_in_tile2    = prev_g % tasks_per_tile
-                tile_idx2        = prev_g // tasks_per_tile
-                output_tile_id2  = tile_start + tile_idx2
-                head_idx2        = (output_tile_id2 // num_seq_blocks) % heads_q
-                batch_idx2       = output_tile_id2 // (num_seq_blocks * heads_q)
-                kv_head_idx2     = head_idx2 // gqa_group
-                ring_slot2       = prev_g % RING
+                prev_task_in_tile    = prev_g % tasks_per_tile
+                prev_tile_idx        = prev_g // tasks_per_tile
+                prev_output_tile_id  = tile_start + prev_tile_idx
+                prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
+                prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
+                kv_prev_head_idx     = prev_head_idx // gqa_group
+                prev_ring_slot       = prev_g % RING
 
                 _mm2_pv(
                     V,
                     v_l1, p_l1, mm2_l0a, mm2_l0b,
                     workspace_p, workspace_pv,
-                    cid, task_in_tile2, batch_idx2, kv_head_idx2,
-                    ring_slot2,
+                    cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
+                    prev_ring_slot,
                     sKb, sKh, sKs, sKd,
                     S, NR,
                 )
@@ -517,19 +517,19 @@ def flash_attention_fwd_3task_kernel(
             # ===== Vec2(g-1): acc_o = acc_o*rescale + pv_acc; finalize at last KV block =====
             if g >= 1:
                 prev_g           = g - 1
-                task_in_tile2    = prev_g % tasks_per_tile
-                tile_idx2        = prev_g // tasks_per_tile
-                output_tile_id2  = tile_start + tile_idx2
-                tile_row2        = output_tile_id2 % num_seq_blocks
-                head_idx2        = (output_tile_id2 // num_seq_blocks) % heads_q
-                batch_idx2       = output_tile_id2 // (num_seq_blocks * heads_q)
-                ring_slot2       = prev_g % RING
+                prev_task_in_tile    = prev_g % tasks_per_tile
+                prev_tile_idx        = prev_g // tasks_per_tile
+                prev_output_tile_id  = tile_start + prev_tile_idx
+                prev_tile_row        = prev_output_tile_id % num_seq_blocks
+                prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
+                prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
+                prev_ring_slot       = prev_g % RING
 
                 acc_o, softmax_denom = _vec2_accumulate(
                     Out,
                     workspace_pv, workspace_rescale, workspace_expsum,
-                    cid, vid, task_in_tile2, tile_row2, batch_idx2, head_idx2,
-                    ring_slot2,
+                    cid, vid, prev_task_in_tile, prev_tile_row, prev_batch_idx, prev_head_idx,
+                    prev_ring_slot,
                     acc_o, softmax_denom,
                     sOb, sOh, sOs, sOd,
                     S, NR, NUM_ITERS,
