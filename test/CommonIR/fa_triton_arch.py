@@ -83,7 +83,7 @@ SEM_PV_FREE  = 5   # V->C : workspace_pv slot  free
 def _mm1_qkt(
     # inputs
     Q, K,
-    q_l1, k_l1, mm1_l0a, mm1_l0b,
+    q_l1, k_l1, q_l0a, kt_l0b,
     workspace_s,
     # task geometry
     cid, task_in_tile, tile_row, batch_idx, head_idx, kv_head_idx,
@@ -117,13 +117,13 @@ def _mm1_qkt(
             (kv_block_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
         tile_copy(k_bp, k_l1, [CBN, CD])
 
-        tile_copy(q_l1, mm1_l0a, [CBM, CD])
+        tile_copy(q_l1, q_l0a, [CBM, CD])
 
-        tile_copy(k_l1, mm1_l0b, [CBN, CD])  # NOTE: no transpose flag yet
+        tile_copy(k_l1, kt_l0b, [CBN, CD])  # NOTE: no transpose flag yet
 
         # attn_score = Q * K^T  (synchronous MMA stand-in for tile.cube_launch)
-        attn_score = tl.dot(tile_to_tensor(mm1_l0a, writable=False),
-                            tile_to_tensor(mm1_l0b, writable=False))
+        attn_score = tl.dot(tile_to_tensor(q_l0a, writable=False),
+                            tile_to_tensor(kt_l0b, writable=False))
 
         score_store_bp = tl.make_block_ptr(
             workspace_s + (cid * (RING * NR * BLOCK_M * BLOCK_N)
@@ -140,7 +140,7 @@ def _mm1_qkt(
 def _mm2_pv(
     # inputs
     V,
-    v_l1, p_l1, mm2_l0a, mm2_l0b,
+    v_l1, p_l1, p_l0a, v_l0b,
     workspace_p, workspace_pv,
     # task geometry
     cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
@@ -173,13 +173,13 @@ def _mm2_pv(
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
         tile_copy(prob_load_bp, p_l1, [CBM, CBN])
 
-        tile_copy(v_l1, mm2_l0b, [CBN, CD])
+        tile_copy(v_l1, v_l0b, [CBN, CD])
 
-        tile_copy(p_l1, mm2_l0a, [CBM, CBN])
+        tile_copy(p_l1, p_l0a, [CBM, CBN])
 
         # pv_part = P * V  (synchronous MMA stand-in for tile.cube_launch)
-        pv_part = tl.dot(tile_to_tensor(mm2_l0a, writable=False),
-                         tile_to_tensor(mm2_l0b, writable=False))
+        pv_part = tl.dot(tile_to_tensor(p_l0a, writable=False),
+                         tile_to_tensor(v_l0b, writable=False))
 
         pv_store_bp = tl.make_block_ptr(
             workspace_pv + (cid * (RING * NR * BLOCK_M * DIM)
@@ -413,11 +413,11 @@ def flash_attention_fwd_3task_kernel(
     v_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
     p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
 
-    mm1_l0a = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L0A)  # MM1 Q
-    mm1_l0b = tile_alloc([DIM,     BLOCK_N], Q.dtype.element_ty, L0B)  # MM1 K
+    q_l0a = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L0A)  # MM1 Q
+    kt_l0b = tile_alloc([DIM,     BLOCK_N], Q.dtype.element_ty, L0B)  # MM1 K
     mm1_l0c = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
-    mm2_l0a = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)  # MM2 P
-    mm2_l0b = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)  # MM2 V
+    p_l0a = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)  # MM2 P
+    v_l0b = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)  # MM2 V
     mm2_l0c = tile_alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
 
     # -- Vector side (UB registers): full online-softmax state ---------------
@@ -454,7 +454,7 @@ def flash_attention_fwd_3task_kernel(
 
                 _mm1_qkt(
                     Q, K,
-                    q_l1, k_l1, mm1_l0a, mm1_l0b,
+                    q_l1, k_l1, q_l0a, kt_l0b,
                     workspace_s,
                     cid, task_in_tile, tile_row, batch_idx, head_idx, kv_head_idx,
                     ring_slot, tasks_per_tile,
@@ -476,7 +476,7 @@ def flash_attention_fwd_3task_kernel(
 
                 _mm2_pv(
                     V,
-                    v_l1, p_l1, mm2_l0a, mm2_l0b,
+                    v_l1, p_l1, p_l0a, v_l0b,
                     workspace_p, workspace_pv,
                     cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
                     prev_ring_slot,
