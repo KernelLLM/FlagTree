@@ -33,38 +33,6 @@ from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
 )
 import triton.language.extra.cann.extension as al
 
-
-# -----------------------------------------------------------------------------
-#  Intra-core cross-pipe synchronisation  (stub — to be lowered to
-#  hivm.hir.set_flag / hivm.hir.wait_flag once the TileIR dialect supports it)
-#
-#  Semantics mirror TileLang's T.set_flag / T.wait_flag:
-#    intra_set_flag(sender, receiver, sig_id)
-#      — executed by the *sender* pipe; signals that the data it produced is
-#        ready for the *receiver* pipe.
-#    intra_wait_flag(sender, receiver, sig_id)
-#      — executed by the *receiver* pipe; blocks until the *sender* has called
-#        intra_set_flag with the same (sender, receiver, sig_id) tuple.
-#
-#  sender / receiver strings match the PIPE names used in TileLang:
-#    "M"     — matrix (Cube MMA) pipeline
-#    "MTE1"  — L1→L0 DMA pipeline
-#    "MTE2"  — GM→L1/UB DMA pipeline
-#    "MTE3"  — UB→GM/L1 DMA pipeline
-#    "FIX"   — L0C→GM/L1 DMA pipeline
-#    "V"     — vector compute pipeline
-# -----------------------------------------------------------------------------
-@triton.jit
-def intra_set_flag(sender: tl.constexpr, receiver: tl.constexpr,
-                   sig_id: tl.constexpr):
-    pass  # TODO: lower to hivm.hir.set_flag[<sender>, <receiver>] flag = sig_id
-
-
-@triton.jit
-def intra_wait_flag(sender: tl.constexpr, receiver: tl.constexpr,
-                    sig_id: tl.constexpr):
-    pass  # TODO: lower to hivm.hir.wait_flag[<sender>, <receiver>] flag = sig_id
-
 # ---- TileIR Pipe ids -------------------------------------------------------
 PIPE_M, PIPE_V, PIPE_MTE1, PIPE_MTE2, PIPE_MTE3, PIPE_FIX, PIPE_S = 0,1,2,3,4,5,6
 
@@ -135,56 +103,37 @@ def _mm1_qkt(
 
     # reload resident Q at the first task of each output tile
     if task_in_tile == 0:
-        intra_wait_flag("MTE1", "MTE2", SIG_Q)
         q_bp = tl.make_block_ptr(
             Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
             (tile_row * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
         tile_copy(q_bp, q_l1, [CBM, CD])
-        intra_set_flag("MTE2", "MTE1", SIG_Q)
-        intra_wait_flag("MTE2", "MTE1", SIG_Q)
 
     for nr in range(NR):
         kv_block_idx = task_in_tile * NR + nr
         l0_slot      = nr % 2
 
-        intra_wait_flag("MTE1", "MTE2", SIG_K_L1)
         k_bp = tl.make_block_ptr(
             K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
             (kv_block_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
         tile_copy(k_bp, k_l1, [CBN, CD])
-        intra_set_flag("MTE2", "MTE1", SIG_K_L1)
 
-        intra_wait_flag("M", "MTE1", SIG_L0AB + l0_slot)
         tile_copy(q_l1, mm1_l0a, [CBM, CD])
 
-        intra_wait_flag("MTE2", "MTE1", SIG_K_L1)
         tile_copy(k_l1, mm1_l0b, [CBN, CD])  # NOTE: no transpose flag yet
-        intra_set_flag("MTE1", "MTE2", SIG_K_L1)
-        intra_set_flag("MTE1", "M", SIG_L0AB + l0_slot)
 
-        intra_wait_flag("MTE1", "M", SIG_L0AB + l0_slot)
-        intra_wait_flag("FIX", "M", SIG_L0C + l0_slot)
         # attn_score = Q * K^T  (synchronous MMA stand-in for tile.cube_launch)
         attn_score = tl.dot(tile_to_tensor(mm1_l0a, writable=False),
                             tile_to_tensor(mm1_l0b, writable=False))
-        intra_set_flag("M", "MTE1", SIG_L0AB + l0_slot)
-        intra_set_flag("M", "FIX", SIG_L0C + l0_slot)
 
-        intra_wait_flag("M", "FIX", SIG_L0C + l0_slot)
         score_store_bp = tl.make_block_ptr(
             workspace_s + (cid * (RING * NR * BLOCK_M * BLOCK_N)
                            + ring_slot  * (NR * BLOCK_M * BLOCK_N)
                            + nr  * (BLOCK_M * BLOCK_N)),
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
         tl.store(score_store_bp, attn_score)
-        intra_set_flag("FIX", "M", SIG_L0C + l0_slot)
 
     # all NR S-blocks written -> notify Vec1
     sync_block_set("cube", "vector", SEM_WS1_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
-
-    # release resident Q at the last task of the tile
-    if task_in_tile == tasks_per_tile - 1:
-        intra_set_flag("MTE1", "MTE2", SIG_Q)
 
 
 @triton.jit
@@ -212,48 +161,32 @@ def _mm2_pv(
         kv_block_idx2 = task_in_tile2 * NR + nr
         l0_slot2      = nr % 2
 
-        intra_wait_flag("MTE1", "MTE2", SIG_V_L1)
         v_bp = tl.make_block_ptr(
             V + batch_idx2 * sKb + kv_head_idx2 * sKh, (S, DIM), (sKs, sKd),
             (kv_block_idx2 * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
         tile_copy(v_bp, v_l1, [CBN, CD])
-        intra_set_flag("MTE2", "MTE1", SIG_V_L1)
 
-        intra_wait_flag("MTE1", "MTE2", SIG_P_L1)
         prob_load_bp = tl.make_block_ptr(
             workspace_p + (cid * (RING * NR * BLOCK_M * BLOCK_N)
                            + ring_slot2  * (NR * BLOCK_M * BLOCK_N)
                            + nr  * (BLOCK_M * BLOCK_N)),
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
         tile_copy(prob_load_bp, p_l1, [CBM, CBN])
-        intra_set_flag("MTE2", "MTE1", SIG_P_L1)
 
-        intra_wait_flag("MTE2", "MTE1", SIG_V_L1)
-        intra_wait_flag("M", "MTE1", SIG_L0AB + l0_slot2)
         tile_copy(v_l1, mm2_l0b, [CBN, CD])
-        intra_set_flag("MTE1", "MTE2", SIG_V_L1)
 
-        intra_wait_flag("MTE2", "MTE1", SIG_P_L1)
         tile_copy(p_l1, mm2_l0a, [CBM, CBN])
-        intra_set_flag("MTE1", "MTE2", SIG_P_L1)
-        intra_set_flag("MTE1", "M", SIG_L0AB + l0_slot2)
 
-        intra_wait_flag("MTE1", "M", SIG_L0AB + l0_slot2)
-        intra_wait_flag("FIX", "M", SIG_L0C + l0_slot2)
         # pv_part = P * V  (synchronous MMA stand-in for tile.cube_launch)
         pv_part = tl.dot(tile_to_tensor(mm2_l0a, writable=False),
                          tile_to_tensor(mm2_l0b, writable=False))
-        intra_set_flag("M", "MTE1", SIG_L0AB + l0_slot2)
-        intra_set_flag("M", "FIX", SIG_L0C + l0_slot2)
 
-        intra_wait_flag("M", "FIX", SIG_L0C + l0_slot2)
         pv_store_bp = tl.make_block_ptr(
             workspace_pv + (cid * (RING * NR * BLOCK_M * DIM)
                             + ring_slot2  * (NR * BLOCK_M * DIM)
                             + nr  * (BLOCK_M * DIM)),
             (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
         tl.store(pv_store_bp, pv_part)
-        intra_set_flag("FIX", "M", SIG_L0C + l0_slot2)
 
     # all NR P*V blocks done -> notify Vec2; release workspace_p[ring_slot2]
     sync_block_set("cube", "vector", SEM_WS3_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
@@ -294,7 +227,6 @@ def _vec1_softmax(
         prv_parity   = 1 - cur_parity
 
         # load score[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_s GM -> UB
-        intra_wait_flag("V", "MTE2", SIG_IO_UB)
         score_load_bp = tl.make_block_ptr(
             workspace_s + (cid * (RING * NR * BLOCK_M * BLOCK_N)
                            + ring_slot  * (NR * BLOCK_M * BLOCK_N)
@@ -302,9 +234,6 @@ def _vec1_softmax(
                            + vid * HALF_M * BLOCK_N),
             (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
         attn_score_tile = tl.load(score_load_bp).to(tl.float32)
-        intra_set_flag("MTE2", "V", SIG_IO_UB)
-        intra_wait_flag("MTE2", "V", SIG_IO_UB)
-        intra_set_flag("V", "MTE2", SIG_IO_UB)
 
         if IS_CAUSAL:
             tile_seq_idx   = g // tasks_per_tile
@@ -351,7 +280,6 @@ def _vec1_softmax(
             neg_max_odd = neg_max_new
 
         # softmax_p -> workspace_p GM (MTE3): sub-core owns HALF_M rows
-        intra_wait_flag("MTE3", "V", SIG_S_HALF)
         prob_store_bp = tl.make_block_ptr(
             workspace_p + (cid * (RING * NR * BLOCK_M * BLOCK_N)
                            + ring_slot  * (NR * BLOCK_M * BLOCK_N)
@@ -359,9 +287,6 @@ def _vec1_softmax(
                            + vid * HALF_M * BLOCK_N),
             (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
         tl.store(prob_store_bp, softmax_p.to(workspace_p.dtype.element_ty))
-        intra_set_flag("V", "MTE3", SIG_S_HALF)
-        intra_wait_flag("V", "MTE3", SIG_S_HALF)
-        intra_set_flag("MTE3", "V", SIG_S_HALF)
 
     # all NR P-blocks written -> release workspace_s[ring_slot]; notify MM2
     sync_block_set("vector", "cube", SEM_WS1_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
@@ -396,7 +321,6 @@ def _vec2_accumulate(
         kv_block_idx2 = task_in_tile2 * NR + nr
 
         # load pv_acc[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_pv (MTE2)
-        intra_wait_flag("V", "MTE2", SIG_IO_UB)
         pv_load_bp = tl.make_block_ptr(
             workspace_pv + (cid * (RING * NR * BLOCK_M * DIM)
                             + ring_slot2  * (NR * BLOCK_M * DIM)
@@ -404,9 +328,6 @@ def _vec2_accumulate(
                             + vid * HALF_M * DIM),
             (HALF_M, DIM), (DIM, 1), (0, 0), (HALF_M, DIM), (1, 0))
         pv_acc = tl.load(pv_load_bp).to(tl.float32)
-        intra_set_flag("MTE2", "V", SIG_IO_UB)
-        intra_wait_flag("MTE2", "V", SIG_IO_UB)
-        intra_set_flag("V", "MTE2", SIG_IO_UB)
 
         # load rescale and block_expsum written by Vec1 for this slot
         rescale_offset2 = (cid * (RING * NR * 2 * HALF_M)
@@ -439,9 +360,7 @@ def _vec2_accumulate(
             o_bp = tl.make_block_ptr(
                 Out + batch_idx2 * sOb + head_idx2 * sOh, (S, DIM), (sOs, sOd),
                 (tile_row2 * BLOCK_M + vid * HALF_M, 0), (HALF_M, DIM), (1, 0))
-            intra_wait_flag("V", "MTE3", SIG_IO_UB)
             tl.store(o_bp, output_tile)
-            intra_set_flag("MTE3", "V", SIG_IO_UB)
 
     # all NR blocks consumed -> release workspace_pv[ring_slot2]
     sync_block_set("vector", "cube", SEM_WS3_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
@@ -519,14 +438,6 @@ def flash_attention_fwd_3task_kernel(
         sync_block_set("cube", "vector", SEM_WS2_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
         sync_block_set("cube", "vector", SEM_WS2_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
         sync_block_set("cube", "vector", SEM_WS2_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        intra_set_flag("MTE1", "MTE2", SIG_K_L1)
-        intra_set_flag("MTE1", "MTE2", SIG_P_L1)
-        intra_set_flag("MTE1", "MTE2", SIG_V_L1)
-        intra_set_flag("M",    "MTE1", SIG_L0AB)
-        intra_set_flag("M",    "MTE1", SIG_L0AB + 1)
-        intra_set_flag("FIX",  "M",   SIG_L0C)
-        intra_set_flag("FIX",  "M",   SIG_L0C + 1)
-        intra_set_flag("MTE1", "MTE2", SIG_Q)
 
         for g in range(num_global_tasks + 1):
 
@@ -574,14 +485,6 @@ def flash_attention_fwd_3task_kernel(
                 )
 
         # ---- destroy: consume outstanding init-direction signals ----
-        intra_wait_flag("MTE1", "MTE2", SIG_K_L1)
-        intra_wait_flag("MTE1", "MTE2", SIG_P_L1)
-        intra_wait_flag("MTE1", "MTE2", SIG_V_L1)
-        intra_wait_flag("M",    "MTE1", SIG_L0AB)
-        intra_wait_flag("M",    "MTE1", SIG_L0AB + 1)
-        intra_wait_flag("FIX",  "M",   SIG_L0C)
-        intra_wait_flag("FIX",  "M",   SIG_L0C + 1)
-        intra_wait_flag("MTE1", "MTE2", SIG_Q)
 
     # =========================================================================
     #  VECTOR scope: Vec1(g) online-softmax, Vec2(g-1) rescale+accumulate.
@@ -594,8 +497,6 @@ def flash_attention_fwd_3task_kernel(
         sync_block_set("vector", "cube", SEM_WS3_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
         sync_block_set("vector", "cube", SEM_WS3_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
         sync_block_set("vector", "cube", SEM_WS3_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        intra_set_flag("V",    "MTE2", SIG_IO_UB)
-        intra_set_flag("MTE3", "V",   SIG_S_HALF)
 
         for g in range(num_global_tasks + 1):
 
@@ -635,8 +536,6 @@ def flash_attention_fwd_3task_kernel(
                 )
 
         # ---- destroy: consume outstanding init-direction signals ----
-        intra_wait_flag("V",    "MTE2", SIG_IO_UB)
-        intra_wait_flag("MTE3", "V",   SIG_S_HALF)
 
 
 
