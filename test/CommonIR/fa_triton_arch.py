@@ -66,12 +66,12 @@ SIG_IO_UB  = 0
 SIG_S_HALF = 1
 
 # ---- cross-core semaphore IDs ----------------------------------------------
-SEM_WS1_READY = 0   # C->V : ws1 (S)   has data
-SEM_WS1_FREE  = 1   # V->C : ws1 slot  free
-SEM_WS2_READY = 2   # V->C : ws2 (P)   has data
-SEM_WS2_FREE  = 3   # C->V : ws2 slot  free
-SEM_WS3_READY = 4   # C->V : ws3 (P*V) has data
-SEM_WS3_FREE  = 5   # V->C : ws3 slot  free
+SEM_S_READY  = 0   # C->V : workspace_s (S)   has data
+SEM_S_FREE   = 1   # V->C : workspace_s slot  free
+SEM_P_READY  = 2   # V->C : workspace_p (P)   has data
+SEM_P_FREE   = 3   # C->V : workspace_p slot  free
+SEM_PV_READY = 4   # C->V : workspace_pv (PV) has data
+SEM_PV_FREE  = 5   # V->C : workspace_pv slot  free
 
 
 # =============================================================================
@@ -99,7 +99,7 @@ def _mm1_qkt(
     ping-pong DMA + MMA sequence for each KV block.
     """
     # wait workspace_s[ring_slot] task slot free (Vector released after Vec1)
-    sync_block_wait("vector", "cube", SEM_WS1_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
     # reload resident Q at the first task of each output tile
     if task_in_tile == 0:
@@ -133,7 +133,7 @@ def _mm1_qkt(
         tl.store(score_store_bp, attn_score)
 
     # all NR S-blocks written -> notify Vec1
-    sync_block_set("cube", "vector", SEM_WS1_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
+    sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
 
 @triton.jit
@@ -155,7 +155,7 @@ def _mm2_pv(
     MMA and writes the partial output to workspace_pv for Vec2.
     """
     # wait workspace_p[ring_slot2] (P from Vec1) ready
-    sync_block_wait("vector", "cube", SEM_WS2_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
+    sync_block_wait("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
     for nr in range(NR):
         kv_block_idx2 = task_in_tile2 * NR + nr
@@ -189,8 +189,8 @@ def _mm2_pv(
         tl.store(pv_store_bp, pv_part)
 
     # all NR P*V blocks done -> notify Vec2; release workspace_p[ring_slot2]
-    sync_block_set("cube", "vector", SEM_WS3_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
-    sync_block_set("cube", "vector", SEM_WS2_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
+    sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
 
 @triton.jit
@@ -214,7 +214,7 @@ def _vec1_softmax(
     Returns updated (neg_max_even, neg_max_odd).
     """
     # wait workspace_s[ring_slot] (all NR score blocks) ready from MM1
-    sync_block_wait("cube", "vector", SEM_WS1_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
+    sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
     # reset running max at the first task of each output tile
     if task_in_tile == 0:
@@ -289,8 +289,8 @@ def _vec1_softmax(
         tl.store(prob_store_bp, softmax_p.to(workspace_p.dtype.element_ty))
 
     # all NR P-blocks written -> release workspace_s[ring_slot]; notify MM2
-    sync_block_set("vector", "cube", SEM_WS1_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-    sync_block_set("vector", "cube", SEM_WS2_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
+    sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    sync_block_set("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
     return neg_max_even, neg_max_odd
 
@@ -315,7 +315,7 @@ def _vec2_accumulate(
     Returns updated (acc_o, softmax_denom).
     """
     # wait workspace_pv[ring_slot2] (all NR P*V blocks) ready from MM2
-    sync_block_wait("cube", "vector", SEM_WS3_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
+    sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
     for nr in range(NR):
         kv_block_idx2 = task_in_tile2 * NR + nr
@@ -363,7 +363,7 @@ def _vec2_accumulate(
             tl.store(o_bp, output_tile)
 
     # all NR blocks consumed -> release workspace_pv[ring_slot2]
-    sync_block_set("vector", "cube", SEM_WS3_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
     return acc_o, softmax_denom
 
@@ -435,9 +435,9 @@ def flash_attention_fwd_3task_kernel(
     with al.scope(core_mode="cube"):
         # ---- init: 3 ws2-FREE tokens + pre-arm intra-core signals ----
         # RING ws2-FREE tokens (one per slot) so MM2 pipeline can start
-        sync_block_set("cube", "vector", SEM_WS2_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("cube", "vector", SEM_WS2_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("cube", "vector", SEM_WS2_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
         for g in range(num_global_tasks + 1):
 
@@ -491,12 +491,12 @@ def flash_attention_fwd_3task_kernel(
     # =========================================================================
     with al.scope(core_mode="vector"):
         # ---- init: 3 ws1-FREE + 3 ws3-FREE tokens + pre-arm intra-core signals ----
-        sync_block_set("vector", "cube", SEM_WS1_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_WS1_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_WS1_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_WS3_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_WS3_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_WS3_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
         for g in range(num_global_tasks + 1):
 
