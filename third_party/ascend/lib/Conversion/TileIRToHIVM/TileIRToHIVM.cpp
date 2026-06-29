@@ -47,6 +47,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/LogicalResult.h"
+#include "triton/Dialect/Triton/IR/Dialect.h"
 
 using namespace mlir;
 namespace tile = mlir::triton::tile;
@@ -326,7 +327,9 @@ void TileIRToHIVMPass::runOnOperation() {
   // framework: tile.alloc → memref.alloc replaces !tile.buf with memref,
   // then tile.copy (now seeing memref operands) → hivm.copy, etc.
   RewritePatternSet patterns(&getContext());
-  patterns.add<TileAllocToMemRef, TileToTensorEliminate, TileCopyToHIVM,
+  patterns.add<TileAllocToMemRef, TileToTensorEliminate,
+               TileFuncArgConvert, TileCallArgConvert,
+               TileCopyToHIVM,
                TileLoadToHIVM, TileStoreToHIVM,
                TileSetFlagToHIVM, TileWaitFlagToHIVM, TilePipeBarrierToHIVM,
                TileCubeWaitToHIVM, TileGmOffsetToHIVM>(&getContext());

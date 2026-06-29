@@ -42,6 +42,18 @@ def mangle_ty(ty):
         shape = "_".join(map(str, ty.shape))
         return f"B{elt}S{shape}S"
 
+    # TLE DSA buffer_type (triton.experimental.tle.language.dsa.types.buffer_type)
+    # is distinct from bl.buffer_type but carries the same shape/element_ty info.
+    try:
+        from triton.experimental.tle.language.dsa.types import buffer_type as tle_buffer_type
+        if isinstance(ty, tle_buffer_type):
+            elt = mangle_ty(ty.element_ty)
+            shape = "_".join(map(str, ty.shape))
+            space = getattr(ty.space, '__class__', type(ty.space)).__name__ if ty.space else "none"
+            return f"T{elt}S{shape}S{space}"
+    except ImportError:
+        pass
+
     if ty.is_ptr():
         return "P" + mangle_ty(ty.element_ty)
     if ty.is_int():

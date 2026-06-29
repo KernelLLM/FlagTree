@@ -467,7 +467,18 @@ class CodeGenerator(ast.NodeVisitor):
                 if isinstance(param_type, bl.buffer_type):
                     arg_values.append(bl.buffer(self.fn.args(idx), param_type))
                 else:
-                    arg_values.append(tensor(self.fn.args(idx), param_type))
+                    # Check for TLE DSA buffer_type (distinct from bl.buffer_type)
+                    try:
+                        from triton.experimental.tle.language.dsa.types import (
+                            buffer_type as tle_buffer_type,
+                            buffer as tle_buffer,
+                        )
+                        if isinstance(param_type, tle_buffer_type):
+                            arg_values.append(tle_buffer(self.fn.args(idx), param_type))
+                        else:
+                            arg_values.append(tensor(self.fn.args(idx), param_type))
+                    except ImportError:
+                        arg_values.append(tensor(self.fn.args(idx), param_type))
                 idx += 1
 
         insert_pt = self.builder.get_insertion_block()
@@ -578,7 +589,16 @@ class CodeGenerator(ast.NodeVisitor):
         if _is_triton_tensor(rhs):
             reverse_method_name = re.sub(r"__(.*)__", r"__r\1__", method_name)
             return getattr(rhs, reverse_method_name)(lhs, _builder=self.builder)
-        return getattr(lhs, method_name)(rhs)
+        # Neither side is a triton tensor (e.g. int * constexpr).  Use Python's
+        # standard operator protocol: try lhs.__method__(rhs) and fall back to
+        # rhs.__rmethod__(lhs) if the forward call returns NotImplemented.
+        result = getattr(lhs, method_name)(rhs)
+        if result is NotImplemented:
+            reverse_method_name = re.sub(r"__(.*)__", r"__r\1__", method_name)
+            reverse_method = getattr(rhs, reverse_method_name, None)
+            if reverse_method is not None:
+                result = reverse_method(lhs)
+        return result
 
     def visit_BinOp(self, node):
         lhs = self.visit(node.left)
@@ -1146,7 +1166,10 @@ class CodeGenerator(ast.NodeVisitor):
             gscope = fn.__globals__
             # If the callee is not set, we use the same debug setting as the caller
             file_name, begin_line = get_jit_fn_file_line(fn)
-            generator = CodeGenerator(self.context, prototype, gscope, attributes, constants, module=self.module,
+            # Use type(self) so that subclass generators (e.g. TleCodeGenerator)
+            # are also used for callee functions, preserving the unified builder
+            # interface (tile_get_buffer_type, create_tile_to_tensor, etc.).
+            generator = type(self)(self.context, prototype, gscope, attributes, constants, module=self.module,
                                       jit_fn=fn, function_name=fn_name, function_types=self.function_ret_types,
                                       noinline=fn.noinline, file_name=file_name, begin_line=begin_line,
                                       options=self.builder.options, codegen_fns=self.builder.codegen_fns,
