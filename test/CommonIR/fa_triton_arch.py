@@ -355,11 +355,11 @@ def _vec2_accumulate(
         if prev_kv_idx == NUM_KV_BLOCKS - 1:
             # last KV block: divide by softmax denominator and write output
             denom_bc    = tl.broadcast_to(softmax_denom, (HALF_M, DIM))
-            output_tile = (acc_o / denom_bc).to(Out.dtype.element_ty)
+            output_block = (acc_o / denom_bc).to(Out.dtype.element_ty)
             o_bp = tl.make_block_ptr(
                 Out + prev_batch_idx * sOb + prev_head_idx * sOh, (S, DIM), (sOs, sOd),
                 ((prev_global_head_idx * BLOCK_M + vid * HALF_M).to(tl.int32), 0), (HALF_M, DIM), (1, 0))
-            tl.store(o_bp, output_tile)
+            tl.store(o_bp, output_block)
 
     # all CB blocks consumed -> release workspace_pv[prev_ring_slot]
     sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
@@ -397,8 +397,8 @@ def flash_attention_fwd_3task_kernel(
 
     # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
     block_start          = cid * block_num_per_core + tl.where(cid < rem_block_num, cid, rem_block_num)
-    tile_count          = block_num_per_core + tl.where(cid < rem_block_num, 1, 0)
-    num_global_tasks  = tile_count * conbined_block_num   # total pipelined tasks on this core
+    block_num          = block_num_per_core + tl.where(cid < rem_block_num, 1, 0)
+    num_global_tasks  = block_num * conbined_block_num   # total pipelined tasks on this core
 
     # =========================================================================
     #  ① on-chip working set  (tile.alloc -> explicit memory hierarchy)
