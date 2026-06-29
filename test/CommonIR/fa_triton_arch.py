@@ -89,7 +89,7 @@ def _mm1_qkt(
     q_l0a, k_l0b,
     workspace_s,
     # task geometry
-    cid, task_in_tile, tile_row, batch_idx, head_idx, kv_head_idx,
+    cid, idx_in_conbine, tile_row, batch_idx, head_idx, kv_head_idx,
     ring_slot,
     # strides
     sQb, sQh, sQs, sQd,
@@ -105,14 +105,14 @@ def _mm1_qkt(
     sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
     # reload resident Q at the first task of each output tile
-    if task_in_tile == 0:
+    if idx_in_conbine == 0:
         q_bp = tl.make_block_ptr(
             Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
             (tile_row * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
         tile_copy(q_bp, q_l0a, [CBM, CD])
 
     for cb_idx in range(CB):
-        kv_idx = task_in_tile * CB + cb_idx
+        kv_idx = idx_in_conbine * CB + cb_idx
 
         k_bp = tl.make_block_ptr(
             K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
@@ -144,7 +144,7 @@ def _mm2_pv(
     v_l0b, p_l0a,
     workspace_p, workspace_pv,
     # task geometry
-    cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
+    cid, prev_idx_in_conbine, prev_batch_idx, kv_prev_head_idx,
     prev_ring_slot,
     # strides
     sKb, sKh, sKs, sKd,
@@ -159,7 +159,7 @@ def _mm2_pv(
     sync_block_wait("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
     for cb_idx in range(CB):
-        prev_kv_idx = prev_task_in_tile * CB + cb_idx
+        prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
 
         v_bp = tl.make_block_ptr(
             V + prev_batch_idx * sKb + kv_prev_head_idx * sKh, (S, DIM), (sKs, sKd),
@@ -195,12 +195,12 @@ def _mm2_pv(
 @triton.jit
 def _vec1_softmax(
     workspace_s, workspace_p, workspace_rescale, workspace_expsum,
-    cid, vid, task_in_tile, ring_slot,
+    cid, vid, idx_in_conbine, ring_slot,
     neg_max_even, neg_max_odd,
     sm_scale,
     # causal mask inputs
     IS_CAUSAL: tl.constexpr,
-    tile_start, tasks_per_tile, num_seq_blocks,
+    tile_start, conbined_block_num, num_seq_blocks,
     g,
     CB: tl.constexpr,
 ):
@@ -216,12 +216,12 @@ def _vec1_softmax(
     sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
     # reset running max at the first task of each output tile
-    if task_in_tile == 0:
+    if idx_in_conbine == 0:
         neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
         neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
 
     for cb_idx in range(CB):
-        kv_idx = task_in_tile * CB + cb_idx
+        kv_idx = idx_in_conbine * CB + cb_idx
         cur_parity   = kv_idx % 2
         prv_parity   = 1 - cur_parity
 
@@ -235,7 +235,7 @@ def _vec1_softmax(
         attn_score_tile = tl.load(score_load_bp).to(tl.float32)
 
         if IS_CAUSAL:
-            tile_seq_idx   = g // tasks_per_tile
+            tile_seq_idx   = g // conbined_block_num
             global_tile_id = tile_start + tile_seq_idx
             q_tile_row     = global_tile_id % num_seq_blocks
             q_row_idx      = q_tile_row * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
@@ -299,7 +299,7 @@ def _vec2_accumulate(
     Out,
     workspace_pv, workspace_rescale, workspace_expsum,
     cid, vid,
-    prev_task_in_tile, prev_tile_row, prev_batch_idx, prev_head_idx,
+    prev_idx_in_conbine, prev_tile_row, prev_batch_idx, prev_head_idx,
     prev_ring_slot,
     acc_o, softmax_denom,
     sOb, sOh, sOs, sOd,
@@ -317,7 +317,7 @@ def _vec2_accumulate(
     sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
     for cb_idx in range(CB):
-        prev_kv_idx = prev_task_in_tile * CB + cb_idx
+        prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
 
         # load pv_acc[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_pv (MTE2)
         pv_load_bp = tl.make_block_ptr(
@@ -381,22 +381,24 @@ def flash_attention_fwd_3task_kernel(
     Q, K, V, Out,
     mm1Res, stage1Res, mm2Res,           # GM ping-pong workspaces
     sm_scale,
-    B, Hq, Hkv, S,                       # shapes
-    sQb, sQh, sQs, sQd,                  # Q strides
-    sKb, sKh, sKs, sKd,                  # K/V strides
-    sOb, sOh, sOs, sOd,                  # Out strides
-    num_seq_blocks, heads_q, gqa_group,  # task-decode helpers
-    n_iters,                             # KV blocks (s2 loop) per output tile
-    q_tasks, r_tasks,                    # static task split
-    NUM_ITERS: tl.constexpr,             # = n_iters as constexpr
+    B, Hq, Hkv, S,
+    sQb, sQh, sQs, sQd,
+    sKb, sKh, sKs, sKd,
+    sOb, sOh, sOs, sOd,
+    num_seq_blocks, heads_q, gqa_group,
+    num_kv_blocks,           # KV blocks per output tile  (= seq_len // BLOCK_N)
+    conbined_block_num,               # tasks per output tile      (= num_kv_blocks // CB)
+    tiles_per_core, extra_tiles,
+    CB:        tl.constexpr,   # KV blocks per task (combine_batch)
+    NUM_KV_BLOCKS: tl.constexpr,   # = num_kv_blocks  (used in causal mask)
     IS_CAUSAL: tl.constexpr,
 ):
     cid = tl.program_id(0)
 
-    # ---- static task distribution (== AICPU GetFASectionInfo metadata) ----
-    my_start = cid * q_tasks + tl.where(cid < r_tasks, cid, r_tasks)
-    my_count = q_tasks + tl.where(cid < r_tasks, 1, 0)
-    n_sub = my_count * n_iters            # flattened (output-tile x KV-block) sub-tasks
+    # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
+    tile_start          = cid * tiles_per_core + tl.where(cid < extra_tiles, cid, extra_tiles)
+    tile_count          = tiles_per_core + tl.where(cid < extra_tiles, 1, 0)
+    num_global_tasks  = tile_count * conbined_block_num   # total pipelined tasks on this core
 
     # =========================================================================
     #  ① on-chip working set  (tile.alloc -> explicit memory hierarchy)
@@ -434,8 +436,8 @@ def flash_attention_fwd_3task_kernel(
 
             # ===== MM1(g): S = Q*K^T for CB KV blocks -> workspace_s[cid, g%RING, :] =====
             if g < num_global_tasks:
-                task_in_tile   = g % tasks_per_tile
-                tile_idx       = g // tasks_per_tile
+                idx_in_conbine   = g % conbined_block_num
+                tile_idx       = g // conbined_block_num
                 output_tile_id = tile_start + tile_idx
                 tile_row       = output_tile_id % num_seq_blocks
                 head_idx       = (output_tile_id // num_seq_blocks) % heads_q
@@ -447,7 +449,7 @@ def flash_attention_fwd_3task_kernel(
                     Q, K,
                     q_l0a, k_l0b,
                     workspace_s,
-                    cid, task_in_tile, tile_row, batch_idx, head_idx, kv_head_idx,
+                    cid, idx_in_conbine, tile_row, batch_idx, head_idx, kv_head_idx,
                     ring_slot,
                     sQb, sQh, sQs, sQd,
                     sKb, sKh, sKs, sKd,
@@ -457,8 +459,8 @@ def flash_attention_fwd_3task_kernel(
             # ===== MM2(g-1): O_part = P*V for CB blocks -> workspace_pv[cid,(g-1)%RING,:] =====
             if g >= 1:
                 prev_g           = g - 1
-                prev_task_in_tile    = prev_g % tasks_per_tile
-                prev_tile_idx        = prev_g // tasks_per_tile
+                prev_idx_in_conbine    = prev_g % conbined_block_num
+                prev_tile_idx        = prev_g // conbined_block_num
                 prev_output_tile_id  = tile_start + prev_tile_idx
                 prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
                 prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
@@ -469,7 +471,7 @@ def flash_attention_fwd_3task_kernel(
                     V,
                     v_l0b, p_l0a,
                     workspace_p, workspace_pv,
-                    cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
+                    cid, prev_idx_in_conbine, prev_batch_idx, kv_prev_head_idx,
                     prev_ring_slot,
                     sKb, sKh, sKs, sKd,
                     S, CB,
@@ -504,32 +506,37 @@ def flash_attention_fwd_3task_kernel(
 
             # ===== Vec1(g): softmax(workspace_s[g%RING]) -> workspace_p[g%RING] =====
             if g < num_global_tasks:
-                task_in_tile = g % tasks_per_tile
+                idx_in_conbine = g % conbined_block_num
                 ring_slot    = g % RING
                 neg_max_even, neg_max_odd = _vec1_softmax(
                     workspace_s, workspace_p, workspace_rescale, workspace_expsum,
-                    cid, vid, task_in_tile, ring_slot,
+                    cid, vid, idx_in_conbine, ring_slot,
                     neg_max_even, neg_max_odd,
                     sm_scale,
-                    IS_CAUSAL, tile_start, tasks_per_tile, num_seq_blocks,
+                    IS_CAUSAL, tile_start, conbined_block_num, num_seq_blocks,
                     g, CB,
                 )
 
-                # GM mm1Res[pp1] -> registers (MTE2)
-                m1r_bp = tl.make_block_ptr(mm1Res + cid * (PP * BLOCK_M * BLOCK_N) + pp1 * (BLOCK_M * BLOCK_N),
-                                           (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                s_tile = tl.load(m1r_bp).to(tl.float32)
-                sync_block_set(EVT_MTE2_V[0], EVT_MTE2_V[1], EVT_MTE2_V[2], EVT_MTE2_V[3], EVT_MTE2_V[4])
-                sync_block_wait(EVT_MTE2_V[0], EVT_MTE2_V[1], EVT_MTE2_V[2], EVT_MTE2_V[3], EVT_MTE2_V[4])
+            # ===== Vec2(g-1): acc_o = acc_o*rescale + pv_acc; finalize at last KV block =====
+            if g >= 1:
+                prev_g           = g - 1
+                prev_idx_in_conbine    = prev_g % conbined_block_num
+                prev_tile_idx        = prev_g // conbined_block_num
+                prev_output_tile_id  = tile_start + prev_tile_idx
+                prev_tile_row        = prev_output_tile_id % num_seq_blocks
+                prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
+                prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
+                prev_ring_slot       = prev_g % RING
 
-                if IS_CAUSAL:
-                    t1  = g1 // n_iters
-                    tid = my_start + t1
-                    bx1 = tid % num_seq_blocks
-                    q_idx  = bx1 * BLOCK_M + tl.arange(0, BLOCK_M)
-                    kv_idx = j1 * BLOCK_N + tl.arange(0, BLOCK_N)
-                    valid  = q_idx[:, None] >= kv_idx[None, :]
-                    s_tile = tl.where(valid, s_tile, float("-inf"))
+                acc_o, softmax_denom = _vec2_accumulate(
+                    Out,
+                    workspace_pv, workspace_rescale, workspace_expsum,
+                    cid, vid, prev_idx_in_conbine, prev_tile_row, prev_batch_idx, prev_head_idx,
+                    prev_ring_slot,
+                    acc_o, softmax_denom,
+                    sOb, sOh, sOs, sOd,
+                    S, CB, NUM_KV_BLOCKS,
+                )
 
                 # per-tile softmax numerator P = exp(scale*S - scale*max)
                 # (cross-KV-block running-max carry dropped; dump illustration)
@@ -633,13 +640,14 @@ class _DumpOptions:
 def _dump_signature():
     """Static signature for ast_to_ttir (pointers / scalars / i32 / constexpr)."""
     ptr = {"Q": "*fp16", "K": "*fp16", "V": "*fp16", "Out": "*fp16",
-           "mm1Res": "*fp32", "stage1Res": "*fp16", "mm2Res": "*fp32"}
-    i32_names = ["B", "Hq", "Hkv", "S",
-                 "sQb", "sQh", "sQs", "sQd",
-                 "sKb", "sKh", "sKs", "sKd",
-                 "sOb", "sOh", "sOs", "sOd",
-                 "num_seq_blocks", "heads_q", "gqa_group",
-                 "n_iters", "q_tasks", "r_tasks"]
+           "workspace_s": "*fp16", "workspace_p": "*fp16", "workspace_pv": "*fp16",
+           "workspace_rescale": "*fp32", "workspace_expsum": "*fp32"}
+    i32s = ["B", "Hq", "Hkv", "S",
+            "sQb", "sQh", "sQs", "sQd",
+            "sKb", "sKh", "sKs", "sKd",
+            "sOb", "sOh", "sOs", "sOd",
+            "num_seq_blocks", "heads_q", "gqa_group",
+            "num_kv_blocks", "conbined_block_num", "tiles_per_core", "extra_tiles"]
     sig = dict(ptr)
     sig["sm_scale"] = "fp32"
     for n in i32_names:
@@ -671,8 +679,10 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is
     if ttir_path is None:
         ttir_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_ttir.mlir")
 
-    signature = _dump_signature()
-    constants = {"NUM_ITERS": num_iters, "IS_CAUSAL": is_causal}
+    cb = combine_batch
+    conbined_block_num = num_kv_blocks // combine_batch
+    signature = _dump_signature(cb)
+    constants = {"CB": combine_batch, "NUM_KV_BLOCKS": num_kv_blocks, "IS_CAUSAL": is_causal}
 
     src = ASTSource(flash_attention_fwd_3task_kernel, signature, constants)
     context = ir.context()
@@ -989,10 +999,17 @@ def flash_attention_fwd(q, k, v, is_causal=False):
     Hkv = k.shape[1]
     assert D == DIM and S % BLOCK_N == 0 and Hq % Hkv == 0
     num_seq_blocks = S // BLOCK_M
-    block_num = num_seq_blocks * Hq * B
-    n_iters = S // BLOCK_N
-    q_tasks = block_num // NUM_CORES
-    r_tasks = block_num % NUM_CORES
+    block_num      = num_seq_blocks * Hq * B
+    num_kv_blocks        = S // BLOCK_N   # KV blocks per output tile
+
+    CB = combine_batch
+    if num_kv_blocks < CB:
+        CB = num_kv_blocks
+    assert num_kv_blocks % CB == 0, f"num_kv_blocks ({num_kv_blocks}) must be divisible by combine_batch ({CB})"
+    conbined_block_num = num_kv_blocks // CB   # tasks per output tile
+
+    tiles_per_core = block_num // NUM_CORES
+    extra_tiles = block_num % NUM_CORES
 
     out = torch.empty_like(q)
     # GM ping-pong workspaces (taskId % 2), one slice per core.
@@ -1009,8 +1026,9 @@ def flash_attention_fwd(q, k, v, is_causal=False):
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
         out.stride(0), out.stride(1), out.stride(2), out.stride(3),
         num_seq_blocks, Hq, Hq // Hkv,
-        n_iters, q_tasks, r_tasks,
-        NUM_ITERS=n_iters,
+        num_kv_blocks, conbined_block_num, tiles_per_core, extra_tiles,
+        CB=CB,
+        NUM_KV_BLOCKS=num_kv_blocks,
         IS_CAUSAL=is_causal,
     )
     return out
