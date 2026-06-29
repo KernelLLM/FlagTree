@@ -68,18 +68,6 @@ CD = tl.constexpr(DIM)
 # ---- arch22 "3-task" schedule constants -----------------------------------
 RING = 3   # depth of the task ring  (the "3-task" of the schedule)
 
-# ---- intra-core signal IDs (Cube scope) ------------------------------------
-SIG_K_L1 = 0
-SIG_P_L1 = 1
-SIG_V_L1 = 2
-SIG_L0AB = 3   # double-buffer base; slot s -> SIG_L0AB+s  (3,4)
-SIG_L0C  = 5   # double-buffer base; slot s -> SIG_L0C+s   (5,6)
-SIG_Q    = 7   # resident-Q guard across tiles
-
-# ---- intra-core signal IDs (Vector scope) ----------------------------------
-SIG_IO_UB  = 0
-SIG_S_HALF = 1
-
 # ---- cross-core semaphore IDs ----------------------------------------------
 SEM_S_READY  = 0   # C->V : workspace_s (S)   has data
 SEM_S_FREE   = 1   # V->C : workspace_s slot  free
