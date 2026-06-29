@@ -437,11 +437,11 @@ def flash_attention_fwd_3task_kernel(
             # ===== MM1(g): S = Q*K^T for CB KV blocks -> workspace_s[cid, g%RING, :] =====
             if g < num_global_tasks:
                 idx_in_conbine   = g % conbined_block_num
-                block_idx       = g // conbined_block_num
-                output_tile_id = tile_start + block_idx
-                global_head_idx       = output_tile_id % num_seq_blocks
-                head_idx       = (output_tile_id // num_seq_blocks) % heads_q
-                batch_idx      = output_tile_id // (num_seq_blocks * heads_q)
+                conbined_block_idx = g // conbined_block_num
+                output_block_id = tile_start + conbined_block_idx
+                global_head_idx       = output_block_id % num_seq_blocks
+                head_idx       = (output_block_id // num_seq_blocks) % heads_q
+                batch_idx      = output_block_id // (num_seq_blocks * heads_q)
                 kv_head_idx    = head_idx // gqa_group
                 ring_slot      = g % RING
 
@@ -460,10 +460,10 @@ def flash_attention_fwd_3task_kernel(
             if g >= 1:
                 prev_g           = g - 1
                 prev_idx_in_conbine    = prev_g % conbined_block_num
-                prev_block_idx        = prev_g // conbined_block_num
-                prev_output_tile_id  = tile_start + prev_block_idx
-                prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
-                prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
+                prev_conbined_block_idx        = prev_g // conbined_block_num
+                prev_output_block_id  = tile_start + prev_conbined_block_idx
+                prev_head_idx        = (prev_output_block_id // num_seq_blocks) % heads_q
+                prev_batch_idx       = prev_output_block_id // (num_seq_blocks * heads_q)
                 kv_prev_head_idx     = prev_head_idx // gqa_group
                 prev_ring_slot       = prev_g % RING
 
@@ -521,11 +521,11 @@ def flash_attention_fwd_3task_kernel(
             if g >= 1:
                 prev_g           = g - 1
                 prev_idx_in_conbine    = prev_g % conbined_block_num
-                prev_block_idx        = prev_g // conbined_block_num
-                prev_output_tile_id  = tile_start + prev_block_idx
-                prev_global_head_idx        = prev_output_tile_id % num_seq_blocks
-                prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
-                prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
+                prev_conbined_block_idx        = prev_g // conbined_block_num
+                prev_output_block_id  = tile_start + prev_conbined_block_idx
+                prev_global_head_idx        = prev_output_block_id % num_seq_blocks
+                prev_head_idx        = (prev_output_block_id // num_seq_blocks) % heads_q
+                prev_batch_idx       = prev_output_block_id // (num_seq_blocks * heads_q)
                 prev_ring_slot       = prev_g % RING
 
                 acc_o, softmax_denom = _vec2_accumulate(
