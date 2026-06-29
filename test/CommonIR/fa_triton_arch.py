@@ -89,7 +89,7 @@ def _mm1_qkt(
     q_l0a, k_l0b,
     workspace_s,
     # task geometry
-    cid, idx_in_conbine, tile_row, batch_idx, head_idx, kv_head_idx,
+    cid, idx_in_conbine, global_head_idx, batch_idx, head_idx, kv_head_idx,
     ring_slot,
     # strides
     sQb, sQh, sQs, sQd,
@@ -108,7 +108,7 @@ def _mm1_qkt(
     if idx_in_conbine == 0:
         q_bp = tl.make_block_ptr(
             Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
-            (tile_row * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
+            (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
         tile_copy(q_bp, q_l0a, [CBM, CD])
 
     for cb_idx in range(CB):
@@ -237,8 +237,8 @@ def _vec1_softmax(
         if IS_CAUSAL:
             tile_seq_idx   = g // conbined_block_num
             global_tile_id = tile_start + tile_seq_idx
-            q_tile_row     = global_tile_id % num_seq_blocks
-            q_row_idx      = q_tile_row * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
+            q_global_head_idx     = global_tile_id % num_seq_blocks
+            q_row_idx      = q_global_head_idx * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
             kv_col_idx     = kv_idx * BLOCK_N + tl.arange(0, BLOCK_N)
             causal_mask    = q_row_idx[:, None] >= kv_col_idx[None, :]
             attn_score_tile = tl.where(causal_mask, attn_score_tile, float("-inf"))
@@ -299,7 +299,7 @@ def _vec2_accumulate(
     Out,
     workspace_pv, workspace_rescale, workspace_expsum,
     cid, vid,
-    prev_idx_in_conbine, prev_tile_row, prev_batch_idx, prev_head_idx,
+    prev_idx_in_conbine, prev_global_head_idx, prev_batch_idx, prev_head_idx,
     prev_ring_slot,
     acc_o, softmax_denom,
     sOb, sOh, sOs, sOd,
@@ -358,7 +358,7 @@ def _vec2_accumulate(
             output_tile = (acc_o / denom_bc).to(Out.dtype.element_ty)
             o_bp = tl.make_block_ptr(
                 Out + prev_batch_idx * sOb + prev_head_idx * sOh, (S, DIM), (sOs, sOd),
-                ((prev_tile_row * BLOCK_M + vid * HALF_M).to(tl.int32), 0), (HALF_M, DIM), (1, 0))
+                ((prev_global_head_idx * BLOCK_M + vid * HALF_M).to(tl.int32), 0), (HALF_M, DIM), (1, 0))
             tl.store(o_bp, output_tile)
 
     # all CB blocks consumed -> release workspace_pv[prev_ring_slot]
@@ -388,7 +388,7 @@ def flash_attention_fwd_3task_kernel(
     num_seq_blocks, heads_q, gqa_group,
     num_kv_blocks,           # KV blocks per output tile  (= seq_len // BLOCK_N)
     conbined_block_num,               # tasks per output tile      (= num_kv_blocks // CB)
-    tiles_per_core, extra_tiles,
+    block_num_per_core, rem_block_num,
     CB:        tl.constexpr,   # KV blocks per task (combine_batch)
     NUM_KV_BLOCKS: tl.constexpr,   # = num_kv_blocks  (used in causal mask)
     IS_CAUSAL: tl.constexpr,
@@ -396,8 +396,8 @@ def flash_attention_fwd_3task_kernel(
     cid = tl.program_id(0)
 
     # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
-    tile_start          = cid * tiles_per_core + tl.where(cid < extra_tiles, cid, extra_tiles)
-    tile_count          = tiles_per_core + tl.where(cid < extra_tiles, 1, 0)
+    tile_start          = cid * block_num_per_core + tl.where(cid < rem_block_num, cid, rem_block_num)
+    tile_count          = block_num_per_core + tl.where(cid < rem_block_num, 1, 0)
     num_global_tasks  = tile_count * conbined_block_num   # total pipelined tasks on this core
 
     # =========================================================================
@@ -437,9 +437,9 @@ def flash_attention_fwd_3task_kernel(
             # ===== MM1(g): S = Q*K^T for CB KV blocks -> workspace_s[cid, g%RING, :] =====
             if g < num_global_tasks:
                 idx_in_conbine   = g % conbined_block_num
-                tile_idx       = g // conbined_block_num
-                output_tile_id = tile_start + tile_idx
-                tile_row       = output_tile_id % num_seq_blocks
+                block_idx       = g // conbined_block_num
+                output_tile_id = tile_start + block_idx
+                global_head_idx       = output_tile_id % num_seq_blocks
                 head_idx       = (output_tile_id // num_seq_blocks) % heads_q
                 batch_idx      = output_tile_id // (num_seq_blocks * heads_q)
                 kv_head_idx    = head_idx // gqa_group
@@ -449,7 +449,7 @@ def flash_attention_fwd_3task_kernel(
                     Q, K,
                     q_l0a, k_l0b,
                     workspace_s,
-                    cid, idx_in_conbine, tile_row, batch_idx, head_idx, kv_head_idx,
+                    cid, idx_in_conbine, global_head_idx, batch_idx, head_idx, kv_head_idx,
                     ring_slot,
                     sQb, sQh, sQs, sQd,
                     sKb, sKh, sKs, sKd,
@@ -460,8 +460,8 @@ def flash_attention_fwd_3task_kernel(
             if g >= 1:
                 prev_g           = g - 1
                 prev_idx_in_conbine    = prev_g % conbined_block_num
-                prev_tile_idx        = prev_g // conbined_block_num
-                prev_output_tile_id  = tile_start + prev_tile_idx
+                prev_block_idx        = prev_g // conbined_block_num
+                prev_output_tile_id  = tile_start + prev_block_idx
                 prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
                 prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
                 kv_prev_head_idx     = prev_head_idx // gqa_group
@@ -521,9 +521,9 @@ def flash_attention_fwd_3task_kernel(
             if g >= 1:
                 prev_g           = g - 1
                 prev_idx_in_conbine    = prev_g % conbined_block_num
-                prev_tile_idx        = prev_g // conbined_block_num
-                prev_output_tile_id  = tile_start + prev_tile_idx
-                prev_tile_row        = prev_output_tile_id % num_seq_blocks
+                prev_block_idx        = prev_g // conbined_block_num
+                prev_output_tile_id  = tile_start + prev_block_idx
+                prev_global_head_idx        = prev_output_tile_id % num_seq_blocks
                 prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
                 prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
                 prev_ring_slot       = prev_g % RING
@@ -531,7 +531,7 @@ def flash_attention_fwd_3task_kernel(
                 acc_o, softmax_denom = _vec2_accumulate(
                     Out,
                     workspace_pv, workspace_rescale, workspace_expsum,
-                    cid, vid, prev_idx_in_conbine, prev_tile_row, prev_batch_idx, prev_head_idx,
+                    cid, vid, prev_idx_in_conbine, prev_global_head_idx, prev_batch_idx, prev_head_idx,
                     prev_ring_slot,
                     acc_o, softmax_denom,
                     sOb, sOh, sOs, sOd,
@@ -647,7 +647,7 @@ def _dump_signature():
             "sKb", "sKh", "sKs", "sKd",
             "sOb", "sOh", "sOs", "sOd",
             "num_seq_blocks", "heads_q", "gqa_group",
-            "num_kv_blocks", "conbined_block_num", "tiles_per_core", "extra_tiles"]
+            "num_kv_blocks", "conbined_block_num", "block_num_per_core", "rem_block_num"]
     sig = dict(ptr)
     sig["sm_scale"] = "fp32"
     for n in i32_names:
@@ -1008,8 +1008,8 @@ def flash_attention_fwd(q, k, v, is_causal=False):
     assert num_kv_blocks % CB == 0, f"num_kv_blocks ({num_kv_blocks}) must be divisible by combine_batch ({CB})"
     conbined_block_num = num_kv_blocks // CB   # tasks per output tile
 
-    tiles_per_core = block_num // NUM_CORES
-    extra_tiles = block_num % NUM_CORES
+    block_num_per_core = block_num // NUM_CORES
+    rem_block_num = block_num % NUM_CORES
 
     out = torch.empty_like(q)
     # GM ping-pong workspaces (taskId % 2), one slice per core.
@@ -1026,7 +1026,7 @@ def flash_attention_fwd(q, k, v, is_causal=False):
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
         out.stride(0), out.stride(1), out.stride(2), out.stride(3),
         num_seq_blocks, Hq, Hq // Hkv,
-        num_kv_blocks, conbined_block_num, tiles_per_core, extra_tiles,
+        num_kv_blocks, conbined_block_num, block_num_per_core, rem_block_num,
         CB=CB,
         NUM_KV_BLOCKS=num_kv_blocks,
         IS_CAUSAL=is_causal,
