@@ -54,20 +54,13 @@ class buffer_type(tl.dtype):
 
     def to_ir(self, builder: ir.builder) -> ir.type:
         element_ty_ir = self.element_ty.to_ir(builder)
-        addr_space_attr = (self.space.to_ir(builder) if self.space
-                           else builder.dsa_get_null_attr())
+        addr_space_attr = self.space.to_ir(builder) if self.space else builder.get_null_attr()
 
-        # Use tile_get_buffer_type to produce tile::BufType (TileIR).
-        # Falls back to get_buffer_ty for non-TileIR builders (e.g. plain
-        # ir.builder used in prototype serialisation).
+        # use the method with strides if strides is not empty
         if self.strides:
-            if hasattr(builder, 'tile_get_buffer_type'):
-                return builder.tile_get_buffer_type(self.shape, element_ty_ir, addr_space_attr)
-            return builder.get_buffer_ty_with_strides(self.shape, element_ty_ir, self.strides, addr_space_attr)
+            return builder.dsa_get_buffer_type_with_strides(self.shape, element_ty_ir, self.strides, addr_space_attr)
         else:
-            if hasattr(builder, 'tile_get_buffer_type'):
-                return builder.tile_get_buffer_type(self.shape, element_ty_ir, addr_space_attr)
-            return builder.get_buffer_ty(self.shape, element_ty_ir, addr_space_attr)
+            return builder.dsa_get_buffer_ty(self.shape, element_ty_ir, addr_space_attr)
 
     def __str__(self):
         return self.name
@@ -83,26 +76,6 @@ class buffer_type(tl.dtype):
 
     def __ne__(self, other) -> bool:
         return not self.__eq__(other)
-
-    @staticmethod
-    def is_void():
-        return False
-
-    @staticmethod
-    def is_block():
-        return False
-
-    @staticmethod
-    def is_ptr():
-        return False
-
-    @staticmethod
-    def is_int():
-        return False
-
-    @staticmethod
-    def is_floating():
-        return False
 
     @property
     def scalar(self):
