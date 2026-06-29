@@ -98,7 +98,7 @@ SEM_PV_FREE  = 5   # V->C : workspace_pv slot  free
 def _mm1_qkt(
     # inputs
     Q, K,
-    q_l1, k_l1, q_l0a, kt_l0b,
+    q_l0a, k_l0b,
     workspace_s,
     # task geometry
     cid, task_in_tile, tile_row, batch_idx, head_idx, kv_head_idx,
@@ -110,8 +110,8 @@ def _mm1_qkt(
 ):
     """MM1: compute S = Q * K^T for CB KV blocks and store into workspace_s.
 
-    Handles resident-Q reload (first task of a tile) and the full L1/L0
-    ping-pong DMA + MMA sequence for each KV block.
+    Handles resident-Q reload (first task of a tile) and the full L0A/L0B
+    DMA + MMA sequence for each KV block.
     """
     # wait workspace_s[ring_slot] task slot free (Vector released after Vec1)
     sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
@@ -121,7 +121,7 @@ def _mm1_qkt(
         q_bp = tl.make_block_ptr(
             Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
             (tile_row * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-        tile_copy(q_bp, q_l1, [CBM, CD])
+        tile_copy(q_bp, q_l0a, [CBM, CD])
 
     for cb_idx in range(CB):
         kv_idx = task_in_tile * CB + cb_idx
@@ -129,22 +129,21 @@ def _mm1_qkt(
         k_bp = tl.make_block_ptr(
             K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
             (kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tile_copy(k_bp, k_l1, [CBN, CD])
+        tile_copy(k_bp, k_l0b, [CBN, CD])
 
-        tile_copy(q_l1, q_l0a, [CBM, CD])
-
-        tile_copy(k_l1, kt_l0b, [CBN, CD])  # NOTE: no transpose flag yet
-
-        # attn_score = Q * K^T  (synchronous MMA stand-in for tile.cube_launch)
+        # attn_score = Q * K^T using L0A/L0B buffers
         attn_score = tl.dot(tile_to_tensor(q_l0a, writable=False),
-                            tile_to_tensor(kt_l0b, writable=False))
+                            tile_to_tensor(k_l0b, writable=False),
+                            out_dtype=tl.float16)
+        # workspace_s is fp16; cast if dot returned fp32
+        attn_score_fp16 = attn_score.to(tl.float16)
 
         score_store_bp = tl.make_block_ptr(
             workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
                            + ring_slot  * (CB * BLOCK_M * BLOCK_N)
                            + cb_idx  * (BLOCK_M * BLOCK_N)),
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-        tl.store(score_store_bp, attn_score)
+        tl.store(score_store_bp, attn_score_fp16)
 
     # all CB S-blocks written -> notify Vec1
     sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
@@ -154,7 +153,7 @@ def _mm1_qkt(
 def _mm2_pv(
     # inputs
     V,
-    v_l1, p_l1, p_l0a, v_l0b,
+    v_l0b, p_l0a,
     workspace_p, workspace_pv,
     # task geometry
     cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
@@ -177,29 +176,28 @@ def _mm2_pv(
         v_bp = tl.make_block_ptr(
             V + prev_batch_idx * sKb + kv_prev_head_idx * sKh, (S, DIM), (sKs, sKd),
             (prev_kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tile_copy(v_bp, v_l1, [CBN, CD])
+        tile_copy(v_bp, v_l0b, [CBN, CD])
 
         prob_load_bp = tl.make_block_ptr(
             workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
                            + prev_ring_slot  * (CB * BLOCK_M * BLOCK_N)
                            + cb_idx  * (BLOCK_M * BLOCK_N)),
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-        tile_copy(prob_load_bp, p_l1, [CBM, CBN])
+        tile_copy(prob_load_bp, p_l0a, [CBM, CBN])
 
-        tile_copy(v_l1, v_l0b, [CBN, CD])
-
-        tile_copy(p_l1, p_l0a, [CBM, CBN])
-
-        # pv_part = P * V  (synchronous MMA stand-in for tile.cube_launch)
+        # pv_part = P * V using L0A/L0B buffers
         pv_part = tl.dot(tile_to_tensor(p_l0a, writable=False),
-                         tile_to_tensor(v_l0b, writable=False))
+                         tile_to_tensor(v_l0b, writable=False),
+                         out_dtype=tl.float16)
+        # workspace_pv is fp16; cast if dot returned fp32
+        pv_part_fp16 = pv_part.to(tl.float16)
 
         pv_store_bp = tl.make_block_ptr(
             workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
                             + prev_ring_slot  * (CB * BLOCK_M * DIM)
                             + cb_idx  * (BLOCK_M * DIM)),
             (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-        tl.store(pv_store_bp, pv_part)
+        tl.store(pv_store_bp, pv_part_fp16)
 
     # all CB P*V blocks done -> notify Vec2; release workspace_p[prev_ring_slot]
     sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
@@ -372,7 +370,7 @@ def _vec2_accumulate(
             output_tile = (acc_o / denom_bc).to(Out.dtype.element_ty)
             o_bp = tl.make_block_ptr(
                 Out + prev_batch_idx * sOb + prev_head_idx * sOh, (S, DIM), (sOs, sOd),
-                (prev_tile_row * BLOCK_M + vid * HALF_M, 0), (HALF_M, DIM), (1, 0))
+                ((prev_tile_row * BLOCK_M + vid * HALF_M).to(tl.int32), 0), (HALF_M, DIM), (1, 0))
             tl.store(o_bp, output_tile)
 
     # all CB blocks consumed -> release workspace_pv[prev_ring_slot]
@@ -415,29 +413,29 @@ def flash_attention_fwd_3task_kernel(
     # =========================================================================
     #  ① on-chip working set  (tile.alloc -> explicit memory hierarchy)
     # =========================================================================
-    # -- Cube side: L1 staging + L0 double buffer (slot 0 = Bmm1, slot 1 = Bmm2) --
-    q_l1 = tile_alloc([BLOCK_M, DIM], Q.dtype.element_ty, L1)
-    k_l1 = tile_alloc([BLOCK_N, DIM], Q.dtype.element_ty, L1)
-    v_l1 = tile_alloc([BLOCK_N, DIM], Q.dtype.element_ty, L1)
-    p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
-    # two separate L0 slots (no buffer indexing in tile-DSA): 0 = Bmm1, 1 = Bmm2
-    l0a0 = tile_alloc([BLOCK_M, DIM], Q.dtype.element_ty, L0A)
-    l0b0 = tile_alloc([DIM, BLOCK_N], Q.dtype.element_ty, L0B)
-    l0c0 = tile_alloc([BLOCK_M, BLOCK_N], tl.float32, L0C)
-    l0a1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)
-    l0b1 = tile_alloc([BLOCK_N, DIM], Q.dtype.element_ty, L0B)
-    l0c1 = tile_alloc([BLOCK_M, DIM], tl.float32, L0C)
+    # -- Cube side: L0A/L0B for MMA inputs, L0C for MMA output --
+    q_l0a = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L0A)
+    k_l0b = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)
+    v_l0b = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)
+    p_l0a = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)
 
-    # -- Vector side: O accumulator in registers (loop-carried). NOTE: the
-    #    running-max / denominator / per-sub-task ring carry of the real 3-task
-    #    pipeline is dropped here — this file is a TileIR-dump illustration, so
-    #    the Vector math is simplified to keep valid (item-assignment-free) IR.
-    acc_o = tl.zeros((BLOCK_M, DIM), tl.float32)   # P·V accumulator
+    mm1_l0c = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
+    mm2_l0c = tile_alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
+
+    # -- Vector side (UB registers): full online-softmax state ---------------
+    # acc_o uses HALF_M rows; state per (ring_slot, cb_idx) stored as flat GM-backed
+    # workspaces; running max uses a ping-pong register pair (one per kv parity).
+    acc_o  = tl.zeros((HALF_M, DIM), tl.float32)
+    softmax_denom = tl.zeros((HALF_M, 1), tl.float32)   # running denominator l
+    # neg_max_even/odd: running -max*scale for even/odd kv index, reset each tile
+    neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
+    neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
 
     # =========================================================================
     #  ② init cross-engine flags: pre-arm so the first producer's wait passes.
     # =========================================================================
-    with al.scope(core_mode="cube"):
+    #with al.scope(core_mode="cube"):
+    with True:
         # ---- init: 3 ws2-FREE tokens + pre-arm intra-core signals ----
         # RING ws2-FREE tokens (one per slot) so MM2 pipeline can start
         sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
@@ -459,7 +457,7 @@ def flash_attention_fwd_3task_kernel(
 
                 _mm1_qkt(
                     Q, K,
-                    q_l1, k_l1, q_l0a, kt_l0b,
+                    q_l0a, k_l0b,
                     workspace_s,
                     cid, task_in_tile, tile_row, batch_idx, head_idx, kv_head_idx,
                     ring_slot,
@@ -481,7 +479,7 @@ def flash_attention_fwd_3task_kernel(
 
                 _mm2_pv(
                     V,
-                    v_l1, p_l1, p_l0a, v_l0b,
+                    v_l0b, p_l0a,
                     workspace_p, workspace_pv,
                     cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
                     prev_ring_slot,
@@ -495,7 +493,15 @@ def flash_attention_fwd_3task_kernel(
     #  ③ 3-task pipeline. One tick = one flattened sub-task g; +PIPE_DEPTH ticks
     #     drain the tail (cooldown).
     # =========================================================================
-    for g in range(n_sub + PIPE_DEPTH):
+    #with al.scope(core_mode="vector"):
+    with True:
+        # ---- init: 3 ws1-FREE + 3 ws3-FREE tokens + pre-arm intra-core signals ----
+        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
         # ─── 2) IterateBmm1(k): S = Q·Kᵀ -> mm1Res[g%2] ──────────────────────
         if g < n_sub:
