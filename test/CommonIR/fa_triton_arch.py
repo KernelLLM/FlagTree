@@ -293,7 +293,7 @@ def _dump_signature():
     return sig
 
 
-def dump_tileir(path=None, ttir_path=None, num_iters=32, is_causal=False):
+def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is_causal=False):
     """Compile the kernel to TTIR (containing tile.* ops) and write it to `path`.
 
     Also runs the TileIR→HIVM pass to lower tile.* ops and dumps the resulting
@@ -670,6 +670,8 @@ if __name__ == "__main__":
     parser.add_argument("--D", type=int, default=128)
     parser.add_argument("--causal", action="store_true")
     parser.add_argument("--no-check", action="store_true")
+    parser.add_argument("--combine-batch", type=int, default=8,
+                        help="KV blocks per task (arch22 nRatio)")
     parser.add_argument("--dump-mlir", nargs="?", const="", default=None,
                         help="Dump intermediate TileIR to PATH (default skill/op/fa_triton_arch.mlir) and exit; no device needed.")
     parser.add_argument("--dump-ir", nargs="?", const="", default=None,
