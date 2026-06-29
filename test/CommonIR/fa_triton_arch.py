@@ -232,25 +232,25 @@ def _vec1_softmax(
                            + cb_idx  * (BLOCK_M * BLOCK_N)
                            + vid * HALF_M * BLOCK_N),
             (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
-        attn_score_tile = tl.load(score_load_bp).to(tl.float32)
+        attn_score_block = tl.load(score_load_bp).to(tl.float32)
 
         if IS_CAUSAL:
-            tile_seq_idx   = g // conbined_block_num
-            global_tile_id = block_start + tile_seq_idx
-            q_global_head_idx     = global_tile_id % num_seq_blocks
+            conbined_block_idx   = g // conbined_block_num
+            global_block_id = block_start + conbined_block_idx
+            q_global_head_idx     = global_block_id % num_seq_blocks
             q_row_idx      = q_global_head_idx * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
             kv_col_idx     = kv_idx * BLOCK_N + tl.arange(0, BLOCK_N)
             causal_mask    = q_row_idx[:, None] >= kv_col_idx[None, :]
-            attn_score_tile = tl.where(causal_mask, attn_score_tile, float("-inf"))
+            attn_score_block = tl.where(causal_mask, attn_score_block, float("-inf"))
 
         # online softmax: compute new running -max*scale (ping-pong)
-        block_row_max = tl.max(attn_score_tile, axis=-1, keep_dims=True)
+        block_row_max = tl.max(attn_score_block, axis=-1, keep_dims=True)
         neg_max_new = tl.minimum(-block_row_max * sm_scale,
                                  tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
         neg_max_prv = tl.where(cur_parity == 0, neg_max_odd, neg_max_even)
 
         # softmax_p = exp(sm_scale * score + neg_max_new)
-        softmax_p = tl.exp(sm_scale * attn_score_tile + neg_max_new)
+        softmax_p = tl.exp(sm_scale * attn_score_block + neg_max_new)
 
         # rescale = exp(neg_max_new - neg_max_prv): correction factor for Vec2
         rescale = tl.exp(neg_max_new - neg_max_prv)
