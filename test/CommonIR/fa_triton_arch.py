@@ -90,9 +90,11 @@ SEM_PV_FREE  = 5   # V->C : workspace_pv slot  free
 
 
 # =============================================================================
-#  Step sub-functions — plain Python; inlined by Triton at JIT compile time.
+#  Step sub-functions (each called from the main kernel; decorated @triton.jit
+#  so the compiler sees them as inlinable device functions).
 # =============================================================================
 
+@triton.jit
 def _mm1_qkt(
     # inputs
     Q, K,
@@ -148,6 +150,7 @@ def _mm1_qkt(
     sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
 
 
+@triton.jit
 def _mm2_pv(
     # inputs
     V,
@@ -203,6 +206,7 @@ def _mm2_pv(
     sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
 
 
+@triton.jit
 def _vec1_softmax(
     workspace_s, workspace_p, workspace_rescale, workspace_expsum,
     cid, vid, task_in_tile, ring_slot,
@@ -304,6 +308,7 @@ def _vec1_softmax(
     return neg_max_even, neg_max_odd
 
 
+@triton.jit
 def _vec2_accumulate(
     Out,
     workspace_pv, workspace_rescale, workspace_expsum,
