@@ -200,7 +200,7 @@ def _vec1_softmax(
     sm_scale,
     # causal mask inputs
     IS_CAUSAL: tl.constexpr,
-    tile_start, conbined_block_num, num_seq_blocks,
+    block_start, conbined_block_num, num_seq_blocks,
     g,
     CB: tl.constexpr,
 ):
@@ -236,7 +236,7 @@ def _vec1_softmax(
 
         if IS_CAUSAL:
             tile_seq_idx   = g // conbined_block_num
-            global_tile_id = tile_start + tile_seq_idx
+            global_tile_id = block_start + tile_seq_idx
             q_global_head_idx     = global_tile_id % num_seq_blocks
             q_row_idx      = q_global_head_idx * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
             kv_col_idx     = kv_idx * BLOCK_N + tl.arange(0, BLOCK_N)
@@ -396,7 +396,7 @@ def flash_attention_fwd_3task_kernel(
     cid = tl.program_id(0)
 
     # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
-    tile_start          = cid * block_num_per_core + tl.where(cid < rem_block_num, cid, rem_block_num)
+    block_start          = cid * block_num_per_core + tl.where(cid < rem_block_num, cid, rem_block_num)
     tile_count          = block_num_per_core + tl.where(cid < rem_block_num, 1, 0)
     num_global_tasks  = tile_count * conbined_block_num   # total pipelined tasks on this core
 
@@ -438,7 +438,7 @@ def flash_attention_fwd_3task_kernel(
             if g < num_global_tasks:
                 idx_in_conbine   = g % conbined_block_num
                 conbined_block_idx = g // conbined_block_num
-                output_block_id = tile_start + conbined_block_idx
+                output_block_id = block_start + conbined_block_idx
                 global_head_idx       = output_block_id % num_seq_blocks
                 head_idx       = (output_block_id // num_seq_blocks) % heads_q
                 batch_idx      = output_block_id // (num_seq_blocks * heads_q)
@@ -461,7 +461,7 @@ def flash_attention_fwd_3task_kernel(
                 prev_g           = g - 1
                 prev_idx_in_conbine    = prev_g % conbined_block_num
                 prev_conbined_block_idx        = prev_g // conbined_block_num
-                prev_output_block_id  = tile_start + prev_conbined_block_idx
+                prev_output_block_id  = block_start + prev_conbined_block_idx
                 prev_head_idx        = (prev_output_block_id // num_seq_blocks) % heads_q
                 prev_batch_idx       = prev_output_block_id // (num_seq_blocks * heads_q)
                 kv_prev_head_idx     = prev_head_idx // gqa_group
@@ -513,7 +513,7 @@ def flash_attention_fwd_3task_kernel(
                     cid, vid, idx_in_conbine, ring_slot,
                     neg_max_even, neg_max_odd,
                     sm_scale,
-                    IS_CAUSAL, tile_start, conbined_block_num, num_seq_blocks,
+                    IS_CAUSAL, block_start, conbined_block_num, num_seq_blocks,
                     g, CB,
                 )
 
@@ -522,7 +522,7 @@ def flash_attention_fwd_3task_kernel(
                 prev_g           = g - 1
                 prev_idx_in_conbine    = prev_g % conbined_block_num
                 prev_conbined_block_idx        = prev_g // conbined_block_num
-                prev_output_block_id  = tile_start + prev_conbined_block_idx
+                prev_output_block_id  = block_start + prev_conbined_block_idx
                 prev_global_head_idx        = prev_output_block_id % num_seq_blocks
                 prev_head_idx        = (prev_output_block_id // num_seq_blocks) % heads_q
                 prev_batch_idx       = prev_output_block_id // (num_seq_blocks * heads_q)
