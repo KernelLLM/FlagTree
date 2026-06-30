@@ -188,7 +188,7 @@ def flash_attention_fwd_3task_kernel(
                     # attn_score = Q * K^T using L1 buffers
                     s_l0c = tl.dot(tle.dsa.to_tensor(q_l1, writable=False),
                                    tle.dsa.to_tensor(k_l1, writable=False),
-                                   out_dtype=tl.float16)
+                                   out_dtype=tl.float32)
 
                     score_store_bp = tl.make_block_ptr(
                         workspace_s + (cid * RING * CB * BLOCK_M * BLOCK_N
