@@ -429,14 +429,19 @@ def flash_attention_fwd_3task_kernel(
     neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
 
     # =========================================================================
-    #  ② init cross-engine flags: pre-arm so the first producer's wait passes.
+    #  ② + ③ 3-task pipeline: Cube (MM1/MM2) and Vector (Vec1/Vec2) scopes
+    #  run tick-by-tick inside a single outer loop.
     # =========================================================================
-    #with al.scope(core_mode="cube"):
-    with True:
-        # ---- init: one SEM_P_FREE token so Vec1 can write workspace_p on first tick ----
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+    for g in range(num_global_tasks + 1):
 
-        for g in range(num_global_tasks + 1):
+        # -----------------------------------------------------------------
+        #  Cube scope
+        # -----------------------------------------------------------------
+        #with al.scope(core_mode="cube"):
+        with True:
+            if g == 0:
+                # ---- init: one SEM_P_FREE token so Vec1 can write workspace_p on first tick ----
+                sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
 
             # ===== MM1(g): S = Q*K^T for CB KV blocks -> workspace_s[cid, g%RING, :] =====
             if g < num_global_tasks:
@@ -481,29 +486,19 @@ def flash_attention_fwd_3task_kernel(
                     S, CB,
                 )
 
-        # ---- destroy: consume the outstanding SEM_P_FREE token from init ----
-        sync_block_wait("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+            if g == num_global_tasks:
+                # ---- destroy: consume the outstanding SEM_P_FREE token from init ----
+                sync_block_wait("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
 
-    # =========================================================================
-    #  ③ 3-task pipeline. One tick = one flattened sub-task g; +PIPE_DEPTH ticks
-    #     drain the tail (cooldown).
-    # =========================================================================
-    #with al.scope(core_mode="vector"):
-    with True:
-        # ---- init: one SEM_S_FREE and one SEM_PV_FREE token so MM1/MM2 can run on first tick ----
-        sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-
-        # ─── 2) IterateBmm1(k): S = Q·Kᵀ -> mm1Res[g%2] ──────────────────────
-        if g < n_sub:
-            t = g // n_iters
-            j = g % n_iters
-            cur_pp = g % PP
-            task_id = my_start + t
-            bx = task_id % num_seq_blocks
-            by = (task_id // num_seq_blocks) % heads_q
-            bz = task_id // (num_seq_blocks * heads_q)
-            kv_by = by // gqa_group
+        # -----------------------------------------------------------------
+        #  Vector scope
+        # -----------------------------------------------------------------
+        #with al.scope(core_mode="vector"):
+        with True:
+            if g == 0:
+                # ---- init: one SEM_S_FREE and one SEM_PV_FREE token so MM1/MM2 can run on first tick ----
+                sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+                sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
             # ===== Vec1(g): softmax(workspace_s[g%RING]) -> workspace_p[g%RING] =====
             if g < num_global_tasks:
@@ -539,9 +534,10 @@ def flash_attention_fwd_3task_kernel(
                     S, CB, NUM_KV_BLOCKS,
                 )
 
-        # ---- destroy: consume the outstanding SEM_S_FREE and SEM_PV_FREE tokens from init ----
-        sync_block_wait("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-        sync_block_wait("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+            if g == num_global_tasks:
+                # ---- destroy: consume the outstanding SEM_S_FREE and SEM_PV_FREE tokens from init ----
+                sync_block_wait("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+                sync_block_wait("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
 
 # =============================================================================
