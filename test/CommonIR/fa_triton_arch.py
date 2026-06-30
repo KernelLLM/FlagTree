@@ -186,7 +186,7 @@ def flash_attention_fwd_3task_kernel(
                     tile_copy(k_bp, k_l1, [CBN, CD])
 
                     # attn_score = Q * K^T using L1 buffers
-                    s_l0c = tl.dot(tle.dsa.to_tensor(q_l1, writable=False),
+                    s_val = tl.dot(tle.dsa.to_tensor(q_l1, writable=False),
                                    tle.dsa.to_tensor(k_l1, writable=False),
                                    out_dtype=tl.float32)
 
@@ -195,7 +195,7 @@ def flash_attention_fwd_3task_kernel(
                                        + ring_slot  * (CB * BLOCK_M * BLOCK_N)
                                        + cb_idx  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                    tl.store(score_store_bp, s_l0c)
+                    tl.store(score_store_bp, s_val)
 
                 # all CB S-blocks written -> notify Vec1
                 sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
@@ -233,16 +233,16 @@ def flash_attention_fwd_3task_kernel(
                     tile_copy(prob_load_bp, p_l1, [CBM, CBN])
 
                     # pv_part = P * V using L1 buffers
-                    pv_l0c = tl.dot(tle.dsa.to_tensor(p_l1, writable=False),
+                    pv_val = tl.dot(tle.dsa.to_tensor(p_l1, writable=False),
                                     tle.dsa.to_tensor(v_l1, writable=False),
-                                    out_dtype=tl.float16)
+                                    out_dtype=tl.float32)
 
                     pv_store_bp = tl.make_block_ptr(
                         workspace_pv + (cid * RING * CB * BLOCK_M * DIM
                                         + prev_ring_slot  * (CB * BLOCK_M * DIM)
                                         + cb_idx  * (BLOCK_M * DIM)),
                         (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-                    tl.store(pv_store_bp, pv_l0c)
+                    tl.store(pv_store_bp, pv_val)
 
                 # all CB P*V blocks done -> notify Vec2; release workspace_p[prev_ring_slot]
                 sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
@@ -440,7 +440,7 @@ class _DumpOptions:
 def _dump_signature():
     """Static signature for ast_to_ttir (pointers / scalars / i32 / constexpr)."""
     ptr = {"Q": "*fp16", "K": "*fp16", "V": "*fp16", "Out": "*fp16",
-           "workspace_s": "*fp32", "workspace_p": "*fp16", "workspace_pv": "*fp16",
+           "workspace_s": "*fp32", "workspace_p": "*fp32", "workspace_pv": "*fp32",
            "workspace_rescale": "*fp32", "workspace_expsum": "*fp32"}
     i32_names = ["B", "Hq", "Hkv", "S",
             "sQb", "sQh", "sQs", "sQd",
