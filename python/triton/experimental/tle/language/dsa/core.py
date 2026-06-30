@@ -161,51 +161,33 @@ def copy(src, dst, shape, inter_no_alias=False, _builder=None):
 
 @builtin
 def add(input, other, result, _builder=None):
-    input = from_buffer_to_tensor_pointer(input, _builder=_builder)
-    other = from_buffer_to_tensor_pointer(other, _builder=_builder)
-    result = from_buffer_to_tensor_pointer(result, _builder=_builder)
     tle_semantic.add(input, other, result, _builder)
 
 
 @builtin
 def sub(input, other, result, _builder=None):
-    input = from_buffer_to_tensor_pointer(input, _builder=_builder)
-    other = from_buffer_to_tensor_pointer(other, _builder=_builder)
-    result = from_buffer_to_tensor_pointer(result, _builder=_builder)
     tle_semantic.sub(input, other, result, _builder)
 
 
 @builtin
 def mul(input, other, result, _builder=None):
-    input = from_buffer_to_tensor_pointer(input, _builder=_builder)
-    other = from_buffer_to_tensor_pointer(other, _builder=_builder)
-    result = from_buffer_to_tensor_pointer(result, _builder=_builder)
     tle_semantic.mul(input, other, result, _builder)
 
 
 @builtin
 def div(input, other, result, _builder=None):
-    input = from_buffer_to_tensor_pointer(input, _builder=_builder)
-    other = from_buffer_to_tensor_pointer(other, _builder=_builder)
-    result = from_buffer_to_tensor_pointer(result, _builder=_builder)
     tle_semantic.div(input, other, result, _builder)
 
 
 @builtin
 def max(input, other, result, _builder=None):
     # elementwise binary vector maximum op
-    input = from_buffer_to_tensor_pointer(input, _builder=_builder)
-    other = from_buffer_to_tensor_pointer(other, _builder=_builder)
-    result = from_buffer_to_tensor_pointer(result, _builder=_builder)
     tle_semantic.max(input, other, result, _builder)
 
 
 @builtin
 def min(input, other, result, _builder=None):
     # elementwise binary vector minimum op
-    input = from_buffer_to_tensor_pointer(input, _builder=_builder)
-    other = from_buffer_to_tensor_pointer(other, _builder=_builder)
-    result = from_buffer_to_tensor_pointer(result, _builder=_builder)
     tle_semantic.min(input, other, result, _builder)
 
 
@@ -252,15 +234,15 @@ def to_tensor(memref: buffer, writable: bool = True, target_shape=None, _builder
 
 
 @builtin
-def subview(src: buffer, offsets: List[tl.constexpr], sizes: List[tl.constexpr], strides: List[tl.constexpr],
+def subview(src: buffer, offsets: List, sizes: List[tl.constexpr], strides: List[tl.constexpr],
             _builder=None) -> buffer:
     '''
     Creates a subview of the source buffer with the specified offsets, sizes, and strides.
 
     :param src: The source buffer to create a subview from.
     :type src: buffer
-    :param offsets: A list of non-negative integers representing the offsets in each dimension.
-    :type offsets: List[tl.constexpr]
+    :param offsets: Offsets in each dimension. Items may be constexpr/int literals or dynamic tl.tensor values.
+    :type offsets: List
     :param sizes: A list of non-negative integers representing the sizes in each dimension.
     :type sizes: List[tl.constexpr]
     :param strides: A list of non-negative integers representing the strides in each dimension.
@@ -397,7 +379,7 @@ def tile_copy(src, dst, shape, inter_no_alias=False, _builder=None):
 
 
 @builtin
-def tile_subview(src: buffer, offsets: List[tl.constexpr], sizes: List[tl.constexpr], strides: List[tl.constexpr],
+def tile_subview(src: buffer, offsets: List, sizes: List[tl.constexpr], strides: List[tl.constexpr],
                  _builder=None) -> buffer:
     """Extract a subview from a buffer using TileIR tile.subview op."""
     new_sizes = []
@@ -473,3 +455,21 @@ def tensor_to_tile(src: tl.tensor, space: address_space = None, _builder=None) -
 def tile_gm_offset(base, indices, strides, _builder=None) -> tl.tensor:
     """Compute a GM pointer with multi-dimensional offsets (TileIR tile.gm_offset)."""
     return tle_semantic.tile_gm_offset(base, indices, strides, _builder)
+
+
+@builtin
+def tile_cube_launch(a: buffer, b: buffer, acc: buffer, stage_a: buffer, stage_b: buffer, dst,
+                     transpose_a: bool = False, transpose_b: bool = False, init: bool = False,
+                     mma: str = "", _builder=None):
+    """Launch a Cube matmul using TileIR tile.cube_launch."""
+    transpose_a = _constexpr_to_value(transpose_a)
+    transpose_b = _constexpr_to_value(transpose_b)
+    init = _constexpr_to_value(init)
+    mma = _constexpr_to_value(mma)
+    tle_semantic.tile_cube_launch(a, b, acc, stage_a, stage_b, dst, transpose_a, transpose_b, init, mma, _builder)
+
+
+@builtin
+def tile_cube_wait(_builder=None):
+    """Wait for TileIR Cube work using tile.cube_wait."""
+    tle_semantic.tile_cube_wait(_builder)
