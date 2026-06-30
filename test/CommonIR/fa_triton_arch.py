@@ -23,13 +23,6 @@ import triton.language as tl
 #  tile/tle dialects are registered in the MLIR context during compilation.
 # =============================================================================
 import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
-from triton.experimental.tle.language.dsa.core import (
-    tile_alloc,
-    tile_copy,
-    tile_to_tensor,
-    tile_pipe_barrier,
-    tensor_to_tile,
-)
 from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
     L1, L0C, UB, PIPE, sync_block_set, sync_block_wait,
 )
@@ -109,7 +102,7 @@ def _mm1_qkt(
         q_bp = tl.make_block_ptr(
             Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
             (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-        tile_copy(q_bp, q_l1, [CBM, CD])
+        tle.dsa.copy(q_bp, q_l1, [CBM, CD])
 
     for cb_idx in range(CB):
         kv_idx = idx_in_conbine * CB + cb_idx
@@ -117,11 +110,11 @@ def _mm1_qkt(
         k_bp = tl.make_block_ptr(
             K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
             (kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tile_copy(k_bp, k_l1, [CBN, CD])
+        tle.dsa.copy(k_bp, k_l1, [CBN, CD])
 
         # attn_score = Q * K^T using L1 buffers
-        attn_score = tl.dot(tile_to_tensor(q_l1, writable=False),
-                            tile_to_tensor(k_l1, writable=False),
+        attn_score = tl.dot(tle.dsa.to_tensor(q_l1, writable=False),
+                            tle.dsa.to_tensor(k_l1, writable=False),
                             out_dtype=tl.float16)
         # workspace_s is fp16; cast if dot returned fp32
         attn_score_fp16 = attn_score.to(tl.float16)
@@ -164,18 +157,18 @@ def _mm2_pv(
         v_bp = tl.make_block_ptr(
             V + prev_batch_idx * sKb + kv_prev_head_idx * sKh, (S, DIM), (sKs, sKd),
             (prev_kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tile_copy(v_bp, v_l1, [CBN, CD])
+        tle.dsa.copy(v_bp, v_l1, [CBN, CD])
 
         prob_load_bp = tl.make_block_ptr(
             workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
                            + prev_ring_slot  * (CB * BLOCK_M * BLOCK_N)
                            + cb_idx  * (BLOCK_M * BLOCK_N)),
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-        tile_copy(prob_load_bp, p_l1, [CBM, CBN])
+        tle.dsa.copy(prob_load_bp, p_l1, [CBM, CBN])
 
         # pv_part = P * V using L1 buffers
-        pv_part = tl.dot(tile_to_tensor(p_l1, writable=False),
-                         tile_to_tensor(v_l1, writable=False),
+        pv_part = tl.dot(tle.dsa.to_tensor(p_l1, writable=False),
+                         tle.dsa.to_tensor(v_l1, writable=False),
                          out_dtype=tl.float16)
         # workspace_pv is fp16; cast if dot returned fp32
         pv_part_fp16 = pv_part.to(tl.float16)
@@ -404,13 +397,13 @@ def flash_attention_fwd_3task_kernel(
     #  ① on-chip working set  (tile.alloc -> explicit memory hierarchy)
     # =========================================================================
     # -- Cube side: L1 for MMA inputs, L0C for MMA output --
-    q_l1 = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L1)
-    k_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
-    v_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
-    p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
+    q_l1 = tle.dsa.alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L1)
+    k_l1 = tle.dsa.alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
+    v_l1 = tle.dsa.alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
+    p_l1 = tle.dsa.alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
 
-    mm1_l0c = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
-    mm2_l0c = tile_alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
+    mm1_l0c = tle.dsa.alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
+    mm2_l0c = tle.dsa.alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
 
     # -- Vector side (UB registers): full online-softmax state ---------------
     # acc_o uses HALF_M rows; state per (ring_slot, cb_idx) stored as flat GM-backed
