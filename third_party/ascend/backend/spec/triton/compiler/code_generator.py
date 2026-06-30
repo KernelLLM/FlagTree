@@ -33,6 +33,15 @@ from triton.language.extra.cann.extension.builder import setup_unified_builder
 WITH_DISPATCH.update(ASCEND_WITH_DISPATCH)
 
 
+def _is_tle_buffer_type(ty):
+    """Check if ty is a TLE buffer_type without top-level import (avoids circular import)."""
+    try:
+        from triton.experimental.tle.language.dsa.types import buffer_type as tle_buffer_type
+        return isinstance(ty, tle_buffer_type)
+    except ImportError:
+        return False
+
+
 def mangle_ty(ty):
     if ty.is_ptr():
         return 'P' + mangle_ty(ty.element_ty)
@@ -466,6 +475,9 @@ class CodeGenerator(ast.NodeVisitor):
                 param_type = self.prototype.param_types[idx]
                 if isinstance(param_type, bl.buffer_type):
                     arg_values.append(bl.buffer(self.fn.args(idx), param_type))
+                elif _is_tle_buffer_type(param_type):
+                    from triton.experimental.tle.language.dsa.types import buffer as tle_buffer
+                    arg_values.append(tle_buffer(self.fn.args(idx), param_type))
                 else:
                     arg_values.append(tensor(self.fn.args(idx), param_type))
                 idx += 1

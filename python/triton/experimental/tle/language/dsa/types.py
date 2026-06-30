@@ -56,11 +56,14 @@ class buffer_type(tl.dtype):
         element_ty_ir = self.element_ty.to_ir(builder)
         addr_space_attr = self.space.to_ir(builder) if self.space else builder.get_null_attr()
 
-        # use the method with strides if strides is not empty
-        if self.strides:
-            return builder.dsa_get_buffer_type_with_strides(self.shape, element_ty_ir, self.strides, addr_space_attr)
+        # Use TileIR BufType when tile_get_buffer_type is available (TileIR path),
+        # otherwise fall back to memref (extension/buffer path).
+        if hasattr(builder, 'tile_get_buffer_type'):
+            return builder.tile_get_buffer_type(self.shape, element_ty_ir, addr_space_attr)
+        elif self.strides:
+            return builder.get_buffer_ty_with_strides(self.shape, element_ty_ir, self.strides, addr_space_attr)
         else:
-            return builder.dsa_get_buffer_ty(self.shape, element_ty_ir, addr_space_attr)
+            return builder.get_buffer_ty(self.shape, element_ty_ir, addr_space_attr)
 
     def __str__(self):
         return self.name
