@@ -155,6 +155,8 @@ def _mm2_pv(
     """
     # wait workspace_p[prev_ring_slot] (P from Vec1) ready
     sync_block_wait("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
+    # wait workspace_pv[prev_ring_slot] slot free (Vec2 released after accumulating)
+    sync_block_wait("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
     for cb_idx in range(CB):
         prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
@@ -212,6 +214,8 @@ def _vec1_softmax(
     """
     # wait workspace_s[ring_slot] (all CB score blocks) ready from MM1
     sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
+    # wait workspace_p[ring_slot] slot free (MM2 released after reading P)
+    sync_block_wait("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
 
     # reset running max at the first task of each output tile
     if idx_in_conbine == 0:
@@ -425,10 +429,10 @@ def flash_attention_fwd_3task_kernel(
     #with al.scope(core_mode="cube"):
     with True:
         # ---- init: 3 ws2-FREE tokens + pre-arm intra-core signals ----
-        # RING ws2-FREE tokens (one per slot) so MM2 pipeline can start
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        # RING ws2-FREE tokens (one per slot) so Vec1 can write workspace_p
+        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
 
         for g in range(num_global_tasks + 1):
 
@@ -484,12 +488,12 @@ def flash_attention_fwd_3task_kernel(
     #with al.scope(core_mode="vector"):
     with True:
         # ---- init: 3 ws1-FREE + 3 ws3-FREE tokens + pre-arm intra-core signals ----
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
         # ─── 2) IterateBmm1(k): S = Q·Kᵀ -> mm1Res[g%2] ──────────────────────
         if g < n_sub:
