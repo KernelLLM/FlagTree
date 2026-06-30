@@ -39,6 +39,7 @@ add_triton_plugin(TritonAscend
 
   LINK_LIBS
   TritonToLinalgIncubated
+  EraseLinalgCasts
   BiShengIRScopeDialect
   BiShengIRHIVMDialect
   ${_MLIRMeshDialect_LIB}
