@@ -565,7 +565,7 @@ def _dump_signature():
     ptr = {"Q": "*fp16", "K": "*fp16", "V": "*fp16", "Out": "*fp16",
            "workspace_s": "*fp16", "workspace_p": "*fp16", "workspace_pv": "*fp16",
            "workspace_rescale": "*fp32", "workspace_expsum": "*fp32"}
-    i32s = ["B", "Hq", "Hkv", "S",
+    i32_names = ["B", "Hq", "Hkv", "S",
             "sQb", "sQh", "sQs", "sQd",
             "sKb", "sKh", "sKs", "sKd",
             "sOb", "sOh", "sOs", "sOd",
@@ -604,7 +604,7 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is
 
     cb = combine_batch
     conbined_block_num = num_kv_blocks // combine_batch
-    signature = _dump_signature(cb)
+    signature = _dump_signature()
     constants = {"CB": combine_batch, "NUM_KV_BLOCKS": num_kv_blocks, "IS_CAUSAL": is_causal}
 
     src = ASTSource(flash_attention_fwd_3task_kernel, signature, constants)
