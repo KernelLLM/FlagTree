@@ -195,7 +195,7 @@ def flash_attention_fwd_3task_kernel(
                                        + ring_slot  * (CB * BLOCK_M * BLOCK_N)
                                        + cb_idx  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                    tl.store(score_store_bp, s_val)
+                    tl.store(score_store_bp, s_val.to(tl.float16))
 
                 # all CB S-blocks written -> notify Vec1
                 sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
@@ -440,7 +440,7 @@ class _DumpOptions:
 def _dump_signature():
     """Static signature for ast_to_ttir (pointers / scalars / i32 / constexpr)."""
     ptr = {"Q": "*fp16", "K": "*fp16", "V": "*fp16", "Out": "*fp16",
-           "workspace_s": "*fp32", "workspace_p": "*fp32", "workspace_pv": "*fp32",
+           "workspace_s": "*fp16", "workspace_p": "*fp16", "workspace_pv": "*fp16",
            "workspace_rescale": "*fp32", "workspace_expsum": "*fp32"}
     i32_names = ["B", "Hq", "Hkv", "S",
             "sQb", "sQh", "sQs", "sQd",
@@ -812,7 +812,7 @@ def flash_attention_fwd(q, k, v, is_causal=False):
 
     out = torch.empty_like(q)
     # GM ping-pong workspaces (taskId % 2), one slice per core.
-    workspace_s = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=torch.float32, device=q.device)
+    workspace_s = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=torch.float16, device=q.device)
     workspace_p = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=q.dtype,        device=q.device)
     workspace_pv = torch.empty((NUM_CORES, PP, BLOCK_M, DIM),     dtype=torch.float32, device=q.device)
     sm_scale = (1.0 / D) ** 0.5
