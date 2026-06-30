@@ -92,7 +92,7 @@ def _mm1_qkt(
     DMA + MMA sequence for each KV block.
     """
     # wait workspace_s[ring_slot] task slot free (Vector released after Vec1)
-    sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
     # reload resident Q at the first task of each output tile
     if idx_in_conbine == 0:
@@ -124,7 +124,7 @@ def _mm1_qkt(
         tl.store(score_store_bp, attn_score_fp16)
 
     # all CB S-blocks written -> notify Vec1
-    sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
+    sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
 
 
 @triton.jit
@@ -178,8 +178,8 @@ def _mm2_pv(
         tl.store(pv_store_bp, pv_part_fp16)
 
     # all CB P*V blocks done -> notify Vec2; release workspace_p[prev_ring_slot]
-    sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
-    sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+    sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
 
 
 @triton.jit
@@ -203,7 +203,7 @@ def _vec1_softmax(
     Returns updated (neg_max_even, neg_max_odd).
     """
     # wait workspace_s[ring_slot] (all CB score blocks) ready from MM1
-    sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
+    sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
 
     # reset running max at the first task of each output tile
     if idx_in_conbine == 0:
@@ -278,7 +278,7 @@ def _vec1_softmax(
         tl.store(prob_store_bp, softmax_p.to(workspace_p.dtype.element_ty))
 
     # all CB P-blocks written -> release workspace_s[ring_slot]; notify MM2
-    sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
     sync_block_set("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
     return neg_max_even, neg_max_odd
@@ -304,7 +304,7 @@ def _vec2_accumulate(
     Returns updated (acc_o, softmax_denom).
     """
     # wait workspace_pv[prev_ring_slot] (all CB P*V blocks) ready from MM2
-    sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
+    sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
 
     for cb_idx in range(CB):
         prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
@@ -352,7 +352,7 @@ def _vec2_accumulate(
             tl.store(o_bp, output_block)
 
     # all CB blocks consumed -> release workspace_pv[prev_ring_slot]
-    sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
     return acc_o, softmax_denom
 
