@@ -603,7 +603,7 @@ def dump_linalg(path=None, num_iters=32, is_causal=False):
     linalg_ok = False
     try:
         pm = ir.pass_manager(context); pm.enable_debug()
-        ascend.passes.ttir.add_triton_to_linalg_incubated(pm, False, False, False, False, False)
+        ascend.passes.ttir.add_triton_to_linalg_incubated(pm, False, True, False, False, False)
         pm.run(module)
         print(f"[dump_linalg] ⑤ triton_to_linalg_incubated: verify={module.verify()}", flush=True)
         linalg_ok = True
