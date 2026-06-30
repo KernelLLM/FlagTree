@@ -35,6 +35,14 @@ from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
 EVT_MTE3_MTE2 = ("vector", "cube", 0, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)  # Vec1 wrote P -> Bmm2 reads
 EVT_MTE2_V    = ("cube", "vector", 1, PIPE.PIPE_MTE2, PIPE.PIPE_V)     # data loaded -> Vector computes
 EVT_V_MTE3    = ("vector", "cube", 2, PIPE.PIPE_V, PIPE.PIPE_MTE3)     # Vector done -> store / next
+# ---- Cross-core semaphores (one "ready" + one "free" per workspace) -------
+SEM_S_READY = 0  # C -> V : workspace_s has data
+SEM_S_FREE = 1   # V -> C : workspace_s slot free
+SEM_P_READY = 2  # V -> C : workspace_p has data
+SEM_P_FREE = 3   # C -> V : workspace_p slot free
+SEM_PV_READY = 4  # C -> V : workspace_pv has data
+SEM_PV_FREE = 5   # V -> C : workspace_pv slot free
+
 
 # NOTE: The tle tile-DSA layer now has minimal tile.cube_launch / tile.cube_wait
 # builder bindings. This architecture dump still keeps Cube matmul as
