@@ -61,6 +61,7 @@ NUM_CORES = 24
 BLOCK_M = 128
 BLOCK_N = 128
 DIM = 128
+HALF_M = BLOCK_M // 2
 
 # constexpr shape literals for tile.copy (semantic.copy runs scalar_constant on
 # each extent, which requires tl.constexpr rather than a plain int).
