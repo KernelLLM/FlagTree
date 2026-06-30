@@ -16,6 +16,41 @@ except ImportError:
 triton_compiler = importlib.import_module("triton.compiler", package=__package__)
 
 
+class scope:
+    """Frontend-only TLE scope marker.
+
+    `with tle.scope(core_mode="cube"|"vector")` is used by the POC DSL to mark
+    cube/vector regions. The marker is consumed by the TLE code generator and
+    intentionally does not emit a Scope IR op.
+    """
+
+    def __init__(self, *, core_mode):
+        if core_mode not in ("cube", "vector"):
+            raise ValueError(f'core_mode must be "cube" or "vector", got {core_mode!r}')
+        self.core_mode = core_mode
+
+    def __enter__(self):
+        raise RuntimeError("tle.scope() can only be used inside a Triton kernel")
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return False
+
+
+def _is_tle_attr_call(context, attr):
+    return isinstance(context, ast.Call) and isinstance(context.func, ast.Attribute) and context.func.attr == attr
+
+
+def _validate_tle_scope(context):
+    if context.args:
+        raise ValueError("tle.scope() only accepts keyword arguments")
+    keywords = {kw.arg: kw.value for kw in context.keywords}
+    if set(keywords) != {"core_mode"}:
+        raise ValueError('tle.scope() requires exactly core_mode="cube" or core_mode="vector"')
+    value = keywords["core_mode"]
+    if not isinstance(value, ast.Constant) or value.value not in ("cube", "vector"):
+        raise ValueError('tle.scope() core_mode must be the literal "cube" or "vector"')
+
+
 def tle_patch_for_triton_compile():
     original_compile_fn = triton_compiler.compile
 
@@ -68,21 +103,23 @@ class TleCodeGenerator(code_generator.CodeGenerator):
 
         # extract tle hints
         hints = {}
-        if isinstance(context, ast.Call):
-            if isinstance(context.func, ast.Attribute) and context.func.attr == "hint":
-                for kw in context.keywords:
-                    if not isinstance(kw.value, ast.Constant):
-                        raise self._unsupported(node,
-                                                "keyword arguments to hint() are only supported for constant values")
-                    hints[kw.arg] = kw.value.value
+        if _is_tle_attr_call(context, "hint"):
+            for kw in context.keywords:
+                if not isinstance(kw.value, ast.Constant):
+                    raise self._unsupported(node, "keyword arguments to hint() are only supported for constant values")
+                hints[kw.arg] = kw.value.value
 
         # append hints to with_hints anyway, to indicate that we're in the with scope
         self.with_hints.append(hints)
 
-        super().visit_With(node)
-
-        # pop hints to indicate that we're out of the with scope
-        self.with_hints.pop()
+        try:
+            if _is_tle_attr_call(context, "scope") and self.visit(context.func) is scope:
+                _validate_tle_scope(context)
+                return self.visit_compound_statement(node.body)
+            return super().visit_With(node)
+        finally:
+            # pop hints to indicate that we're out of the with scope
+            self.with_hints.pop()
 
 
 def extract_tle_hints_scope(generator: TleCodeGenerator):
@@ -122,4 +159,5 @@ from .language import dsa
 
 __all__ = [
     "dsa",
+    "scope",
 ]
