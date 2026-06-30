@@ -677,7 +677,7 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is
     return mlir
 
 
-def dump_hivm(path=None, num_iters=32, is_causal=False):
+def dump_hivm(path=None, combine_batch=32, is_causal=False):
     """Compile the kernel to TTIR, then lower through TileIR→HIVM pipeline to HIVM IR.
 
     Pipeline (matches compiler.py ttir_to_linalg):
@@ -697,7 +697,7 @@ def dump_hivm(path=None, num_iters=32, is_causal=False):
     from triton._C.libtriton import ir, passes, ascend
 
     # Step 1: compile to TTIR (TileIR)
-    tileir_mlir = dump_tileir(path=None, num_iters=num_iters, is_causal=is_causal)
+    tileir_mlir = dump_tileir(path=None, combine_batch=combine_batch, is_causal=is_causal)
 
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_hivm.mlir")
@@ -759,7 +759,7 @@ def dump_hivm(path=None, num_iters=32, is_causal=False):
     return mlir
 
 
-def dump_linalg(path=None, num_iters=32, is_causal=False):
+def dump_linalg(path=None, combine_batch=32, is_causal=False):
     """Compile the kernel through the full TileIR→Linalg lowering pipeline.
 
     Pipeline:
@@ -792,7 +792,7 @@ def dump_linalg(path=None, num_iters=32, is_causal=False):
     from triton._C.libtriton import tle as tle_ir
 
     # Step 1: compile to TTIR (TileIR)
-    tileir_mlir = dump_tileir(path=None, num_iters=num_iters, is_causal=is_causal)
+    tileir_mlir = dump_tileir(path=None, combine_batch=combine_batch, is_causal=is_causal)
 
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -981,21 +981,21 @@ if __name__ == "__main__":
     if args.dump_mlir is not None:
         B, S, H, D = args.B, args.S, args.H, args.D
         n_iters = S // BLOCK_N
-        dump_tileir(path=(args.dump_mlir or None), num_iters=n_iters, is_causal=args.causal)
+        dump_tileir(path=(args.dump_mlir or None), combine_batch=n_iters, is_causal=args.causal)
         raise SystemExit(0)
 
     # ---- dump HIVM IR after full lowering pipeline (no device required) ----
     if args.dump_ir is not None:
         B, S, H, D = args.B, args.S, args.H, args.D
         n_iters = S // BLOCK_N
-        dump_hivm(path=(args.dump_ir or None), num_iters=n_iters, is_causal=args.causal)
+        dump_hivm(path=(args.dump_ir or None), combine_batch=n_iters, is_causal=args.causal)
         raise SystemExit(0)
 
     # ---- dump Linalg IR after full TileIR→Linalg lowering (no device required) ----
     if args.dump_linalg is not None:
         B, S, H, D = args.B, args.S, args.H, args.D
         n_iters = S // BLOCK_N
-        dump_linalg(path=(args.dump_linalg or None), num_iters=n_iters, is_causal=args.causal)
+        dump_linalg(path=(args.dump_linalg or None), combine_batch=n_iters, is_causal=args.causal)
         raise SystemExit(0)
 
     B, S, H, D = args.B, args.S, args.H, args.D
