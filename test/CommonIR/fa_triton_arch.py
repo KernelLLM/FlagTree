@@ -31,7 +31,7 @@ from triton.experimental.tle.language.dsa.core import (
     tensor_to_tile,
 )
 from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
-    L1, L0A, L0B, L0C, UB, PIPE, sync_block_set, sync_block_wait,
+    L1, L0C, UB, PIPE, sync_block_set, sync_block_wait,
 )
 
 # ---- TileIR Pipe ids (== TileIRAttrDefs.td TileIR_Pipe) ---------------------
@@ -86,7 +86,7 @@ SEM_PV_FREE  = 5   # V->C : workspace_pv slot  free
 def _mm1_qkt(
     # inputs
     Q, K,
-    q_l0a, k_l0b,
+    q_l1, k_l1,
     workspace_s,
     # task geometry
     cid, idx_in_conbine, global_head_idx, batch_idx, head_idx, kv_head_idx,
@@ -98,7 +98,7 @@ def _mm1_qkt(
 ):
     """MM1: compute S = Q * K^T for CB KV blocks and store into workspace_s.
 
-    Handles resident-Q reload (first task of a tile) and the full L0A/L0B
+    Handles resident-Q reload (first task of a tile) and the full L1
     DMA + MMA sequence for each KV block.
     """
     # wait workspace_s[ring_slot] task slot free (Vector released after Vec1)
@@ -109,7 +109,7 @@ def _mm1_qkt(
         q_bp = tl.make_block_ptr(
             Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
             (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-        tile_copy(q_bp, q_l0a, [CBM, CD])
+        tile_copy(q_bp, q_l1, [CBM, CD])
 
     for cb_idx in range(CB):
         kv_idx = idx_in_conbine * CB + cb_idx
@@ -117,11 +117,11 @@ def _mm1_qkt(
         k_bp = tl.make_block_ptr(
             K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
             (kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tile_copy(k_bp, k_l0b, [CBN, CD])
+        tile_copy(k_bp, k_l1, [CBN, CD])
 
-        # attn_score = Q * K^T using L0A/L0B buffers
-        attn_score = tl.dot(tile_to_tensor(q_l0a, writable=False),
-                            tile_to_tensor(k_l0b, writable=False),
+        # attn_score = Q * K^T using L1 buffers
+        attn_score = tl.dot(tile_to_tensor(q_l1, writable=False),
+                            tile_to_tensor(k_l1, writable=False),
                             out_dtype=tl.float16)
         # workspace_s is fp16; cast if dot returned fp32
         attn_score_fp16 = attn_score.to(tl.float16)
@@ -141,7 +141,7 @@ def _mm1_qkt(
 def _mm2_pv(
     # inputs
     V,
-    v_l0b, p_l0a,
+    v_l1, p_l1,
     workspace_p, workspace_pv,
     # task geometry
     cid, prev_idx_in_conbine, prev_batch_idx, kv_prev_head_idx,
@@ -164,18 +164,18 @@ def _mm2_pv(
         v_bp = tl.make_block_ptr(
             V + prev_batch_idx * sKb + kv_prev_head_idx * sKh, (S, DIM), (sKs, sKd),
             (prev_kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tile_copy(v_bp, v_l0b, [CBN, CD])
+        tile_copy(v_bp, v_l1, [CBN, CD])
 
         prob_load_bp = tl.make_block_ptr(
             workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
                            + prev_ring_slot  * (CB * BLOCK_M * BLOCK_N)
                            + cb_idx  * (BLOCK_M * BLOCK_N)),
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-        tile_copy(prob_load_bp, p_l0a, [CBM, CBN])
+        tile_copy(prob_load_bp, p_l1, [CBM, CBN])
 
-        # pv_part = P * V using L0A/L0B buffers
-        pv_part = tl.dot(tile_to_tensor(p_l0a, writable=False),
-                         tile_to_tensor(v_l0b, writable=False),
+        # pv_part = P * V using L1 buffers
+        pv_part = tl.dot(tile_to_tensor(p_l1, writable=False),
+                         tile_to_tensor(v_l1, writable=False),
                          out_dtype=tl.float16)
         # workspace_pv is fp16; cast if dot returned fp32
         pv_part_fp16 = pv_part.to(tl.float16)
@@ -371,7 +371,7 @@ def _vec2_accumulate(
 #  The single-stream 3-task scheduler kernel (TileIR / tle.dsa form)
 #
 #  grid = (NUM_CORES,). Each program drives one Cube + one Vector engine.
-#  On-chip staging (L1 / L0A / L0B / L0C) is allocated with tile.alloc; DMA uses
+#  On-chip staging (L1 / L0C) is allocated with tile.alloc; DMA uses
 #  tile.copy; cross-engine ordering uses tile.set_flag / tile.wait_flag /
 #  tile.pipe_barrier. The Vector-side online-softmax state stays in registers
 #  (plain tl.* ops) since it is pure compute.
@@ -403,11 +403,11 @@ def flash_attention_fwd_3task_kernel(
     # =========================================================================
     #  ① on-chip working set  (tile.alloc -> explicit memory hierarchy)
     # =========================================================================
-    # -- Cube side: L0A/L0B for MMA inputs, L0C for MMA output --
-    q_l0a = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L0A)
-    k_l0b = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)
-    v_l0b = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)
-    p_l0a = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)
+    # -- Cube side: L1 for MMA inputs, L0C for MMA output --
+    q_l1 = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L1)
+    k_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
+    v_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
+    p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
 
     mm1_l0c = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
     mm2_l0c = tile_alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
@@ -447,7 +447,7 @@ def flash_attention_fwd_3task_kernel(
 
                 _mm1_qkt(
                     Q, K,
-                    q_l0a, k_l0b,
+                    q_l1, k_l1,
                     workspace_s,
                     cid, idx_in_conbine, global_head_idx, batch_idx, head_idx, kv_head_idx,
                     ring_slot,
@@ -469,7 +469,7 @@ def flash_attention_fwd_3task_kernel(
 
                 _mm2_pv(
                     V,
-                    v_l0b, p_l0a,
+                    v_l1, p_l1,
                     workspace_p, workspace_pv,
                     cid, prev_idx_in_conbine, prev_batch_idx, kv_prev_head_idx,
                     prev_ring_slot,
