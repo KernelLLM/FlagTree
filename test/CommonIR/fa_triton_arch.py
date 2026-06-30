@@ -575,7 +575,6 @@ def _dump_signature():
     sig["sm_scale"] = "fp32"
     for n in i32_names:
         sig[n] = "i32"
-    sig["NUM_ITERS"] = "constexpr"
     sig["IS_CAUSAL"] = "constexpr"
     return sig
 
