@@ -27,9 +27,6 @@ from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
     L1, L0C, UB, PIPE, sync_block_set, sync_block_wait,
 )
 
-# ---- TileIR Pipe ids (== TileIRAttrDefs.td TileIR_Pipe) ---------------------
-PIPE_M, PIPE_V, PIPE_MTE1, PIPE_MTE2, PIPE_MTE3, PIPE_FIX, PIPE_S = 0, 1, 2, 3, 4, 5, 6
-
 # ---- cross-engine sync_block events -----------------------------------------
 # (sender, receiver, event_id, sender_pipe, receiver_pipe). Replaces the old
 # tile.set_flag/wait_flag pipe pairs with core-to-core (cube<->vector) sync via
