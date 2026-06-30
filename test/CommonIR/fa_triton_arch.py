@@ -90,7 +90,7 @@ SEM_PV_FREE  = 5   # V->C : workspace_pv slot  free
 def _mm1_qkt(
     # inputs
     Q, K,
-    q_l1, k_l1,
+    q_l1, k_l1, attn_score_l0c,
     workspace_s,
     # task geometry
     cid, idx_in_conbine, global_head_idx, batch_idx, head_idx, kv_head_idx,
@@ -124,18 +124,16 @@ def _mm1_qkt(
         tle.dsa.copy(k_bp, k_l1, [CBN, CD])
 
         # attn_score = Q * K^T using L1 buffers
-        attn_score = tl.dot(tle.dsa.to_tensor(q_l1, writable=False),
+        attn_score_l0c = tl.dot(tle.dsa.to_tensor(q_l1, writable=False),
                             tle.dsa.to_tensor(k_l1, writable=False),
                             out_dtype=tl.float16)
-        # workspace_s is fp16; cast if dot returned fp32
-        attn_score_fp16 = attn_score.to(tl.float16)
 
         score_store_bp = tl.make_block_ptr(
             workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
                            + ring_slot  * (CB * BLOCK_M * BLOCK_N)
                            + cb_idx  * (BLOCK_M * BLOCK_N)),
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-        tl.store(score_store_bp, attn_score_fp16)
+        tl.store(score_store_bp, attn_score_l0c)
 
     # all CB S-blocks written -> notify Vec1
     sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
@@ -145,7 +143,7 @@ def _mm1_qkt(
 def _mm2_pv(
     # inputs
     V,
-    v_l1, p_l1,
+    v_l1, p_l1, pv_part_l0c,
     workspace_p, workspace_pv,
     # task geometry
     cid, prev_idx_in_conbine, prev_batch_idx, kv_prev_head_idx,
@@ -180,18 +178,16 @@ def _mm2_pv(
         tle.dsa.copy(prob_load_bp, p_l1, [CBM, CBN])
 
         # pv_part = P * V using L1 buffers
-        pv_part = tl.dot(tle.dsa.to_tensor(p_l1, writable=False),
+        pv_part_l0c = tl.dot(tle.dsa.to_tensor(p_l1, writable=False),
                          tle.dsa.to_tensor(v_l1, writable=False),
                          out_dtype=tl.float16)
-        # workspace_pv is fp16; cast if dot returned fp32
-        pv_part_fp16 = pv_part.to(tl.float16)
-
+        
         pv_store_bp = tl.make_block_ptr(
             workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
                             + prev_ring_slot  * (CB * BLOCK_M * DIM)
                             + cb_idx  * (BLOCK_M * DIM)),
             (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-        tl.store(pv_store_bp, pv_part_fp16)
+        tl.store(pv_store_bp, pv_part_l0c)
 
     # all CB P*V blocks done -> notify Vec2; release workspace_p[prev_ring_slot]
     sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
@@ -387,7 +383,7 @@ def _vec2_accumulate(
 @triton.jit
 def flash_attention_fwd_3task_kernel(
     Q, K, V, Out,
-    mm1Res, stage1Res, mm2Res,           # GM ping-pong workspaces
+    workspace_s, workspace_p, workspace_pv,           # GM ping-pong workspaces
     sm_scale,
     B, Hq, Hkv, S,
     sQb, sQh, sQs, sQd,
@@ -417,8 +413,8 @@ def flash_attention_fwd_3task_kernel(
     v_l1 = tle.dsa.alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
     p_l1 = tle.dsa.alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
 
-    mm1_l0c = tle.dsa.alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
-    mm2_l0c = tle.dsa.alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
+    s_l0c = tle.dsa.alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
+    pv_l0c = tle.dsa.alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
 
     # -- Vector side (UB registers): full online-softmax state ---------------
     # acc_o uses HALF_M rows; state per (ring_slot, cb_idx) stored as flat GM-backed
@@ -457,7 +453,7 @@ def flash_attention_fwd_3task_kernel(
 
                 _mm1_qkt(
                     Q, K,
-                    q_l1, k_l1,
+                    q_l1, k_l1, s_l0c,
                     workspace_s,
                     cid, idx_in_conbine, global_head_idx, batch_idx, head_idx, kv_head_idx,
                     ring_slot,
@@ -479,7 +475,7 @@ def flash_attention_fwd_3task_kernel(
 
                 _mm2_pv(
                     V,
-                    v_l1, p_l1,
+                    v_l1, p_l1, pv_l0c,
                     workspace_p, workspace_pv,
                     cid, prev_idx_in_conbine, prev_batch_idx, kv_prev_head_idx,
                     prev_ring_slot,
@@ -936,14 +932,14 @@ def flash_attention_fwd(q, k, v, is_causal=False):
 
     out = torch.empty_like(q)
     # GM ping-pong workspaces (taskId % 2), one slice per core.
-    mm1Res    = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=torch.float32, device=q.device)
-    stage1Res = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=q.dtype,        device=q.device)
-    mm2Res    = torch.empty((NUM_CORES, PP, BLOCK_M, DIM),     dtype=torch.float32, device=q.device)
+    workspace_s = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=torch.float32, device=q.device)
+    workspace_p = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=q.dtype,        device=q.device)
+    workspace_pv = torch.empty((NUM_CORES, PP, BLOCK_M, DIM),     dtype=torch.float32, device=q.device)
     sm_scale = (1.0 / D) ** 0.5
 
     grid = (NUM_CORES,)  # one program per AI core; one Cube + one Vector stream (MIX_1_1)
     flash_attention_fwd_3task_kernel[grid](
-        q, k, v, out, mm1Res, stage1Res, mm2Res, sm_scale,
+        q, k, v, out, workspace_s, workspace_p, workspace_pv, sm_scale,
         B, Hq, Hkv, S,
         q.stride(0), q.stride(1), q.stride(2), q.stride(3),
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
