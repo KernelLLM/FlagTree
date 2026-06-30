@@ -440,7 +440,7 @@ class _DumpOptions:
 def _dump_signature():
     """Static signature for ast_to_ttir (pointers / scalars / i32 / constexpr)."""
     ptr = {"Q": "*fp16", "K": "*fp16", "V": "*fp16", "Out": "*fp16",
-           "workspace_s": "*fp16", "workspace_p": "*fp16", "workspace_pv": "*fp16",
+           "workspace_s": "*fp32", "workspace_p": "*fp16", "workspace_pv": "*fp16",
            "workspace_rescale": "*fp32", "workspace_expsum": "*fp32"}
     i32_names = ["B", "Hq", "Hkv", "S",
             "sQb", "sQh", "sQs", "sQd",
