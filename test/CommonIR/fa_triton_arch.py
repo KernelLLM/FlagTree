@@ -35,13 +35,18 @@ from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
 EVT_MTE3_MTE2 = ("vector", "cube", 0, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)  # Vec1 wrote P -> Bmm2 reads
 EVT_MTE2_V    = ("cube", "vector", 1, PIPE.PIPE_MTE2, PIPE.PIPE_V)     # data loaded -> Vector computes
 EVT_V_MTE3    = ("vector", "cube", 2, PIPE.PIPE_V, PIPE.PIPE_MTE3)     # Vector done -> store / next
-# ---- Cross-core semaphores (one "ready" + one "free" per workspace) -------
-SEM_S_READY = 0  # C -> V : workspace_s has data
-SEM_S_FREE = 1   # V -> C : workspace_s slot free
-SEM_P_READY = 2  # V -> C : workspace_p has data
-SEM_P_FREE = 3   # C -> V : workspace_p slot free
+# ---- Cross-core semaphores (one id per signal, ids 0-5) --------------------
+# Each id may be set at most once before being waited.  The pipeline is
+# single-slot: init pre-arms exactly one "free" token per workspace so the
+# first iteration's wait passes; every subsequent set is preceded by the
+# matching wait in the same slot, keeping each id in strictly alternating
+# set→wait→set→... state.
+SEM_S_READY  = 0  # C -> V : workspace_s has data
+SEM_S_FREE   = 1  # V -> C : workspace_s slot free
+SEM_P_READY  = 2  # V -> C : workspace_p has data
+SEM_P_FREE   = 3  # C -> V : workspace_p slot free
 SEM_PV_READY = 4  # C -> V : workspace_pv has data
-SEM_PV_FREE = 5   # V -> C : workspace_pv slot free
+SEM_PV_FREE  = 5  # V -> C : workspace_pv slot free
 
 
 # NOTE: The tle tile-DSA layer now has minimal tile.cube_launch / tile.cube_wait
@@ -428,10 +433,7 @@ def flash_attention_fwd_3task_kernel(
     # =========================================================================
     #with al.scope(core_mode="cube"):
     with True:
-        # ---- init: 3 ws2-FREE tokens + pre-arm intra-core signals ----
-        # RING ws2-FREE tokens (one per slot) so Vec1 can write workspace_p
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+        # ---- init: one SEM_P_FREE token so Vec1 can write workspace_p on first tick ----
         sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
 
         for g in range(num_global_tasks + 1):
@@ -479,7 +481,8 @@ def flash_attention_fwd_3task_kernel(
                     S, CB,
                 )
 
-        # ---- destroy: consume outstanding init-direction signals ----
+        # ---- destroy: consume the outstanding SEM_P_FREE token from init ----
+        sync_block_wait("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
 
     # =========================================================================
     #  ③ 3-task pipeline. One tick = one flattened sub-task g; +PIPE_DEPTH ticks
@@ -487,12 +490,8 @@ def flash_attention_fwd_3task_kernel(
     # =========================================================================
     #with al.scope(core_mode="vector"):
     with True:
-        # ---- init: 3 ws1-FREE + 3 ws3-FREE tokens + pre-arm intra-core signals ----
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+        # ---- init: one SEM_S_FREE and one SEM_PV_FREE token so MM1/MM2 can run on first tick ----
+        sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
         sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
         # ─── 2) IterateBmm1(k): S = Q·Kᵀ -> mm1Res[g%2] ──────────────────────
@@ -540,83 +539,9 @@ def flash_attention_fwd_3task_kernel(
                     S, CB, NUM_KV_BLOCKS,
                 )
 
-                # per-tile softmax numerator P = exp(scale*S - scale*max)
-                # (cross-KV-block running-max carry dropped; dump illustration)
-                row_max = tl.max(s_tile, axis=-1, keep_dims=True)
-                p_tile = tl.exp(sm_scale * s_tile - sm_scale * row_max)
-
-                tile_pipe_barrier(PIPE_V)
-
-                # P -> GM stage1Res[pp1] (UB->GM, MTE3); signal Bmm2 it may read
-                s1_bp = tl.make_block_ptr(stage1Res + cid * (PP * BLOCK_M * BLOCK_N) + pp1 * (BLOCK_M * BLOCK_N),
-                                          (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                sync_block_set(EVT_V_MTE3[0], EVT_V_MTE3[1], EVT_V_MTE3[2], EVT_V_MTE3[3], EVT_V_MTE3[4])
-                sync_block_wait(EVT_V_MTE3[0], EVT_V_MTE3[1], EVT_V_MTE3[2], EVT_V_MTE3[3], EVT_V_MTE3[4])
-                tl.store(s1_bp, p_tile.to(stage1Res.dtype.element_ty))
-                sync_block_set(EVT_MTE3_MTE2[0], EVT_MTE3_MTE2[1], EVT_MTE3_MTE2[2], EVT_MTE3_MTE2[3], EVT_MTE3_MTE2[4])   # P[pp1] ready for Bmm2
-
-        # ─── 5) IterateBmm2(k-1): stage1Res[prev]·V -> mm2Res[prev] ──────────
-        if g >= 1:
-            g1 = g - 1
-            if g1 < n_sub:
-                t1   = g1 // n_iters
-                j1   = g1 % n_iters
-                pp1  = g1 % PP
-                tid1 = my_start + t1
-                by1  = (tid1 // num_seq_blocks) % heads_q
-                bz1  = tid1 // (num_seq_blocks * heads_q)
-                kv_by1 = by1 // gqa_group
-
-                # P from stage1Res[pp1] -> p_l1 -> L0 slot 1
-                sync_block_wait(EVT_MTE3_MTE2[0], EVT_MTE3_MTE2[1], EVT_MTE3_MTE2[2], EVT_MTE3_MTE2[3], EVT_MTE3_MTE2[4])
-                s1r_bp = tl.make_block_ptr(stage1Res + cid * (PP * BLOCK_M * BLOCK_N) + pp1 * (BLOCK_M * BLOCK_N),
-                                           (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                tile_copy(tensor_to_tile(s1r_bp), p_l1, [CBM, CBN])
-                # V[j1] -> v_l1 -> L0 slot 1
-                v_bp = tl.make_block_ptr(V + bz1 * sKb + kv_by1 * sKh, (S, DIM), (sKs, sKd),
-                                         (j1 * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-                tile_copy(tensor_to_tile(v_bp), v_l1, [CBN, CD])
-                #tile_copy(p_l1, l0a1, [CBM, CBN])
-                #tile_copy(v_l1, l0b1, [CBN, CD])
-                # O_part = P·V : mma -> l0c1 -> FIX -> mm2Res[pp1]  (synchronous stand-in).
-                m2_bp = tl.make_block_ptr(mm2Res + cid * (PP * BLOCK_M * DIM) + pp1 * (BLOCK_M * DIM),
-                                          (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-                o = tl.dot(tile_to_tensor(p_l1, writable=False), tile_to_tensor(v_l1, writable=False))
-                tl.store(m2_bp, o)
-
-        # ─── 6) ProcessVec2(k-2): rescale acc_o + add mm2Res[prev2], finalize ─
-        if g >= 2:
-            g2 = g - 2
-            if g2 < n_sub:
-                j2   = g2 % n_iters
-                pp2  = g2 % PP
-                is_first = j2 == 0
-                is_last  = j2 == NUM_ITERS - 1
-                t2   = g2 // n_iters
-                tid2 = my_start + t2
-                bx2  = tid2 % num_seq_blocks
-                by2  = (tid2 // num_seq_blocks) % heads_q
-                bz2  = tid2 // (num_seq_blocks * heads_q)
-
-                if is_first:                        # init O accumulator at tile start
-                    acc_o = tl.zeros((BLOCK_M, DIM), tl.float32)
-
-                # O_partial from mm2Res[pp2] -> add (MTE2). NOTE: softmax rescale
-                # and denominator carry dropped (dump illustration).
-                m2r_bp = tl.make_block_ptr(mm2Res + cid * (PP * BLOCK_M * DIM) + pp2 * (BLOCK_M * DIM),
-                                           (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-                o_part = tl.load(m2r_bp).to(tl.float32)
-                sync_block_set(EVT_MTE2_V[0], EVT_MTE2_V[1], EVT_MTE2_V[2], EVT_MTE2_V[3], EVT_MTE2_V[4])
-                sync_block_wait(EVT_MTE2_V[0], EVT_MTE2_V[1], EVT_MTE2_V[2], EVT_MTE2_V[3], EVT_MTE2_V[4])
-                acc_o = acc_o + o_part
-
-                if is_last:                         # last KV block: write O
-                    out_tile = acc_o.to(Out.dtype.element_ty)
-                    o_bp = tl.make_block_ptr(Out + bz2 * sOb + by2 * sOh, (S, DIM), (sOs, sOd),
-                                             (bx2 * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-                    sync_block_set(EVT_V_MTE3[0], EVT_V_MTE3[1], EVT_V_MTE3[2], EVT_V_MTE3[3], EVT_V_MTE3[4])
-                    sync_block_wait(EVT_V_MTE3[0], EVT_V_MTE3[1], EVT_V_MTE3[2], EVT_V_MTE3[3], EVT_V_MTE3[4])
-                    tl.store(o_bp, out_tile)
+        # ---- destroy: consume the outstanding SEM_S_FREE and SEM_PV_FREE tokens from init ----
+        sync_block_wait("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+        sync_block_wait("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
 
 # =============================================================================
