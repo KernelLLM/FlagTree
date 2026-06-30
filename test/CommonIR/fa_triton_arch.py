@@ -191,7 +191,7 @@ def flash_attention_fwd_3task_kernel(
                                    out_dtype=tl.float16)
 
                     score_store_bp = tl.make_block_ptr(
-                        workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
+                        workspace_s + (cid * RING * CB * BLOCK_M * BLOCK_N
                                        + ring_slot  * (CB * BLOCK_M * BLOCK_N)
                                        + cb_idx  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
@@ -226,7 +226,7 @@ def flash_attention_fwd_3task_kernel(
                     tile_copy(v_bp, v_l1, [CBN, CD])
 
                     prob_load_bp = tl.make_block_ptr(
-                        workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
+                        workspace_p + (cid * RING * CB * BLOCK_M * BLOCK_N
                                        + prev_ring_slot  * (CB * BLOCK_M * BLOCK_N)
                                        + cb_idx  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
@@ -238,7 +238,7 @@ def flash_attention_fwd_3task_kernel(
                                     out_dtype=tl.float16)
 
                     pv_store_bp = tl.make_block_ptr(
-                        workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
+                        workspace_pv + (cid * RING * CB * BLOCK_M * DIM
                                         + prev_ring_slot  * (CB * BLOCK_M * DIM)
                                         + cb_idx  * (BLOCK_M * DIM)),
                         (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
@@ -284,7 +284,7 @@ def flash_attention_fwd_3task_kernel(
 
                     # load score[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_s GM -> UB
                     score_load_bp = tl.make_block_ptr(
-                        workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
+                        workspace_s + (cid * RING * CB * BLOCK_M * BLOCK_N
                                        + ring_slot  * (CB * BLOCK_M * BLOCK_N)
                                        + cb_idx  * (BLOCK_M * BLOCK_N)
                                        + vid * HALF_M * BLOCK_N),
@@ -316,7 +316,7 @@ def flash_attention_fwd_3task_kernel(
 
                     # store rescale and block_expsum into GM ring-buffers for Vec2
                     # layout: [NUM_CORES, RING, CB, 2 sub-cores, HALF_M]
-                    rescale_offset = (cid * (RING * CB * 2 * HALF_M)
+                    rescale_offset = (cid * RING * CB * 2 * HALF_M
                                       + ring_slot  * (CB * 2 * HALF_M)
                                       + cb_idx  * (2 * HALF_M)
                                       + vid * HALF_M)
@@ -337,7 +337,7 @@ def flash_attention_fwd_3task_kernel(
 
                     # softmax_p -> workspace_p GM (MTE3): sub-core owns HALF_M rows
                     prob_store_bp = tl.make_block_ptr(
-                        workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
+                        workspace_p + (cid * RING * CB * BLOCK_M * BLOCK_N
                                        + ring_slot  * (CB * BLOCK_M * BLOCK_N)
                                        + cb_idx  * (BLOCK_M * BLOCK_N)
                                        + vid * HALF_M * BLOCK_N),
@@ -368,7 +368,7 @@ def flash_attention_fwd_3task_kernel(
 
                     # load pv_acc[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_pv (MTE2)
                     pv_load_bp = tl.make_block_ptr(
-                        workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
+                        workspace_pv + (cid * RING * CB * BLOCK_M * DIM
                                         + prev_ring_slot  * (CB * BLOCK_M * DIM)
                                         + cb_idx  * (BLOCK_M * DIM)
                                         + vid * HALF_M * DIM),
@@ -376,7 +376,7 @@ def flash_attention_fwd_3task_kernel(
                     pv_acc = tl.load(pv_load_bp).to(tl.float32)
 
                     # load rescale and block_expsum written by Vec1 for this slot
-                    prev_rescale_offset = (cid * (RING * CB * 2 * HALF_M)
+                    prev_rescale_offset = (cid * RING * CB * 2 * HALF_M
                                            + prev_ring_slot  * (CB * 2 * HALF_M)
                                            + cb_idx  * (2 * HALF_M)
                                            + vid * HALF_M)
