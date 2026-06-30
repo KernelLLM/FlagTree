@@ -26,7 +26,9 @@ import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialect
 from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
     L1, L0C, UB, PIPE, sub_vec_id, sync_block_set, sync_block_wait,
 )
-
+from triton.experimental.tle.language.dsa.core import (
+    tile_copy,
+)
 # ---- cross-engine sync_block events -----------------------------------------
 # (sender, receiver, event_id, sender_pipe, receiver_pipe). Replaces the old
 # tile.set_flag/wait_flag pipe pairs with core-to-core (cube<->vector) sync via
@@ -173,7 +175,7 @@ def flash_attention_fwd_3task_kernel(
                     q_bp = tl.make_block_ptr(
                         Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
                         (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-                    tle.dsa.copy(q_bp, q_l1, [CBM, CD])
+                    tile_copy(q_bp, q_l1, [CBM, CD])
 
                 for cb_idx in range(CB):
                     kv_idx = idx_in_conbine * CB + cb_idx
@@ -181,7 +183,7 @@ def flash_attention_fwd_3task_kernel(
                     k_bp = tl.make_block_ptr(
                         K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
                         (kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-                    tle.dsa.copy(k_bp, k_l1, [CBN, CD])
+                    tile_copy(k_bp, k_l1, [CBN, CD])
 
                     # attn_score = Q * K^T using L1 buffers
                     s_l0c = tl.dot(tle.dsa.to_tensor(q_l1, writable=False),
@@ -221,14 +223,14 @@ def flash_attention_fwd_3task_kernel(
                     v_bp = tl.make_block_ptr(
                         V + prev_batch_idx * sKb + kv_prev_head_idx * sKh, (S, DIM), (sKs, sKd),
                         (prev_kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-                    tle.dsa.copy(v_bp, v_l1, [CBN, CD])
+                    tile_copy(v_bp, v_l1, [CBN, CD])
 
                     prob_load_bp = tl.make_block_ptr(
                         workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
                                        + prev_ring_slot  * (CB * BLOCK_M * BLOCK_N)
                                        + cb_idx  * (BLOCK_M * BLOCK_N)),
                         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                    tle.dsa.copy(prob_load_bp, p_l1, [CBM, CBN])
+                    tile_copy(prob_load_bp, p_l1, [CBM, CBN])
 
                     # pv_part = P * V using L1 buffers
                     pv_l0c = tl.dot(tle.dsa.to_tensor(p_l1, writable=False),
