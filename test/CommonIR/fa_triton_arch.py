@@ -6,19 +6,22 @@ import triton
 import triton.language as tl
 
 # =============================================================================
-#  arch22 "3-task" (Cube 双发) FlashAttention schedule, ported to Triton/TileIR
-#  following tilelang_3_task_fa.py.
+#  Real TLE tile-DSA API (replaces the old dl.dsa executable mock)
 #
-#   * 3-task pipeline (taskId % 3): MM1(g) dual-issues with MM2(g-1); Vec1(g)
-#     softmax dual-issues with Vec2(g-1) rescale+accumulate.
-#   * GLOBAL pipeline: (tile x KV) loops flattened into one task stream.
-#   * nRatio (CB): one task covers CB consecutive KV blocks; single cross-core
-#     handshake per task cuts C-V syncs by CB.
-#   * Full online-softmax state: neg_sm ping-pong, r_factors, sumexp_is,
-#     acc_o; finalises at the last KV block of each output tile.
-#   * Each vector sub-core (vid 0/1) owns HALF_M = 64 rows.
+#  These are the genuine TileIR builders from
+#    python/triton/experimental/tle/language/dsa/{core,semantic}.py
+#  Each `tile_*` builtin emits a tile.* op into the Triton IR module, so the
+#  compiled TTIR *is* the intermediate TileIR we want to dump.
+#
+#  IMPORTANT — they are @triton.language `@builtin`s: they must be called
+#  DIRECTLY inside the @triton.jit body (so the code-generator injects the
+#  MLIR builder). Wrapping them in plain Python helpers would break tracing,
+#  which is exactly why the old `_DL_DSA` static-method mock never lowered to
+#  real ops. Here we call them directly.
+#
+#  `import triton.experimental.tle as tle` also patches triton.compiler so the
+#  tile/tle dialects are registered in the MLIR context during compilation.
 # =============================================================================
-
 import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
 from triton.experimental.tle.language.dsa.core import (
     tile_alloc,
@@ -28,519 +31,252 @@ from triton.experimental.tle.language.dsa.core import (
     tensor_to_tile,
 )
 from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
-    PIPE, sync_block_set, sync_block_wait,
-    L1, L0A, L0B, L0C,
+    L1, L0A, L0B, L0C, UB, PIPE, sync_block_set, sync_block_wait,
 )
-import triton.language.extra.cann.extension as al
 
-# ---- TileIR Pipe ids -------------------------------------------------------
-PIPE_M, PIPE_V, PIPE_MTE1, PIPE_MTE2, PIPE_MTE3, PIPE_FIX, PIPE_S = 0,1,2,3,4,5,6
+# ---- TileIR Pipe ids (== TileIRAttrDefs.td TileIR_Pipe) ---------------------
+PIPE_M, PIPE_V, PIPE_MTE1, PIPE_MTE2, PIPE_MTE3, PIPE_FIX, PIPE_S = 0, 1, 2, 3, 4, 5, 6
+
+# ---- cross-engine sync_block events -----------------------------------------
+# (sender, receiver, event_id, sender_pipe, receiver_pipe). Replaces the old
+# tile.set_flag/wait_flag pipe pairs with core-to-core (cube<->vector) sync via
+# tle.dsa.ascend.sync_block_set / sync_block_wait (hivm.hir.sync_block_*).
+# Constraint: sender != receiver; event_id in [0,15].
+EVT_MTE3_MTE2 = ("vector", "cube", 0, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)  # Vec1 wrote P -> Bmm2 reads
+EVT_MTE2_V    = ("cube", "vector", 1, PIPE.PIPE_MTE2, PIPE.PIPE_V)     # data loaded -> Vector computes
+EVT_V_MTE3    = ("vector", "cube", 2, PIPE.PIPE_V, PIPE.PIPE_MTE3)     # Vector done -> store / next
+
+# NOTE: TileIR has tile.cube_launch / tile.cube_wait ops, but the tle tile-DSA
+# layer does not expose builder bindings for them yet. The async Cube matmul is
+# therefore expressed here as a synchronous tl.dot + tl.store (it still produces
+# correct results; it just drops the launch/wait overlap). Replace with real
+# tile.cube_launch/cube_wait DSA bindings once they exist.
+
 
 # =============================================================================
 #  Compile-time configuration
 # =============================================================================
 NUM_CORES = 24
-BLOCK_M   = 128
-BLOCK_N   = 128
-DIM       = 128
-HALF_M    = BLOCK_M // 2   # each vector sub-core owns half the rows
+BLOCK_M = 128
+BLOCK_N = 128
+DIM = 128
 
-CBM  = tl.constexpr(BLOCK_M)
-CBHM = tl.constexpr(HALF_M)
-CBN  = tl.constexpr(BLOCK_N)
-CD   = tl.constexpr(DIM)
+# constexpr shape literals for tile.copy (semantic.copy runs scalar_constant on
+# each extent, which requires tl.constexpr rather than a plain int).
+CBM = tl.constexpr(BLOCK_M)
+CBN = tl.constexpr(BLOCK_N)
+CD = tl.constexpr(DIM)
 
-# ---- arch22 "3-task" schedule constants -----------------------------------
-RING = 3   # depth of the task ring  (the "3-task" of the schedule)
-
-# ---- intra-core signal IDs (Cube scope) ------------------------------------
-SIG_K_L1 = 0
-SIG_P_L1 = 1
-SIG_V_L1 = 2
-SIG_L0AB = 3   # double-buffer base; slot s -> SIG_L0AB+s  (3,4)
-SIG_L0C  = 5   # double-buffer base; slot s -> SIG_L0C+s   (5,6)
-SIG_Q    = 7   # resident-Q guard across tiles
-
-# ---- intra-core signal IDs (Vector scope) ----------------------------------
-SIG_IO_UB  = 0
-SIG_S_HALF = 1
-
-# ---- cross-core semaphore IDs ----------------------------------------------
-SEM_S_READY  = 0   # C->V : workspace_s (S)   has data
-SEM_S_FREE   = 1   # V->C : workspace_s slot  free
-SEM_P_READY  = 2   # V->C : workspace_p (P)   has data
-SEM_P_FREE   = 3   # C->V : workspace_p slot  free
-SEM_PV_READY = 4   # C->V : workspace_pv (PV) has data
-SEM_PV_FREE  = 5   # V->C : workspace_pv slot  free
-
-
-# =============================================================================
-#  Step sub-functions (each called from the main kernel; decorated @triton.jit
-#  so the compiler sees them as inlinable device functions).
-# =============================================================================
-
-@triton.jit
-def _mm1_qkt(
-    # inputs
-    Q, K,
-    q_l1, k_l1, q_l0a, kt_l0b,
-    workspace_s,
-    # task geometry
-    cid, task_in_tile, tile_row, batch_idx, head_idx, kv_head_idx,
-    ring_slot, tasks_per_tile,
-    # strides
-    sQb, sQh, sQs, sQd,
-    sKb, sKh, sKs, sKd,
-    S, CB: tl.constexpr,
-):
-    """MM1: compute S = Q * K^T for CB KV blocks and store into workspace_s.
-
-    Handles resident-Q reload (first task of a tile) and the full L1/L0
-    ping-pong DMA + MMA sequence for each KV block.
-    """
-    # wait workspace_s[ring_slot] task slot free (Vector released after Vec1)
-    sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-
-    # reload resident Q at the first task of each output tile
-    if task_in_tile == 0:
-        q_bp = tl.make_block_ptr(
-            Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
-            (tile_row * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-        tile_copy(q_bp, q_l1, [CBM, CD])
-
-    for cb_idx in range(CB):
-        kv_idx = task_in_tile * CB + cb_idx
-        l0_slot      = cb_idx % 2
-
-        k_bp = tl.make_block_ptr(
-            K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
-            (kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tile_copy(k_bp, k_l1, [CBN, CD])
-
-        tile_copy(q_l1, q_l0a, [CBM, CD])
-
-        tile_copy(k_l1, kt_l0b, [CBN, CD])  # NOTE: no transpose flag yet
-
-        # attn_score = Q * K^T  (synchronous MMA stand-in for tile.cube_launch)
-        attn_score = tl.dot(tile_to_tensor(q_l0a, writable=False),
-                            tile_to_tensor(kt_l0b, writable=False))
-
-        score_store_bp = tl.make_block_ptr(
-            workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
-                           + ring_slot  * (CB * BLOCK_M * BLOCK_N)
-                           + cb_idx  * (BLOCK_M * BLOCK_N)),
-            (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-        tl.store(score_store_bp, attn_score)
-
-    # all CB S-blocks written -> notify Vec1
-    sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
-
-
-@triton.jit
-def _mm2_pv(
-    # inputs
-    V,
-    v_l1, p_l1, p_l0a, v_l0b,
-    workspace_p, workspace_pv,
-    # task geometry
-    cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
-    prev_ring_slot,
-    # strides
-    sKb, sKh, sKs, sKd,
-    S, CB: tl.constexpr,
-):
-    """MM2: compute O_part = P * V for CB blocks and store into workspace_pv.
-
-    Loads P from workspace_p (written by Vec1), loads V from GM, performs
-    MMA and writes the partial output to workspace_pv for Vec2.
-    """
-    # wait workspace_p[prev_ring_slot] (P from Vec1) ready
-    sync_block_wait("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
-
-    for cb_idx in range(CB):
-        prev_kv_idx = prev_task_in_tile * CB + cb_idx
-        prev_l0_slot      = cb_idx % 2
-
-        v_bp = tl.make_block_ptr(
-            V + prev_batch_idx * sKb + kv_prev_head_idx * sKh, (S, DIM), (sKs, sKd),
-            (prev_kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tile_copy(v_bp, v_l1, [CBN, CD])
-
-        prob_load_bp = tl.make_block_ptr(
-            workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
-                           + prev_ring_slot  * (CB * BLOCK_M * BLOCK_N)
-                           + cb_idx  * (BLOCK_M * BLOCK_N)),
-            (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-        tile_copy(prob_load_bp, p_l1, [CBM, CBN])
-
-        tile_copy(v_l1, v_l0b, [CBN, CD])
-
-        tile_copy(p_l1, p_l0a, [CBM, CBN])
-
-        # pv_part = P * V  (synchronous MMA stand-in for tile.cube_launch)
-        pv_part = tl.dot(tile_to_tensor(p_l0a, writable=False),
-                         tile_to_tensor(v_l0b, writable=False))
-
-        pv_store_bp = tl.make_block_ptr(
-            workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
-                            + prev_ring_slot  * (CB * BLOCK_M * DIM)
-                            + cb_idx  * (BLOCK_M * DIM)),
-            (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-        tl.store(pv_store_bp, pv_part)
-
-    # all CB P*V blocks done -> notify Vec2; release workspace_p[prev_ring_slot]
-    sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
-    sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-
-
-@triton.jit
-def _vec1_softmax(
-    workspace_s, workspace_p, workspace_rescale, workspace_expsum,
-    cid, vid, task_in_tile, ring_slot,
-    neg_max_even, neg_max_odd,
-    sm_scale,
-    # causal mask inputs
-    IS_CAUSAL: tl.constexpr,
-    tile_start, tasks_per_tile, num_seq_blocks,
-    g,
-    CB: tl.constexpr,
-):
-    """Vec1: online softmax over CB score blocks -> workspace_p + rescale/expsum.
-
-    Reads workspace_s[ring_slot], applies causal mask if needed, computes
-    stabilised softmax probabilities, and stores P, rescale, and block_expsum
-    to their respective GM ring-buffers for MM2 and Vec2.
-
-    Returns updated (neg_max_even, neg_max_odd).
-    """
-    # wait workspace_s[ring_slot] (all CB score blocks) ready from MM1
-    sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
-
-    # reset running max at the first task of each output tile
-    if task_in_tile == 0:
-        neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
-        neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
-
-    for cb_idx in range(CB):
-        kv_idx = task_in_tile * CB + cb_idx
-        cur_parity   = kv_idx % 2
-        prv_parity   = 1 - cur_parity
-
-        # load score[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_s GM -> UB
-        score_load_bp = tl.make_block_ptr(
-            workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
-                           + ring_slot  * (CB * BLOCK_M * BLOCK_N)
-                           + cb_idx  * (BLOCK_M * BLOCK_N)
-                           + vid * HALF_M * BLOCK_N),
-            (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
-        attn_score_tile = tl.load(score_load_bp).to(tl.float32)
-
-        if IS_CAUSAL:
-            tile_seq_idx   = g // tasks_per_tile
-            global_tile_id = tile_start + tile_seq_idx
-            q_tile_row     = global_tile_id % num_seq_blocks
-            q_row_idx      = q_tile_row * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
-            kv_col_idx     = kv_idx * BLOCK_N + tl.arange(0, BLOCK_N)
-            causal_mask    = q_row_idx[:, None] >= kv_col_idx[None, :]
-            attn_score_tile = tl.where(causal_mask, attn_score_tile, float("-inf"))
-
-        # online softmax: compute new running -max*scale (ping-pong)
-        block_row_max = tl.max(attn_score_tile, axis=-1, keep_dims=True)
-        neg_max_new = tl.minimum(-block_row_max * sm_scale,
-                                 tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
-        neg_max_prv = tl.where(cur_parity == 0, neg_max_odd, neg_max_even)
-
-        # softmax_p = exp(sm_scale * score + neg_max_new)
-        softmax_p = tl.exp(sm_scale * attn_score_tile + neg_max_new)
-
-        # rescale = exp(neg_max_new - neg_max_prv): correction factor for Vec2
-        rescale = tl.exp(neg_max_new - neg_max_prv)
-        # block_expsum: partial row-sum contributed by this KV block
-        block_expsum = tl.sum(softmax_p, axis=-1, keep_dims=True)
-
-        # store rescale and block_expsum into GM ring-buffers for Vec2
-        # layout: [NUM_CORES, RING, CB, 2 sub-cores, HALF_M]
-        rescale_offset = (cid * (RING * CB * 2 * HALF_M)
-                          + ring_slot  * (CB * 2 * HALF_M)
-                          + cb_idx  * (2 * HALF_M)
-                          + vid * HALF_M)
-        rescale_store_bp = tl.make_block_ptr(
-            workspace_rescale + rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-        tl.store(rescale_store_bp, rescale)
-        expsum_store_bp = tl.make_block_ptr(
-            workspace_expsum + rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-        tl.store(expsum_store_bp, block_expsum)
-
-        # update running max ping-pong
-        if cur_parity == 0:
-            neg_max_even = neg_max_new
-        else:
-            neg_max_odd = neg_max_new
-
-        # softmax_p -> workspace_p GM (MTE3): sub-core owns HALF_M rows
-        prob_store_bp = tl.make_block_ptr(
-            workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
-                           + ring_slot  * (CB * BLOCK_M * BLOCK_N)
-                           + cb_idx  * (BLOCK_M * BLOCK_N)
-                           + vid * HALF_M * BLOCK_N),
-            (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
-        tl.store(prob_store_bp, softmax_p.to(workspace_p.dtype.element_ty))
-
-    # all CB P-blocks written -> release workspace_s[ring_slot]; notify MM2
-    sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-    sync_block_set("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
-
-    return neg_max_even, neg_max_odd
-
-
-@triton.jit
-def _vec2_accumulate(
-    Out,
-    workspace_pv, workspace_rescale, workspace_expsum,
-    cid, vid,
-    prev_task_in_tile, prev_tile_row, prev_batch_idx, prev_head_idx,
-    prev_ring_slot,
-    acc_o, softmax_denom,
-    sOb, sOh, sOs, sOd,
-    S, CB: tl.constexpr, NUM_KV_BLOCKS: tl.constexpr,
-):
-    """Vec2: rescale acc_o with each new KV block's P*V; finalize on last block.
-
-    Reads pv_acc from workspace_pv and (rescale, block_expsum) from
-    workspace_rescale/expsum (both written by Vec1), accumulates into acc_o
-    and softmax_denom, and writes the final output row on the last KV block.
-
-    Returns updated (acc_o, softmax_denom).
-    """
-    # wait workspace_pv[prev_ring_slot] (all CB P*V blocks) ready from MM2
-    sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_V)
-
-    for cb_idx in range(CB):
-        prev_kv_idx = prev_task_in_tile * CB + cb_idx
-
-        # load pv_acc[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_pv (MTE2)
-        pv_load_bp = tl.make_block_ptr(
-            workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
-                            + prev_ring_slot  * (CB * BLOCK_M * DIM)
-                            + cb_idx  * (BLOCK_M * DIM)
-                            + vid * HALF_M * DIM),
-            (HALF_M, DIM), (DIM, 1), (0, 0), (HALF_M, DIM), (1, 0))
-        pv_acc = tl.load(pv_load_bp).to(tl.float32)
-
-        # load rescale and block_expsum written by Vec1 for this slot
-        prev_rescale_offset = (cid * (RING * CB * 2 * HALF_M)
-                           + prev_ring_slot  * (CB * 2 * HALF_M)
-                           + cb_idx  * (2 * HALF_M)
-                           + vid * HALF_M)
-        rescale_load_bp = tl.make_block_ptr(
-            workspace_rescale + prev_rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-        rescale = tl.load(rescale_load_bp).to(tl.float32)
-        expsum_load_bp = tl.make_block_ptr(
-            workspace_expsum + prev_rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-        block_expsum = tl.load(expsum_load_bp).to(tl.float32)
-
-        if prev_kv_idx == 0:
-            # first KV block: init acc_o and softmax_denom directly
-            acc_o         = pv_acc
-            softmax_denom = block_expsum
-        else:
-            # rescale acc_o and accumulate
-            rescale_bc    = tl.broadcast_to(rescale, (HALF_M, DIM))
-            acc_o         = acc_o * rescale_bc + pv_acc
-            softmax_denom = softmax_denom * rescale + block_expsum
-
-        if prev_kv_idx == NUM_KV_BLOCKS - 1:
-            # last KV block: divide by softmax denominator and write output
-            denom_bc    = tl.broadcast_to(softmax_denom, (HALF_M, DIM))
-            output_tile = (acc_o / denom_bc).to(Out.dtype.element_ty)
-            o_bp = tl.make_block_ptr(
-                Out + prev_batch_idx * sOb + prev_head_idx * sOh, (S, DIM), (sOs, sOd),
-                (prev_tile_row * BLOCK_M + vid * HALF_M, 0), (HALF_M, DIM), (1, 0))
-            tl.store(o_bp, output_tile)
-
-    # all CB blocks consumed -> release workspace_pv[prev_ring_slot]
-    sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-
-    return acc_o, softmax_denom
+# ---- 3-task pipeline constants ----
+PIPE_DEPTH = 2
+RING = PIPE_DEPTH + 1   # = 3 task-metadata slots (taskId % 3)
+PP = 2                  # ping-pong GM buffers (taskId % 2)
 
 
 # =============================================================================
 #  The single-stream 3-task scheduler kernel (TileIR / tle.dsa form)
 #
-#  grid = (NUM_CORES,).  Each program drives one Cube + one Vector engine.
-#  On-chip staging allocated with tile.alloc; DMA uses tile.copy; cross-engine
-#  ordering uses intra_set/wait_flag (intra-core cross-pipe) + sync_block_set/wait (cross-core).
+#  grid = (NUM_CORES,). Each program drives one Cube + one Vector engine.
+#  On-chip staging (L1 / L0A / L0B / L0C) is allocated with tile.alloc; DMA uses
+#  tile.copy; cross-engine ordering uses tile.set_flag / tile.wait_flag /
+#  tile.pipe_barrier. The Vector-side online-softmax state stays in registers
+#  (plain tl.* ops) since it is pure compute.
 # =============================================================================
 @triton.jit
 def flash_attention_fwd_3task_kernel(
     Q, K, V, Out,
-    workspace_s,    # [NUM_CORES, RING, CB, BLOCK_M, BLOCK_N]  fp16  S        (MM1 out)
-    workspace_p,    # [NUM_CORES, RING, CB, BLOCK_M, BLOCK_N]  fp16  P        (Vec1 out)
-    workspace_pv,   # [NUM_CORES, RING, CB, BLOCK_M, DIM]      fp16  P*V      (MM2 out)
-    workspace_rescale, # [NUM_CORES, RING, CB, 2, HALF_M, 1]      fp32  exp(m_old-m_new) (Vec1->Vec2)
-    workspace_expsum,  # [NUM_CORES, RING, CB, 2, HALF_M, 1]      fp32  sum(exp(s-m))    (Vec1->Vec2)
+    mm1Res, stage1Res, mm2Res,           # GM ping-pong workspaces
     sm_scale,
-    B, Hq, Hkv, S,
-    sQb, sQh, sQs, sQd,
-    sKb, sKh, sKs, sKd,
-    sOb, sOh, sOs, sOd,
-    num_seq_blocks, heads_q, gqa_group,
-    num_kv_blocks,           # KV blocks per output tile  (= seq_len // BLOCK_N)
-    tasks_per_tile,               # tasks per output tile      (= num_kv_blocks // CB)
-    tiles_per_core, extra_tiles,
-    CB:        tl.constexpr,   # KV blocks per task (combine_batch)
-    NUM_KV_BLOCKS: tl.constexpr,   # = num_kv_blocks  (used in causal mask)
+    B, Hq, Hkv, S,                       # shapes
+    sQb, sQh, sQs, sQd,                  # Q strides
+    sKb, sKh, sKs, sKd,                  # K/V strides
+    sOb, sOh, sOs, sOd,                  # Out strides
+    num_seq_blocks, heads_q, gqa_group,  # task-decode helpers
+    n_iters,                             # KV blocks (s2 loop) per output tile
+    q_tasks, r_tasks,                    # static task split
+    NUM_ITERS: tl.constexpr,             # = n_iters as constexpr
     IS_CAUSAL: tl.constexpr,
 ):
     cid = tl.program_id(0)
-    vid = al.sub_vec_id()   # 0 or 1 — vector sub-core index, used in both scopes
 
-    # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
-    tile_start          = cid * tiles_per_core + tl.where(cid < extra_tiles, cid, extra_tiles)
-    tile_count          = tiles_per_core + tl.where(cid < extra_tiles, 1, 0)
-    num_global_tasks  = tile_count * tasks_per_tile   # total pipelined tasks on this core
+    # ---- static task distribution (== AICPU GetFASectionInfo metadata) ----
+    my_start = cid * q_tasks + tl.where(cid < r_tasks, cid, r_tasks)
+    my_count = q_tasks + tl.where(cid < r_tasks, 1, 0)
+    n_sub = my_count * n_iters            # flattened (output-tile x KV-block) sub-tasks
 
     # =========================================================================
-    #  On-chip buffers  (tile.alloc -> explicit memory hierarchy)
+    #  ① on-chip working set  (tile.alloc -> explicit memory hierarchy)
     # =========================================================================
-    # -- Cube side: L1 staging + L0 double-buffer (slot 0=MM1, slot 1=MM2) --
-    q_l1 = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L1)
-    k_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
-    v_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
+    # -- Cube side: L1 staging + L0 double buffer (slot 0 = Bmm1, slot 1 = Bmm2) --
+    q_l1 = tile_alloc([BLOCK_M, DIM], Q.dtype.element_ty, L1)
+    k_l1 = tile_alloc([BLOCK_N, DIM], Q.dtype.element_ty, L1)
+    v_l1 = tile_alloc([BLOCK_N, DIM], Q.dtype.element_ty, L1)
     p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
+    # two separate L0 slots (no buffer indexing in tile-DSA): 0 = Bmm1, 1 = Bmm2
+    l0a0 = tile_alloc([BLOCK_M, DIM], Q.dtype.element_ty, L0A)
+    l0b0 = tile_alloc([DIM, BLOCK_N], Q.dtype.element_ty, L0B)
+    l0c0 = tile_alloc([BLOCK_M, BLOCK_N], tl.float32, L0C)
+    l0a1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)
+    l0b1 = tile_alloc([BLOCK_N, DIM], Q.dtype.element_ty, L0B)
+    l0c1 = tile_alloc([BLOCK_M, DIM], tl.float32, L0C)
 
-    q_l0a = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L0A)  # MM1 Q
-    kt_l0b = tile_alloc([DIM,     BLOCK_N], Q.dtype.element_ty, L0B)  # MM1 K
-    mm1_l0c = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,         L0C)  # MM1 out
-    p_l0a = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L0A)  # MM2 P
-    v_l0b = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L0B)  # MM2 V
-    mm2_l0c = tile_alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
-
-    # -- Vector side (UB registers): full online-softmax state ---------------
-    # acc_o uses HALF_M rows; state per (ring_slot, cb_idx) stored as flat GM-backed
-    # workspaces; running max uses a ping-pong register pair (one per kv parity).
-    acc_o  = tl.zeros((HALF_M, DIM), tl.float32)
-    softmax_denom = tl.zeros((HALF_M, 1), tl.float32)   # running denominator l
-    # neg_max_even/odd: running -max*scale for even/odd kv index, reset each tile
-    neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
-    neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
+    # -- Vector side: O accumulator in registers (loop-carried). NOTE: the
+    #    running-max / denominator / per-sub-task ring carry of the real 3-task
+    #    pipeline is dropped here — this file is a TileIR-dump illustration, so
+    #    the Vector math is simplified to keep valid (item-assignment-free) IR.
+    acc_o = tl.zeros((BLOCK_M, DIM), tl.float32)   # P·V accumulator
 
     # =========================================================================
-    #  CUBE scope: MM1(g) and MM2(g-1) dual-issued; each task = CB MMAs.
+    #  ② init cross-engine flags: pre-arm so the first producer's wait passes.
     # =========================================================================
-    with al.scope(core_mode="cube"):
-        # ---- init: 3 ws2-FREE tokens + pre-arm intra-core signals ----
-        # RING ws2-FREE tokens (one per slot) so MM2 pipeline can start
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-
-        for g in range(num_global_tasks + 1):
-
-            # ===== MM1(g): S = Q*K^T for CB KV blocks -> workspace_s[cid, g%RING, :] =====
-            if g < num_global_tasks:
-                task_in_tile   = g % tasks_per_tile
-                tile_idx       = g // tasks_per_tile
-                output_tile_id = tile_start + tile_idx
-                tile_row       = output_tile_id % num_seq_blocks
-                head_idx       = (output_tile_id // num_seq_blocks) % heads_q
-                batch_idx      = output_tile_id // (num_seq_blocks * heads_q)
-                kv_head_idx    = head_idx // gqa_group
-                ring_slot      = g % RING
-
-                _mm1_qkt(
-                    Q, K,
-                    q_l1, k_l1, q_l0a, kt_l0b,
-                    workspace_s,
-                    cid, task_in_tile, tile_row, batch_idx, head_idx, kv_head_idx,
-                    ring_slot, tasks_per_tile,
-                    sQb, sQh, sQs, sQd,
-                    sKb, sKh, sKs, sKd,
-                    S, CB,
-                )
-
-            # ===== MM2(g-1): O_part = P*V for CB blocks -> workspace_pv[cid,(g-1)%RING,:] =====
-            if g >= 1:
-                prev_g           = g - 1
-                prev_task_in_tile    = prev_g % tasks_per_tile
-                prev_tile_idx        = prev_g // tasks_per_tile
-                prev_output_tile_id  = tile_start + prev_tile_idx
-                prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
-                prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
-                kv_prev_head_idx     = prev_head_idx // gqa_group
-                prev_ring_slot       = prev_g % RING
-
-                _mm2_pv(
-                    V,
-                    v_l1, p_l1, p_l0a, v_l0b,
-                    workspace_p, workspace_pv,
-                    cid, prev_task_in_tile, prev_batch_idx, kv_prev_head_idx,
-                    prev_ring_slot,
-                    sKb, sKh, sKs, sKd,
-                    S, CB,
-                )
-
-        # ---- destroy: consume outstanding init-direction signals ----
+    sync_block_set(EVT_MTE3_MTE2[0], EVT_MTE3_MTE2[1], EVT_MTE3_MTE2[2], EVT_MTE3_MTE2[3], EVT_MTE3_MTE2[4])  # pretend last P consumed
 
     # =========================================================================
-    #  VECTOR scope: Vec1(g) online-softmax, Vec2(g-1) rescale+accumulate.
+    #  ③ 3-task pipeline. One tick = one flattened sub-task g; +PIPE_DEPTH ticks
+    #     drain the tail (cooldown).
     # =========================================================================
-    with al.scope(core_mode="vector"):
-        # ---- init: 3 ws1-FREE + 3 ws3-FREE tokens + pre-arm intra-core signals ----
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE2)
+    for g in range(n_sub + PIPE_DEPTH):
 
-        for g in range(num_global_tasks + 1):
+        # ─── 2) IterateBmm1(k): S = Q·Kᵀ -> mm1Res[g%2] ──────────────────────
+        if g < n_sub:
+            t = g // n_iters
+            j = g % n_iters
+            cur_pp = g % PP
+            task_id = my_start + t
+            bx = task_id % num_seq_blocks
+            by = (task_id // num_seq_blocks) % heads_q
+            bz = task_id // (num_seq_blocks * heads_q)
+            kv_by = by // gqa_group
 
-            # ===== Vec1(g): softmax(workspace_s[g%RING]) -> workspace_p[g%RING] =====
-            if g < num_global_tasks:
-                task_in_tile = g % tasks_per_tile
-                ring_slot    = g % RING
+            q_bp = tl.make_block_ptr(Q + bz * sQb + by * sQh, (S, DIM), (sQs, sQd),
+                                     (bx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
+            if j == 0:                              # new output tile: (re)load Q into L1
+                tile_copy(tensor_to_tile(q_bp), q_l1, [CBM, CD])
+            # K[j] -> k_l1 -> L0 slot 0
+            k_bp = tl.make_block_ptr(K + bz * sKb + kv_by * sKh, (S, DIM), (sKs, sKd),
+                                     (j * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
+            tile_copy(tensor_to_tile(k_bp), k_l1, [CBN, CD])
+            tile_copy(q_l1, l0a0, [CBM, CD])
+            tile_copy(k_l1, l0b0, [CBN, CD])   # NOTE: tile.copy has no transpose flag yet
+            # S = Q·Kᵀ : matmul stand-in for tile.cube_launch (no DSA binding yet).
+            # NOTE: tt.dot requires standard ranked tensors — a !tile.tensor (from
+            # tile.to_tensor) is rejected by the verifier — so the dot runs on tt
+            # tensors loaded from GM, not on the !tile.* staging buffers above.
+            m1_bp = tl.make_block_ptr(mm1Res + cid * (PP * BLOCK_M * BLOCK_N) + cur_pp * (BLOCK_M * BLOCK_N),
+                                      (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
+            s = tl.dot(tile_to_tensor(l0a0, writable=False), tile_to_tensor(l0b0, writable=False))                           
+            # s = tl.dot(tl.load(q_bp), tl.trans(tl.load(k_bp)))
+            tl.store(m1_bp, s)
 
-                neg_max_even, neg_max_odd = _vec1_softmax(
-                    workspace_s, workspace_p, workspace_rescale, workspace_expsum,
-                    cid, vid, task_in_tile, ring_slot,
-                    neg_max_even, neg_max_odd,
-                    sm_scale,
-                    IS_CAUSAL, tile_start, tasks_per_tile, num_seq_blocks,
-                    g, CB,
-                )
+        # ─── 3) ProcessVec1(k-1): softmax(mm1Res[prev]) -> stage1Res[prev] ───
+        if g >= 1:
+            g1 = g - 1
+            if g1 < n_sub:
+                j1   = g1 % n_iters
+                pp1  = g1 % PP
 
-            # ===== Vec2(g-1): acc_o = acc_o*rescale + pv_acc; finalize at last KV block =====
-            if g >= 1:
-                prev_g           = g - 1
-                prev_task_in_tile    = prev_g % tasks_per_tile
-                prev_tile_idx        = prev_g // tasks_per_tile
-                prev_output_tile_id  = tile_start + prev_tile_idx
-                prev_tile_row        = prev_output_tile_id % num_seq_blocks
-                prev_head_idx        = (prev_output_tile_id // num_seq_blocks) % heads_q
-                prev_batch_idx       = prev_output_tile_id // (num_seq_blocks * heads_q)
-                prev_ring_slot       = prev_g % RING
+                # GM mm1Res[pp1] -> registers (MTE2)
+                m1r_bp = tl.make_block_ptr(mm1Res + cid * (PP * BLOCK_M * BLOCK_N) + pp1 * (BLOCK_M * BLOCK_N),
+                                           (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
+                s_tile = tl.load(m1r_bp).to(tl.float32)
+                sync_block_set(EVT_MTE2_V[0], EVT_MTE2_V[1], EVT_MTE2_V[2], EVT_MTE2_V[3], EVT_MTE2_V[4])
+                sync_block_wait(EVT_MTE2_V[0], EVT_MTE2_V[1], EVT_MTE2_V[2], EVT_MTE2_V[3], EVT_MTE2_V[4])
 
-                acc_o, softmax_denom = _vec2_accumulate(
-                    Out,
-                    workspace_pv, workspace_rescale, workspace_expsum,
-                    cid, vid, prev_task_in_tile, prev_tile_row, prev_batch_idx, prev_head_idx,
-                    prev_ring_slot,
-                    acc_o, softmax_denom,
-                    sOb, sOh, sOs, sOd,
-                    S, CB, NUM_KV_BLOCKS,
-                )
+                if IS_CAUSAL:
+                    t1  = g1 // n_iters
+                    tid = my_start + t1
+                    bx1 = tid % num_seq_blocks
+                    q_idx  = bx1 * BLOCK_M + tl.arange(0, BLOCK_M)
+                    kv_idx = j1 * BLOCK_N + tl.arange(0, BLOCK_N)
+                    valid  = q_idx[:, None] >= kv_idx[None, :]
+                    s_tile = tl.where(valid, s_tile, float("-inf"))
 
-        # ---- destroy: consume outstanding init-direction signals ----
+                # per-tile softmax numerator P = exp(scale*S - scale*max)
+                # (cross-KV-block running-max carry dropped; dump illustration)
+                row_max = tl.max(s_tile, axis=-1, keep_dims=True)
+                p_tile = tl.exp(sm_scale * s_tile - sm_scale * row_max)
 
+                tile_pipe_barrier(PIPE_V)
+
+                # P -> GM stage1Res[pp1] (UB->GM, MTE3); signal Bmm2 it may read
+                s1_bp = tl.make_block_ptr(stage1Res + cid * (PP * BLOCK_M * BLOCK_N) + pp1 * (BLOCK_M * BLOCK_N),
+                                          (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
+                sync_block_set(EVT_V_MTE3[0], EVT_V_MTE3[1], EVT_V_MTE3[2], EVT_V_MTE3[3], EVT_V_MTE3[4])
+                sync_block_wait(EVT_V_MTE3[0], EVT_V_MTE3[1], EVT_V_MTE3[2], EVT_V_MTE3[3], EVT_V_MTE3[4])
+                tl.store(s1_bp, p_tile.to(stage1Res.dtype.element_ty))
+                sync_block_set(EVT_MTE3_MTE2[0], EVT_MTE3_MTE2[1], EVT_MTE3_MTE2[2], EVT_MTE3_MTE2[3], EVT_MTE3_MTE2[4])   # P[pp1] ready for Bmm2
+
+        # ─── 5) IterateBmm2(k-1): stage1Res[prev]·V -> mm2Res[prev] ──────────
+        if g >= 1:
+            g1 = g - 1
+            if g1 < n_sub:
+                t1   = g1 // n_iters
+                j1   = g1 % n_iters
+                pp1  = g1 % PP
+                tid1 = my_start + t1
+                by1  = (tid1 // num_seq_blocks) % heads_q
+                bz1  = tid1 // (num_seq_blocks * heads_q)
+                kv_by1 = by1 // gqa_group
+
+                # P from stage1Res[pp1] -> p_l1 -> L0 slot 1
+                sync_block_wait(EVT_MTE3_MTE2[0], EVT_MTE3_MTE2[1], EVT_MTE3_MTE2[2], EVT_MTE3_MTE2[3], EVT_MTE3_MTE2[4])
+                s1r_bp = tl.make_block_ptr(stage1Res + cid * (PP * BLOCK_M * BLOCK_N) + pp1 * (BLOCK_M * BLOCK_N),
+                                           (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
+                tile_copy(tensor_to_tile(s1r_bp), p_l1, [CBM, CBN])
+                # V[j1] -> v_l1 -> L0 slot 1
+                v_bp = tl.make_block_ptr(V + bz1 * sKb + kv_by1 * sKh, (S, DIM), (sKs, sKd),
+                                         (j1 * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
+                tile_copy(tensor_to_tile(v_bp), v_l1, [CBN, CD])
+                tile_copy(p_l1, l0a1, [CBM, CBN])
+                tile_copy(v_l1, l0b1, [CBN, CD])
+                # O_part = P·V : mma -> l0c1 -> FIX -> mm2Res[pp1]  (synchronous stand-in).
+                m2_bp = tl.make_block_ptr(mm2Res + cid * (PP * BLOCK_M * DIM) + pp1 * (BLOCK_M * DIM),
+                                          (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
+                o = tl.dot(tile_to_tensor(l0a1, writable=False), tile_to_tensor(l0b1, writable=False))
+                tl.store(m2_bp, o)
+
+        # ─── 6) ProcessVec2(k-2): rescale acc_o + add mm2Res[prev2], finalize ─
+        if g >= 2:
+            g2 = g - 2
+            if g2 < n_sub:
+                j2   = g2 % n_iters
+                pp2  = g2 % PP
+                is_first = j2 == 0
+                is_last  = j2 == NUM_ITERS - 1
+                t2   = g2 // n_iters
+                tid2 = my_start + t2
+                bx2  = tid2 % num_seq_blocks
+                by2  = (tid2 // num_seq_blocks) % heads_q
+                bz2  = tid2 // (num_seq_blocks * heads_q)
+
+                if is_first:                        # init O accumulator at tile start
+                    acc_o = tl.zeros((BLOCK_M, DIM), tl.float32)
+
+                # O_partial from mm2Res[pp2] -> add (MTE2). NOTE: softmax rescale
+                # and denominator carry dropped (dump illustration).
+                m2r_bp = tl.make_block_ptr(mm2Res + cid * (PP * BLOCK_M * DIM) + pp2 * (BLOCK_M * DIM),
+                                           (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
+                o_part = tl.load(m2r_bp).to(tl.float32)
+                sync_block_set(EVT_MTE2_V[0], EVT_MTE2_V[1], EVT_MTE2_V[2], EVT_MTE2_V[3], EVT_MTE2_V[4])
+                sync_block_wait(EVT_MTE2_V[0], EVT_MTE2_V[1], EVT_MTE2_V[2], EVT_MTE2_V[3], EVT_MTE2_V[4])
+                acc_o = acc_o + o_part
+
+                if is_last:                         # last KV block: write O
+                    out_tile = acc_o.to(Out.dtype.element_ty)
+                    o_bp = tl.make_block_ptr(Out + bz2 * sOb + by2 * sOh, (S, DIM), (sOs, sOd),
+                                             (bx2 * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
+                    sync_block_set(EVT_V_MTE3[0], EVT_V_MTE3[1], EVT_V_MTE3[2], EVT_V_MTE3[3], EVT_V_MTE3[4])
+                    sync_block_wait(EVT_V_MTE3[0], EVT_V_MTE3[1], EVT_V_MTE3[2], EVT_V_MTE3[3], EVT_V_MTE3[4])
+                    tl.store(o_bp, out_tile)
 
 
 # =============================================================================
 #  Intermediate-TileIR dump (no device required)
+#
+#  Compiles the kernel straight to TTIR with the tile/tle/ascend dialects
+#  registered, then writes str(module). The tile.* ops emitted by the tile-DSA
+#  builtins above appear in this dump — that is the intermediate TileIR.
+#  Mirrors python/test/tle/test_bind_buffer.py::compile_kernel.
 # =============================================================================
 class _DumpOptions:
     num_warps = 4
@@ -554,27 +290,26 @@ class _DumpOptions:
     default_dot_input_precision = "ieee"
 
 
-def _dump_signature(combine_batch):
+def _dump_signature():
+    """Static signature for ast_to_ttir (pointers / scalars / i32 / constexpr)."""
     ptr = {"Q": "*fp16", "K": "*fp16", "V": "*fp16", "Out": "*fp16",
-           "workspace_s": "*fp16", "workspace_p": "*fp16", "workspace_pv": "*fp16",
-           "workspace_rescale": "*fp32", "workspace_expsum": "*fp32"}
-    i32s = ["B", "Hq", "Hkv", "S",
-            "sQb", "sQh", "sQs", "sQd",
-            "sKb", "sKh", "sKs", "sKd",
-            "sOb", "sOh", "sOs", "sOd",
-            "num_seq_blocks", "heads_q", "gqa_group",
-            "num_kv_blocks", "tasks_per_tile", "tiles_per_core", "extra_tiles"]
+           "mm1Res": "*fp32", "stage1Res": "*fp16", "mm2Res": "*fp32"}
+    i32_names = ["B", "Hq", "Hkv", "S",
+                 "sQb", "sQh", "sQs", "sQd",
+                 "sKb", "sKh", "sKs", "sKd",
+                 "sOb", "sOh", "sOs", "sOd",
+                 "num_seq_blocks", "heads_q", "gqa_group",
+                 "n_iters", "q_tasks", "r_tasks"]
     sig = dict(ptr)
     sig["sm_scale"] = "fp32"
-    for n in i32s:
+    for n in i32_names:
         sig[n] = "i32"
-    sig["CB"]        = "constexpr"
-    sig["NUM_KV_BLOCKS"] = "constexpr"
+    sig["NUM_ITERS"] = "constexpr"
     sig["IS_CAUSAL"] = "constexpr"
     return sig
 
 
-def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, is_causal=False):
+def dump_tileir(path=None, ttir_path=None, num_iters=32, is_causal=False):
     """Compile the kernel to TTIR (containing tile.* ops) and write it to `path`.
 
     Also runs the TileIR→HIVM pass to lower tile.* ops and dumps the resulting
@@ -587,6 +322,8 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, is_causal=False):
     from triton._C.libtriton import ir
     from triton._C.libtriton import tle as tle_ir
 
+    # The kernel reads module-level shape constants (BLOCK_M, DIM, ...) as plain
+    # globals; allow that during this front-end-only dump.
     os.environ.setdefault("TRITON_ALLOW_NON_CONSTEXPR_GLOBALS", "1")
 
     if path is None:
@@ -594,28 +331,30 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, is_causal=False):
     if ttir_path is None:
         ttir_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_ttir.mlir")
 
-    cb = combine_batch
-    tasks_per_tile = num_kv_blocks // combine_batch
-    signature = _dump_signature(cb)
-    constants = {"CB": combine_batch, "NUM_KV_BLOCKS": num_kv_blocks, "IS_CAUSAL": is_causal}
+    signature = _dump_signature()
+    constants = {"NUM_ITERS": num_iters, "IS_CAUSAL": is_causal}
 
     src = ASTSource(flash_attention_fwd_3task_kernel, signature, constants)
     context = ir.context()
     ir.load_dialects(context)
     tle_ir.load_dialects(context)
     tle_ir.load_tile_dialects(context)
+    # Ascend dialect is optional (only needed for ascend-specific ops); load if present.
     try:
         from triton._C.libtriton.ascend import ir as ascend_ir
         ascend_ir.load_dialects(context)
     except Exception:
         pass
 
+    # codegen_fns: tl.dot needs a target-provided "min_dot_size"; the ascend
+    # backend simply returns (1,1,1), so supply that inline (no full backend).
     codegen_fns = {"min_dot_size": lambda lhsType, rhsType: (1, 1, 1)}
     module = ast_to_ttir(flash_attention_fwd_3task_kernel, src, context, _DumpOptions(), codegen_fns, {})
 
+    # Ensure the produced IR is legal before writing it out.
     ok = module.verify()
     if not ok:
-        raise RuntimeError("dump_tileir: module.verify() failed -- IR is not legal")
+        raise RuntimeError("dump_tileir: module.verify() failed — IR is not legal")
 
     # ---- dump TileIR (TTIR + tile.* ops) ----
     mlir = str(module)
@@ -665,7 +404,7 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, is_causal=False):
     return mlir
 
 
-def dump_hivm(path=None, num_kv_blocks=32, is_causal=False):
+def dump_hivm(path=None, num_iters=32, is_causal=False):
     """Compile the kernel to TTIR, then lower through TileIR→HIVM pipeline to HIVM IR.
 
     Pipeline (matches compiler.py ttir_to_linalg):
@@ -685,7 +424,7 @@ def dump_hivm(path=None, num_kv_blocks=32, is_causal=False):
     from triton._C.libtriton import ir, passes, ascend
 
     # Step 1: compile to TTIR (TileIR)
-    tileir_mlir = dump_tileir(path=None, num_kv_blocks=num_kv_blocks, is_causal=is_causal)
+    tileir_mlir = dump_tileir(path=None, num_iters=num_iters, is_causal=is_causal)
 
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_hivm.mlir")
@@ -747,52 +486,33 @@ def dump_hivm(path=None, num_kv_blocks=32, is_causal=False):
 # =============================================================================
 #  Host launcher
 # =============================================================================
-def flash_attention_fwd(q, k, v, is_causal=False, combine_batch=8):
+def flash_attention_fwd(q, k, v, is_causal=False):
     B, Hq, S, D = q.shape
     Hkv = k.shape[1]
     assert D == DIM and S % BLOCK_N == 0 and Hq % Hkv == 0
-
     num_seq_blocks = S // BLOCK_M
-    block_num      = num_seq_blocks * Hq * B
-    num_kv_blocks        = S // BLOCK_N   # KV blocks per output tile
-
-    CB = combine_batch
-    if num_kv_blocks < CB:
-        CB = num_kv_blocks
-    assert num_kv_blocks % CB == 0, f"num_kv_blocks ({num_kv_blocks}) must be divisible by combine_batch ({CB})"
-    tasks_per_tile = num_kv_blocks // CB   # tasks per output tile
-
-    tiles_per_core = block_num // NUM_CORES
-    extra_tiles = block_num % NUM_CORES
+    block_num = num_seq_blocks * Hq * B
+    n_iters = S // BLOCK_N
+    q_tasks = block_num // NUM_CORES
+    r_tasks = block_num % NUM_CORES
 
     out = torch.empty_like(q)
-    # GM workspaces
-    workspace_s = torch.empty((NUM_CORES, RING, CB, BLOCK_M, BLOCK_N),
-                              dtype=q.dtype, device=q.device)   # S
-    workspace_p = torch.empty((NUM_CORES, RING, CB, BLOCK_M, BLOCK_N),
-                              dtype=q.dtype, device=q.device)   # P
-    workspace_pv = torch.empty((NUM_CORES, RING, CB, BLOCK_M, DIM),
-                              dtype=q.dtype, device=q.device)   # P*V
-    # [NUM_CORES, RING, CB, 2 sub-cores, HALF_M, 1] — written by Vec1, read by Vec2
-    workspace_rescale = torch.empty((NUM_CORES, RING, CB, 2, HALF_M, 1),
-                              dtype=torch.float32, device=q.device)  # exp(m_old - m_new)
-    workspace_expsum = torch.empty((NUM_CORES, RING, CB, 2, HALF_M, 1),
-                              dtype=torch.float32, device=q.device)  # sum(exp(s - m))
+    # GM ping-pong workspaces (taskId % 2), one slice per core.
+    mm1Res    = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=torch.float32, device=q.device)
+    stage1Res = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=q.dtype,        device=q.device)
+    mm2Res    = torch.empty((NUM_CORES, PP, BLOCK_M, DIM),     dtype=torch.float32, device=q.device)
     sm_scale = (1.0 / D) ** 0.5
 
-    grid = (NUM_CORES,)
+    grid = (NUM_CORES,)  # one program per AI core; one Cube + one Vector stream (MIX_1_1)
     flash_attention_fwd_3task_kernel[grid](
-        q, k, v, out,
-        workspace_s, workspace_p, workspace_pv, workspace_rescale, workspace_expsum,
-        sm_scale,
+        q, k, v, out, mm1Res, stage1Res, mm2Res, sm_scale,
         B, Hq, Hkv, S,
         q.stride(0), q.stride(1), q.stride(2), q.stride(3),
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
         out.stride(0), out.stride(1), out.stride(2), out.stride(3),
         num_seq_blocks, Hq, Hq // Hkv,
-        num_kv_blocks, tasks_per_tile, tiles_per_core, extra_tiles,
-        CB=CB,
-        NUM_KV_BLOCKS=num_kv_blocks,
+        n_iters, q_tasks, r_tasks,
+        NUM_ITERS=n_iters,
         IS_CAUSAL=is_causal,
     )
     return out
@@ -808,26 +528,24 @@ if __name__ == "__main__":
     parser.add_argument("--D", type=int, default=128)
     parser.add_argument("--causal", action="store_true")
     parser.add_argument("--no-check", action="store_true")
-    parser.add_argument("--n-ratio", type=int, default=8,
-                        help="KV blocks per task (arch22 nRatio)")
     parser.add_argument("--dump-mlir", nargs="?", const="", default=None,
                         help="Dump intermediate TileIR to PATH (default skill/op/fa_triton_arch.mlir) and exit; no device needed.")
     parser.add_argument("--dump-ir", nargs="?", const="", default=None,
                         help="Dump HIVM IR (after TileIR→HIVM lowering) to PATH and exit; no device needed.")
     args = parser.parse_args()
 
+    # ---- dump intermediate TileIR and exit (no device required) ----
     if args.dump_mlir is not None:
         B, S, H, D = args.B, args.S, args.H, args.D
-        num_kv_blocks = S // BLOCK_N
-        dump_tileir(path=(args.dump_mlir or None), num_kv_blocks=num_kv_blocks,
-                    combine_batch=args.combine_batch, is_causal=args.causal)
+        n_iters = S // BLOCK_N
+        dump_tileir(path=(args.dump_mlir or None), num_iters=n_iters, is_causal=args.causal)
         raise SystemExit(0)
 
     # ---- dump HIVM IR after full lowering pipeline (no device required) ----
     if args.dump_ir is not None:
         B, S, H, D = args.B, args.S, args.H, args.D
-        num_kv_blocks = S // BLOCK_N
-        dump_hivm(path=(args.dump_ir or None), num_kv_blocks=num_kv_blocks, is_causal=args.causal)
+        n_iters = S // BLOCK_N
+        dump_hivm(path=(args.dump_ir or None), num_iters=n_iters, is_causal=args.causal)
         raise SystemExit(0)
 
     B, S, H, D = args.B, args.S, args.H, args.D
@@ -840,14 +558,14 @@ if __name__ == "__main__":
     k = torch.randn((B, KV_H, S, D), dtype=torch.float16, device=device)
     v = torch.randn((B, KV_H, S, D), dtype=torch.float16, device=device)
 
-    out = flash_attention_fwd(q, k, v, is_causal=args.causal, combine_batch=args.combine_batch)
+    out = flash_attention_fwd(q, k, v, is_causal=args.causal)
 
     if not args.no_check:
         def ref(q, k, v):
             if k.shape[1] != q.shape[1]:
-                gqa_rep = q.shape[1] // k.shape[1]
-                k = k.repeat_interleave(gqa_rep, dim=1)
-                v = v.repeat_interleave(gqa_rep, dim=1)
+                n_rep = q.shape[1] // k.shape[1]
+                k = k.repeat_interleave(n_rep, dim=1)
+                v = v.repeat_interleave(n_rep, dim=1)
             return torch.nn.functional.scaled_dot_product_attention(
                 q.float(), k.float(), v.float(), is_causal=args.causal).to(torch.float16)
 
