@@ -24,7 +24,7 @@ import triton.language as tl
 # =============================================================================
 import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
 from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
-    L1, L0C, UB, PIPE, sync_block_set, sync_block_wait,
+    L1, L0C, UB, PIPE, sub_vec_id, sync_block_set, sync_block_wait,
 )
 
 # ---- cross-engine sync_block events -----------------------------------------
@@ -82,295 +82,6 @@ SEM_PV_FREE  = 5   # V->C : workspace_pv slot  free
 
 
 # =============================================================================
-#  Step sub-functions (each called from the main kernel; decorated @triton.jit
-#  so the compiler sees them as inlinable device functions).
-# =============================================================================
-
-@triton.jit
-def _mm1_qkt(
-    # inputs
-    Q, K,
-    q_l1, k_l1, attn_score_l0c,
-    workspace_s,
-    # task geometry
-    cid, idx_in_conbine, global_head_idx, batch_idx, head_idx, kv_head_idx,
-    ring_slot,
-    # strides
-    sQb, sQh, sQs, sQd,
-    sKb, sKh, sKs, sKd,
-    S, CB: tl.constexpr,
-):
-    """MM1: compute S = Q * K^T for CB KV blocks and store into workspace_s.
-
-    Handles resident-Q reload (first task of a tile) and the full L1
-    DMA + MMA sequence for each KV block.
-    """
-    # wait workspace_s[ring_slot] task slot free (Vector released after Vec1)
-    sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-
-    # reload resident Q at the first task of each output tile
-    if idx_in_conbine == 0:
-        q_bp = tl.make_block_ptr(
-            Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
-            (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-        tle.dsa.copy(q_bp, q_l1, [CBM, CD])
-
-    for cb_idx in range(CB):
-        kv_idx = idx_in_conbine * CB + cb_idx
-
-        k_bp = tl.make_block_ptr(
-            K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
-            (kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tle.dsa.copy(k_bp, k_l1, [CBN, CD])
-
-        # attn_score = Q * K^T using L1 buffers
-        attn_score_l0c = tl.dot(tle.dsa.to_tensor(q_l1, writable=False),
-                            tle.dsa.to_tensor(k_l1, writable=False),
-                            out_dtype=tl.float16)
-
-        score_store_bp = tl.make_block_ptr(
-            workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
-                           + ring_slot  * (CB * BLOCK_M * BLOCK_N)
-                           + cb_idx  * (BLOCK_M * BLOCK_N)),
-            (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-        tl.store(score_store_bp, attn_score_l0c)
-
-    # all CB S-blocks written -> notify Vec1
-    sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
-
-
-@triton.jit
-def _mm2_pv(
-    # inputs
-    V,
-    v_l1, p_l1, pv_part_l0c,
-    workspace_p, workspace_pv,
-    # task geometry
-    cid, prev_idx_in_conbine, prev_batch_idx, kv_prev_head_idx,
-    prev_ring_slot,
-    # strides
-    sKb, sKh, sKs, sKd,
-    S, CB: tl.constexpr,
-):
-    """MM2: compute O_part = P * V for CB blocks and store into workspace_pv.
-
-    Loads P from workspace_p (written by Vec1), loads V from GM, performs
-    MMA and writes the partial output to workspace_pv for Vec2.
-    """
-    # wait workspace_p[prev_ring_slot] (P from Vec1) ready
-    sync_block_wait("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
-    # wait workspace_pv[prev_ring_slot] slot free (Vec2 released after accumulating)
-    sync_block_wait("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-
-    for cb_idx in range(CB):
-        prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
-
-        v_bp = tl.make_block_ptr(
-            V + prev_batch_idx * sKb + kv_prev_head_idx * sKh, (S, DIM), (sKs, sKd),
-            (prev_kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-        tle.dsa.copy(v_bp, v_l1, [CBN, CD])
-
-        prob_load_bp = tl.make_block_ptr(
-            workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
-                           + prev_ring_slot  * (CB * BLOCK_M * BLOCK_N)
-                           + cb_idx  * (BLOCK_M * BLOCK_N)),
-            (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-        tle.dsa.copy(prob_load_bp, p_l1, [CBM, CBN])
-
-        # pv_part = P * V using L1 buffers
-        pv_part_l0c = tl.dot(tle.dsa.to_tensor(p_l1, writable=False),
-                         tle.dsa.to_tensor(v_l1, writable=False),
-                         out_dtype=tl.float16)
-        
-        pv_store_bp = tl.make_block_ptr(
-            workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
-                            + prev_ring_slot  * (CB * BLOCK_M * DIM)
-                            + cb_idx  * (BLOCK_M * DIM)),
-            (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-        tl.store(pv_store_bp, pv_part_l0c)
-
-    # all CB P*V blocks done -> notify Vec2; release workspace_p[prev_ring_slot]
-    sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
-    sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
-
-
-@triton.jit
-def _vec1_softmax(
-    workspace_s, workspace_p, workspace_rescale, workspace_expsum,
-    cid, vid, idx_in_conbine, ring_slot,
-    neg_max_even, neg_max_odd,
-    sm_scale,
-    # causal mask inputs
-    IS_CAUSAL: tl.constexpr,
-    block_start, conbined_block_num, num_seq_blocks,
-    g,
-    CB: tl.constexpr,
-):
-    """Vec1: online softmax over CB score blocks -> workspace_p + rescale/expsum.
-
-    Reads workspace_s[ring_slot], applies causal mask if needed, computes
-    stabilised softmax probabilities, and stores P, rescale, and block_expsum
-    to their respective GM ring-buffers for MM2 and Vec2.
-
-    Returns updated (neg_max_even, neg_max_odd).
-    """
-    # wait workspace_s[ring_slot] (all CB score blocks) ready from MM1
-    sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
-    # wait workspace_p[ring_slot] slot free (MM2 released after reading P)
-    sync_block_wait("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
-
-    # reset running max at the first task of each output tile
-    if idx_in_conbine == 0:
-        neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
-        neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
-
-    for cb_idx in range(CB):
-        kv_idx = idx_in_conbine * CB + cb_idx
-        cur_parity   = kv_idx % 2
-        prv_parity   = 1 - cur_parity
-
-        # load score[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_s GM -> UB
-        score_load_bp = tl.make_block_ptr(
-            workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
-                           + ring_slot  * (CB * BLOCK_M * BLOCK_N)
-                           + cb_idx  * (BLOCK_M * BLOCK_N)
-                           + vid * HALF_M * BLOCK_N),
-            (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
-        attn_score_block = tl.load(score_load_bp).to(tl.float32)
-
-        if IS_CAUSAL:
-            conbined_block_idx   = g // conbined_block_num
-            global_block_id = block_start + conbined_block_idx
-            q_global_head_idx     = global_block_id % num_seq_blocks
-            q_row_idx      = q_global_head_idx * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
-            kv_col_idx     = kv_idx * BLOCK_N + tl.arange(0, BLOCK_N)
-            causal_mask    = q_row_idx[:, None] >= kv_col_idx[None, :]
-            attn_score_block = tl.where(causal_mask, attn_score_block, float("-inf"))
-
-        # online softmax: compute new running -max*scale (ping-pong)
-        block_row_max = tl.max(attn_score_block, axis=-1, keep_dims=True)
-        neg_max_new = tl.minimum(-block_row_max * sm_scale,
-                                 tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
-        neg_max_prv = tl.where(cur_parity == 0, neg_max_odd, neg_max_even)
-
-        # softmax_p = exp(sm_scale * score + neg_max_new)
-        softmax_p = tl.exp(sm_scale * attn_score_block + neg_max_new)
-
-        # rescale = exp(neg_max_new - neg_max_prv): correction factor for Vec2
-        rescale = tl.exp(neg_max_new - neg_max_prv)
-        # block_expsum: partial row-sum contributed by this KV block
-        block_expsum = tl.sum(softmax_p, axis=-1, keep_dims=True)
-
-        # store rescale and block_expsum into GM ring-buffers for Vec2
-        # layout: [NUM_CORES, RING, CB, 2 sub-cores, HALF_M]
-        rescale_offset = (cid * (RING * CB * 2 * HALF_M)
-                          + ring_slot  * (CB * 2 * HALF_M)
-                          + cb_idx  * (2 * HALF_M)
-                          + vid * HALF_M)
-        rescale_store_bp = tl.make_block_ptr(
-            workspace_rescale + rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-        tl.store(rescale_store_bp, rescale)
-        expsum_store_bp = tl.make_block_ptr(
-            workspace_expsum + rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-        tl.store(expsum_store_bp, block_expsum)
-
-        # update running max ping-pong
-        if cur_parity == 0:
-            neg_max_even = neg_max_new
-        else:
-            neg_max_odd = neg_max_new
-
-        # softmax_p -> workspace_p GM (MTE3): sub-core owns HALF_M rows
-        prob_store_bp = tl.make_block_ptr(
-            workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
-                           + ring_slot  * (CB * BLOCK_M * BLOCK_N)
-                           + cb_idx  * (BLOCK_M * BLOCK_N)
-                           + vid * HALF_M * BLOCK_N),
-            (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
-        tl.store(prob_store_bp, softmax_p.to(workspace_p.dtype.element_ty))
-
-    # all CB P-blocks written -> release workspace_s[ring_slot]; notify MM2
-    sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-    sync_block_set("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
-
-    return neg_max_even, neg_max_odd
-
-
-@triton.jit
-def _vec2_accumulate(
-    Out,
-    workspace_pv, workspace_rescale, workspace_expsum,
-    cid, vid,
-    prev_idx_in_conbine, prev_global_head_idx, prev_batch_idx, prev_head_idx,
-    prev_ring_slot,
-    acc_o, softmax_denom,
-    sOb, sOh, sOs, sOd,
-    S, CB: tl.constexpr, NUM_KV_BLOCKS: tl.constexpr,
-):
-    """Vec2: rescale acc_o with each new KV block's P*V; finalize on last block.
-
-    Reads pv_acc from workspace_pv and (rescale, block_expsum) from
-    workspace_rescale/expsum (both written by Vec1), accumulates into acc_o
-    and softmax_denom, and writes the final output row on the last KV block.
-
-    Returns updated (acc_o, softmax_denom).
-    """
-    # wait workspace_pv[prev_ring_slot] (all CB P*V blocks) ready from MM2
-    sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
-
-    for cb_idx in range(CB):
-        prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
-
-        # load pv_acc[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_pv (MTE2)
-        pv_load_bp = tl.make_block_ptr(
-            workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
-                            + prev_ring_slot  * (CB * BLOCK_M * DIM)
-                            + cb_idx  * (BLOCK_M * DIM)
-                            + vid * HALF_M * DIM),
-            (HALF_M, DIM), (DIM, 1), (0, 0), (HALF_M, DIM), (1, 0))
-        pv_acc = tl.load(pv_load_bp).to(tl.float32)
-
-        # load rescale and block_expsum written by Vec1 for this slot
-        prev_rescale_offset = (cid * (RING * CB * 2 * HALF_M)
-                           + prev_ring_slot  * (CB * 2 * HALF_M)
-                           + cb_idx  * (2 * HALF_M)
-                           + vid * HALF_M)
-        rescale_load_bp = tl.make_block_ptr(
-            workspace_rescale + prev_rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-        rescale = tl.load(rescale_load_bp).to(tl.float32)
-        expsum_load_bp = tl.make_block_ptr(
-            workspace_expsum + prev_rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
-        block_expsum = tl.load(expsum_load_bp).to(tl.float32)
-
-        if prev_kv_idx == 0:
-            # first KV block: init acc_o and softmax_denom directly
-            acc_o         = pv_acc
-            softmax_denom = block_expsum
-        else:
-            # rescale acc_o and accumulate
-            rescale_bc    = tl.broadcast_to(rescale, (HALF_M, DIM))
-            acc_o         = acc_o * rescale_bc + pv_acc
-            softmax_denom = softmax_denom * rescale + block_expsum
-
-        if prev_kv_idx == NUM_KV_BLOCKS - 1:
-            # last KV block: divide by softmax denominator and write output
-            denom_bc    = tl.broadcast_to(softmax_denom, (HALF_M, DIM))
-            output_block = (acc_o / denom_bc).to(Out.dtype.element_ty)
-            o_bp = tl.make_block_ptr(
-                Out + prev_batch_idx * sOb + prev_head_idx * sOh, (S, DIM), (sOs, sOd),
-                ((prev_global_head_idx * BLOCK_M + vid * HALF_M).to(tl.int32), 0), (HALF_M, DIM), (1, 0))
-            tl.store(o_bp, output_block)
-
-    # all CB blocks consumed -> release workspace_pv[prev_ring_slot]
-    sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-
-    return acc_o, softmax_denom
-
-
 # =============================================================================
 #  The single-stream 3-task scheduler kernel (TileIR / tle.dsa form)
 #
@@ -383,7 +94,8 @@ def _vec2_accumulate(
 @triton.jit
 def flash_attention_fwd_3task_kernel(
     Q, K, V, Out,
-    workspace_s, workspace_p, workspace_pv,           # GM ping-pong workspaces
+    workspace_s, workspace_p, workspace_pv,           # GM ping-pong workspaces (Cube↔Vector)
+    workspace_rescale, workspace_expsum,              # GM ring-buffers for Vec1→Vec2 stats
     sm_scale,
     B, Hq, Hkv, S,
     sQb, sQh, sQs, sQd,
@@ -398,6 +110,7 @@ def flash_attention_fwd_3task_kernel(
     IS_CAUSAL: tl.constexpr,
 ):
     cid = tl.program_id(0)
+    vid = sub_vec_id()
 
     # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
     block_start          = cid * block_num_per_core + tl.where(cid < rem_block_num, cid, rem_block_num)
@@ -451,16 +164,39 @@ def flash_attention_fwd_3task_kernel(
                 kv_head_idx    = head_idx // gqa_group
                 ring_slot      = g % RING
 
-                _mm1_qkt(
-                    Q, K,
-                    q_l1, k_l1, s_l0c,
-                    workspace_s,
-                    cid, idx_in_conbine, global_head_idx, batch_idx, head_idx, kv_head_idx,
-                    ring_slot,
-                    sQb, sQh, sQs, sQd,
-                    sKb, sKh, sKs, sKd,
-                    S, CB,
-                )
+                # ----- MM1: S = Q * K^T -----
+                # wait workspace_s[ring_slot] task slot free (Vector released after Vec1)
+                sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+
+                # reload resident Q at the first task of each output tile
+                if idx_in_conbine == 0:
+                    q_bp = tl.make_block_ptr(
+                        Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
+                        (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
+                    tle.dsa.copy(q_bp, q_l1, [CBM, CD])
+
+                for cb_idx in range(CB):
+                    kv_idx = idx_in_conbine * CB + cb_idx
+
+                    k_bp = tl.make_block_ptr(
+                        K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
+                        (kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
+                    tle.dsa.copy(k_bp, k_l1, [CBN, CD])
+
+                    # attn_score = Q * K^T using L1 buffers
+                    s_l0c = tl.dot(tle.dsa.to_tensor(q_l1, writable=False),
+                                   tle.dsa.to_tensor(k_l1, writable=False),
+                                   out_dtype=tl.float16)
+
+                    score_store_bp = tl.make_block_ptr(
+                        workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
+                                       + ring_slot  * (CB * BLOCK_M * BLOCK_N)
+                                       + cb_idx  * (BLOCK_M * BLOCK_N)),
+                        (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
+                    tl.store(score_store_bp, s_l0c)
+
+                # all CB S-blocks written -> notify Vec1
+                sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
 
             # ===== MM2(g-1): O_part = P*V for CB blocks -> workspace_pv[cid,(g-1)%RING,:] =====
             if g >= 1:
@@ -473,15 +209,42 @@ def flash_attention_fwd_3task_kernel(
                 kv_prev_head_idx     = prev_head_idx // gqa_group
                 prev_ring_slot       = prev_g % RING
 
-                _mm2_pv(
-                    V,
-                    v_l1, p_l1, pv_l0c,
-                    workspace_p, workspace_pv,
-                    cid, prev_idx_in_conbine, prev_batch_idx, kv_prev_head_idx,
-                    prev_ring_slot,
-                    sKb, sKh, sKs, sKd,
-                    S, CB,
-                )
+                # ----- MM2: O_part = P * V -----
+                # wait workspace_p[prev_ring_slot] (P from Vec1) ready
+                sync_block_wait("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
+                # wait workspace_pv[prev_ring_slot] slot free (Vec2 released after accumulating)
+                sync_block_wait("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+
+                for cb_idx in range(CB):
+                    prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
+
+                    v_bp = tl.make_block_ptr(
+                        V + prev_batch_idx * sKb + kv_prev_head_idx * sKh, (S, DIM), (sKs, sKd),
+                        (prev_kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
+                    tle.dsa.copy(v_bp, v_l1, [CBN, CD])
+
+                    prob_load_bp = tl.make_block_ptr(
+                        workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
+                                       + prev_ring_slot  * (CB * BLOCK_M * BLOCK_N)
+                                       + cb_idx  * (BLOCK_M * BLOCK_N)),
+                        (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
+                    tle.dsa.copy(prob_load_bp, p_l1, [CBM, CBN])
+
+                    # pv_part = P * V using L1 buffers
+                    pv_l0c = tl.dot(tle.dsa.to_tensor(p_l1, writable=False),
+                                    tle.dsa.to_tensor(v_l1, writable=False),
+                                    out_dtype=tl.float16)
+
+                    pv_store_bp = tl.make_block_ptr(
+                        workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
+                                        + prev_ring_slot  * (CB * BLOCK_M * DIM)
+                                        + cb_idx  * (BLOCK_M * DIM)),
+                        (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
+                    tl.store(pv_store_bp, pv_l0c)
+
+                # all CB P*V blocks done -> notify Vec2; release workspace_p[prev_ring_slot]
+                sync_block_set("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+                sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
 
             if g == num_global_tasks:
                 # ---- destroy: consume the outstanding SEM_P_FREE token from init ----
@@ -501,14 +264,87 @@ def flash_attention_fwd_3task_kernel(
             if g < num_global_tasks:
                 idx_in_conbine = g % conbined_block_num
                 ring_slot    = g % RING
-                neg_max_even, neg_max_odd = _vec1_softmax(
-                    workspace_s, workspace_p, workspace_rescale, workspace_expsum,
-                    cid, vid, idx_in_conbine, ring_slot,
-                    neg_max_even, neg_max_odd,
-                    sm_scale,
-                    IS_CAUSAL, block_start, conbined_block_num, num_seq_blocks,
-                    g, CB,
-                )
+                # ----- Vec1: online softmax -----
+                # wait workspace_s[ring_slot] (all CB score blocks) ready from MM1
+                sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
+                # wait workspace_p[ring_slot] slot free (MM2 released after reading P)
+                sync_block_wait("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+
+                # reset running max at the first task of each output tile
+                if idx_in_conbine == 0:
+                    neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
+                    neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
+
+                for cb_idx in range(CB):
+                    kv_idx = idx_in_conbine * CB + cb_idx
+                    cur_parity   = kv_idx % 2
+                    prv_parity   = 1 - cur_parity
+
+                    # load score[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_s GM -> UB
+                    score_load_bp = tl.make_block_ptr(
+                        workspace_s + (cid * (RING * CB * BLOCK_M * BLOCK_N)
+                                       + ring_slot  * (CB * BLOCK_M * BLOCK_N)
+                                       + cb_idx  * (BLOCK_M * BLOCK_N)
+                                       + vid * HALF_M * BLOCK_N),
+                        (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
+                    attn_score_block = tl.load(score_load_bp).to(tl.float32)
+
+                    if IS_CAUSAL:
+                        conbined_block_idx   = g // conbined_block_num
+                        global_block_id = block_start + conbined_block_idx
+                        q_global_head_idx     = global_block_id % num_seq_blocks
+                        q_row_idx      = q_global_head_idx * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
+                        kv_col_idx     = kv_idx * BLOCK_N + tl.arange(0, BLOCK_N)
+                        causal_mask    = q_row_idx[:, None] >= kv_col_idx[None, :]
+                        attn_score_block = tl.where(causal_mask, attn_score_block, float("-inf"))
+
+                    # online softmax: compute new running -max*scale (ping-pong)
+                    block_row_max = tl.max(attn_score_block, axis=-1, keep_dims=True)
+                    neg_max_new = tl.minimum(-block_row_max * sm_scale,
+                                             tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
+                    neg_max_prv = tl.where(cur_parity == 0, neg_max_odd, neg_max_even)
+
+                    # softmax_p = exp(sm_scale * score + neg_max_new)
+                    softmax_p = tl.exp(sm_scale * attn_score_block + neg_max_new)
+
+                    # rescale = exp(neg_max_new - neg_max_prv): correction factor for Vec2
+                    rescale = tl.exp(neg_max_new - neg_max_prv)
+                    # block_expsum: partial row-sum contributed by this KV block
+                    block_expsum = tl.sum(softmax_p, axis=-1, keep_dims=True)
+
+                    # store rescale and block_expsum into GM ring-buffers for Vec2
+                    # layout: [NUM_CORES, RING, CB, 2 sub-cores, HALF_M]
+                    rescale_offset = (cid * (RING * CB * 2 * HALF_M)
+                                      + ring_slot  * (CB * 2 * HALF_M)
+                                      + cb_idx  * (2 * HALF_M)
+                                      + vid * HALF_M)
+                    rescale_store_bp = tl.make_block_ptr(
+                        workspace_rescale + rescale_offset,
+                        (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+                    tl.store(rescale_store_bp, rescale)
+                    expsum_store_bp = tl.make_block_ptr(
+                        workspace_expsum + rescale_offset,
+                        (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+                    tl.store(expsum_store_bp, block_expsum)
+
+                    # update running max ping-pong
+                    if cur_parity == 0:
+                        neg_max_even = neg_max_new
+                    else:
+                        neg_max_odd = neg_max_new
+
+                    # softmax_p -> workspace_p GM (MTE3): sub-core owns HALF_M rows
+                    prob_store_bp = tl.make_block_ptr(
+                        workspace_p + (cid * (RING * CB * BLOCK_M * BLOCK_N)
+                                       + ring_slot  * (CB * BLOCK_M * BLOCK_N)
+                                       + cb_idx  * (BLOCK_M * BLOCK_N)
+                                       + vid * HALF_M * BLOCK_N),
+                        (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
+                    tl.store(prob_store_bp, softmax_p.to(workspace_p.dtype.element_ty))
+
+                # all CB P-blocks written -> release workspace_s[ring_slot]; notify MM2
+                sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+                sync_block_set("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
             # ===== Vec2(g-1): acc_o = acc_o*rescale + pv_acc; finalize at last KV block =====
             if g >= 1:
@@ -521,15 +357,57 @@ def flash_attention_fwd_3task_kernel(
                 prev_batch_idx       = prev_output_block_id // (num_seq_blocks * heads_q)
                 prev_ring_slot       = prev_g % RING
 
-                acc_o, softmax_denom = _vec2_accumulate(
-                    Out,
-                    workspace_pv, workspace_rescale, workspace_expsum,
-                    cid, vid, prev_idx_in_conbine, prev_global_head_idx, prev_batch_idx, prev_head_idx,
-                    prev_ring_slot,
-                    acc_o, softmax_denom,
-                    sOb, sOh, sOs, sOd,
-                    S, CB, NUM_KV_BLOCKS,
-                )
+                # ----- Vec2: rescale + accumulate -----
+                # wait workspace_pv[prev_ring_slot] (all CB P*V blocks) ready from MM2
+                sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
+
+                for cb_idx in range(CB):
+                    prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
+
+                    # load pv_acc[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_pv (MTE2)
+                    pv_load_bp = tl.make_block_ptr(
+                        workspace_pv + (cid * (RING * CB * BLOCK_M * DIM)
+                                        + prev_ring_slot  * (CB * BLOCK_M * DIM)
+                                        + cb_idx  * (BLOCK_M * DIM)
+                                        + vid * HALF_M * DIM),
+                        (HALF_M, DIM), (DIM, 1), (0, 0), (HALF_M, DIM), (1, 0))
+                    pv_acc = tl.load(pv_load_bp).to(tl.float32)
+
+                    # load rescale and block_expsum written by Vec1 for this slot
+                    prev_rescale_offset = (cid * (RING * CB * 2 * HALF_M)
+                                           + prev_ring_slot  * (CB * 2 * HALF_M)
+                                           + cb_idx  * (2 * HALF_M)
+                                           + vid * HALF_M)
+                    rescale_load_bp = tl.make_block_ptr(
+                        workspace_rescale + prev_rescale_offset,
+                        (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+                    rescale = tl.load(rescale_load_bp).to(tl.float32)
+                    expsum_load_bp = tl.make_block_ptr(
+                        workspace_expsum + prev_rescale_offset,
+                        (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+                    block_expsum = tl.load(expsum_load_bp).to(tl.float32)
+
+                    if prev_kv_idx == 0:
+                        # first KV block: init acc_o and softmax_denom directly
+                        acc_o         = pv_acc
+                        softmax_denom = block_expsum
+                    else:
+                        # rescale acc_o and accumulate
+                        rescale_bc    = tl.broadcast_to(rescale, (HALF_M, DIM))
+                        acc_o         = acc_o * rescale_bc + pv_acc
+                        softmax_denom = softmax_denom * rescale + block_expsum
+
+                    if prev_kv_idx == NUM_KV_BLOCKS - 1:
+                        # last KV block: divide by softmax denominator and write output
+                        denom_bc    = tl.broadcast_to(softmax_denom, (HALF_M, DIM))
+                        output_block = (acc_o / denom_bc).to(Out.dtype.element_ty)
+                        o_bp = tl.make_block_ptr(
+                            Out + prev_batch_idx * sOb + prev_head_idx * sOh, (S, DIM), (sOs, sOd),
+                            ((prev_global_head_idx * BLOCK_M + vid * HALF_M).to(tl.int32), 0), (HALF_M, DIM), (1, 0))
+                        tl.store(o_bp, output_block)
+
+                # all CB blocks consumed -> release workspace_pv[prev_ring_slot]
+                sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
             if g == num_global_tasks:
                 # ---- destroy: consume the outstanding SEM_S_FREE and SEM_PV_FREE tokens from init ----
