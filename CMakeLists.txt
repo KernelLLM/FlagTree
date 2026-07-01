@@ -38,10 +38,11 @@ elseif(FLAGTREE_BACKEND STREQUAL "aipu")
   add_definitions(-D__AMD__)
 elseif(FLAGTREE_BACKEND STREQUAL "ascend")
   set(FLAGTREE_TLE ON)
+  set(FLAGTREE_TLE_STRUCT ON)
   add_definitions(-D__NVIDIA__)
   add_definitions(-D__AMD__)
-  #set(FLAGTREE_TLE_STRUCT ON)
-  #add_definitions(-D__TLE_STRUCT__)
+  add_definitions(-D__TLE_STRUCT__)
+  add_definitions(-D__TLE_DSA__)
   set(CMAKE_C_COMPILER clang)
   set(CMAKE_CXX_COMPILER clang++)
   set(FLIR_BUILD_INCUBATED ON CACHE BOOL "Build FLIR incubated passes" FORCE)
@@ -361,6 +362,10 @@ if(TRITON_BUILD_PYTHON_MODULE)
   # We always build proton dialect
   list(APPEND TRITON_PLUGIN_NAMES "proton")
   add_subdirectory(third_party/proton/Dialect)
+
+  # The 3.2 DSA CMake tree defines the same TLE dialect/plugin targets as
+  # third_party/tle on 3.5, so do not add it as a second CMake subdirectory.
+  # DSA Python sources are packaged separately via setup_tools/utils/ascend.py.
 
   get_property(triton_libs GLOBAL PROPERTY TRITON_LIBS)
   get_property(triton_plugins GLOBAL PROPERTY TRITON_PLUGINS)
