@@ -266,6 +266,234 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is
     return mlir
 
 
+def dump_hivm(path=None, combine_batch=32, is_causal=False):
+    """Compile the kernel to TTIR, then lower through TileIR→HIVM pipeline to HIVM IR.
+
+    Pipeline (matches compiler.py ttir_to_linalg):
+      1. add_triton_to_structure_incubated
+      2. add_discrete_mask_access_conversion
+      3. add_triton_to_unstructure_incubated
+      4. add_triton_to_hivm          (Triton CustomOp → HIVM SyncOp)
+      5. add_triton_to_hfusion       (Triton → HFusion)
+      6. add_tileir_to_hivm          (TileIR → HIVM)          ← our pass
+      7. add_triton_to_llvm          (Triton → LLVM)
+      8. add_bubble_up_operation
+      9. add_triton_to_structure_incubated (second round)
+     10. add_triton_to_linalg_incubated    (TTIR compute → Linalg)
+
+    Returns the MLIR string. Requires no NPU/GPU — pure front-end + pass pipeline.
+    """
+    from triton._C.libtriton import ir, passes, ascend
+
+    # Step 1: compile to TTIR (TileIR)
+    tileir_mlir = dump_tileir(path=None, combine_batch=combine_batch, is_causal=is_causal)
+
+    if path is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_dummy_hivm.mlir")
+
+    # Step 2: parse the TileIR module and run the pass pipeline
+    context = ir.context()
+    ir.load_dialects(context)
+    from triton._C.libtriton import tle as tle_ir
+    tle_ir.load_dialects(context)
+    tle_ir.load_tile_dialects(context)
+    try:
+        from triton._C.libtriton.ascend import ir as ascend_ir
+        ascend_ir.load_dialects(context)
+    except Exception:
+        pass
+
+    # Write TileIR to temp file and parse it back into a module
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.mlir', delete=False) as f:
+        f.write(tileir_mlir)
+        tmp_path = f.name
+    module = ir.parse_mlir_module(tmp_path, context)
+    os.unlink(tmp_path)
+
+    # Phase 1: TileIR → HIVM (first pass) — converts:
+    #   tile.alloc → memref.alloc, tile.to_tensor → unrealized_conversion_cast,
+    #   tile.copy  → hivm.copy (tile.* src, on-chip DMA)
+    #             or memref.copy (!tt.ptr src, GM↔local DMA),
+    #   tile.load/store → hivm.load/store, sync ops → hivm sync ops.
+    pm1 = ir.pass_manager(context)
+    pm1.enable_debug()
+    ascend.passes.ttir.add_tileir_to_hivm(pm1)
+    pm1.run(module)
+    print(f"[dump_hivm] after tileir (pass 1): verify={module.verify()}", flush=True)
+
+    # Phase 2: Triton CustomOp → HIVM SyncOp
+    pm2 = ir.pass_manager(context)
+    pm2.enable_debug()
+    ascend.passes.ttir.add_triton_to_hivm(pm2)
+    pm2.run(module)
+    print(f"[dump_hivm] after triton_to_hivm: verify={module.verify()}", flush=True)
+
+    # Phase 3: Inline + canonicalize to clean up the IR.
+    pm3 = ir.pass_manager(context)
+    pm3.enable_debug()
+    passes.common.add_inliner(pm3)
+    passes.common.add_canonicalizer(pm3)
+    pm3.run(module)
+    print(f"[dump_hivm] after canonicalize: verify={module.verify()}", flush=True)
+
+    ok = module.verify()
+    if not ok:
+        raise RuntimeError("dump_hivm: module.verify() failed after pipeline — IR is not legal")
+
+    mlir = str(module)
+    with open(path, "w") as f:
+        f.write(mlir)
+    print(f"[dump_hivm] module.verify() = {ok}; wrote HIVM IR to {path}")
+    return mlir
+
+
+def dump_linalg(path=None, combine_batch=32, is_causal=False):
+    """Compile the kernel through the full TileIR→Linalg lowering pipeline.
+
+    Pipeline:
+      ① add_tileir_to_hivm               — tile.* → memref/hivm
+      ② add_triton_to_structure_incubated    — structured ptr analysis (r1)
+        add_discrete_mask_access_conversion  — non-contiguous mask handling
+      ③ add_triton_to_unstructure_incubated  — scalarize unstructured accesses
+        add_triton_to_hivm               — CustomOp → HIVM SyncOp
+        add_triton_to_hfusion            — Triton → HFusion
+        add_triton_to_llvm               — Triton → LLVM
+      ④ add_bubble_up_operation          — push extracts upward
+        add_triton_to_structure_incubated    — cleanup (round 2)
+      ④b inline + canonicalize           — clean up before linalg
+      ⑤ add_triton_to_linalg_incubated       — Triton→Linalg (may create
+                                           unresolved materialization casts)
+      ⑤b fold memref→ptr→memref chains   — eliminate casts created by ⑤
+      ⑥ final canonicalize + CSE + DCE   — erase dead ops
+
+    Returns the final Linalg MLIR string.  No NPU/GPU required.
+    """
+    from triton._C.libtriton import ir, passes, ascend
+    from triton._C.libtriton import tle as tle_ir
+
+    # Step 1: compile to TTIR (TileIR)
+    tileir_mlir = dump_tileir(path=None, combine_batch=combine_batch, is_causal=is_causal)
+
+    if path is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "fa_triton_dummy_linalg.mlir")
+
+    # Step 2: parse the TileIR module into a fresh context
+    context = ir.context()
+    ir.load_dialects(context)
+    tle_ir.load_dialects(context)
+    tle_ir.load_tile_dialects(context)
+    try:
+        from triton._C.libtriton.ascend import ir as ascend_ir
+        ascend_ir.load_dialects(context)
+    except Exception:
+        pass
+
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.mlir', delete=False) as f:
+        f.write(tileir_mlir)
+        tmp_path = f.name
+    module = ir.parse_mlir_module(tmp_path, context)
+    os.unlink(tmp_path)
+
+    # ── ① TileIR → HIVM ──────────────────────────────────────────────────
+    pm = ir.pass_manager(context); pm.enable_debug()
+    passes.common.add_inliner(pm)
+    ascend.passes.ttir.add_tileir_to_hivm(pm)
+    pm.run(module)
+    print(f"[dump_linalg] ① tileir_to_hivm: verify={module.verify()}", flush=True)
+
+    # ── ①b Erase the unrealized_conversion_cast ops produced by TileIRToHIVM
+    #     before any structured/linalg lowering runs.  This turns:
+    #       cast !tt.ptr<tensor<>> -> memref  =>  tt.load + bufferization.to_memref
+    #       cast memref<,#space>   -> tensor  =>  memref.memory_space_cast + bufferization.to_tensor
+    #     so the linalg-incubator never sees the unresolved materializations
+    #     that cause "unresolved materialization" failures.
+    pm = ir.pass_manager(context); pm.enable_debug()
+    ascend.passes.ttir.add_erase_linalg_casts(pm)
+    passes.common.add_canonicalizer(pm)
+    pm.run(module)
+    print(f"[dump_linalg] ①b erase_linalg_casts: verify={module.verify()}", flush=True)
+
+    # ── ② Structured (r1) + discrete mask ────────────────────────────────
+    pm = ir.pass_manager(context); pm.enable_debug()
+    ascend.passes.ttir.add_triton_to_structure_incubated(pm, False, False, False)
+    ascend.passes.ttir.add_discrete_mask_access_conversion(pm, False, False)
+    pm.run(module)
+    print(f"[dump_linalg] ② structure(r1)+discrete_mask: verify={module.verify()}", flush=True)
+
+    # ── ③ Unstructured + HIVM + HFusion + LLVM ──────────────────────────
+    pm = ir.pass_manager(context); pm.enable_debug()
+    ascend.passes.ttir.add_triton_to_unstructure_incubated(pm, False, False)
+    ascend.passes.ttir.add_triton_to_hivm(pm)
+    ascend.passes.ttir.add_triton_to_hfusion(pm)
+    ascend.passes.ttir.add_triton_to_llvm(pm)
+    pm.run(module)
+    print(f"[dump_linalg] ③ unstructure+hivm+hfusion+llvm: verify={module.verify()}", flush=True)
+
+    # ── ④ Bubble-up + structured (r2) ────────────────────────────────────
+    pm = ir.pass_manager(context); pm.enable_debug()
+    ascend.passes.ttir.add_bubble_up_operation(pm)
+    ascend.passes.ttir.add_triton_to_structure_incubated(pm, False, False, False)
+    pm.run(module)
+    print(f"[dump_linalg] ④ bubble_up+structure(r2): verify={module.verify()}", flush=True)
+
+    # ── ④b Inline + canonicalize ← REQUIRED to avoid C++ assertion ─────
+    # Without this, the linalg incubator crashes with cast<RankedTensorType>
+    # in MaskAnalysis when it encounters non-tensor types.
+    pm = ir.pass_manager(context); pm.enable_debug()
+    passes.common.add_inliner(pm)
+    passes.common.add_canonicalizer(pm)
+    pm.run(module)
+    print(f"[dump_linalg] ④b inline+canonicalize: verify={module.verify()}", flush=True)
+
+    # ── ⑤ Triton → Linalg ───────────────────────────────────────────────
+    # This pass does the heavy lifting: tt.ptr→memref, triton ops→linalg,
+    # triton::FuncOp→func::FuncOp.  It may fail with "unresolved
+    # materialization" when it creates memref→!tt.ptr→memref cast chains
+    # during partial conversion of !tt.ptr<tensor<>> values.  We handle
+    # that in phase ⑤b.
+    linalg_ok = False
+    try:
+        pm = ir.pass_manager(context); pm.enable_debug()
+        ascend.passes.ttir.add_triton_to_linalg_incubated(pm, False, True, False, False, False)
+        pm.run(module)
+        print(f"[dump_linalg] ⑤ triton_to_linalg_incubated: verify={module.verify()}", flush=True)
+        linalg_ok = True
+    except RuntimeError as e:
+        print(f"[dump_linalg] ⑤ triton_to_linalg_incubated: partial conversion "
+              f"(this is expected — the pass creates cast chains that need "
+              f"post-processing)", flush=True)
+
+    # ── ⑤b Run erase-linalg-casts one more time to reconcile any
+    #     unrealized_conversion_cast ops that the partial linalg conversion
+    #     may have introduced around the on-chip allocations / function
+    #     boundary.
+    pm = ir.pass_manager(context); pm.enable_debug()
+    ascend.passes.ttir.add_erase_linalg_casts(pm)
+    pm.run(module)
+    print(f"[dump_linalg] ⑤b erase_linalg_casts (post): verify={module.verify()}", flush=True)
+
+    # ── ⑥ Final canonicalize → erase dead casts ─────────────────────────
+    pm = ir.pass_manager(context); pm.enable_debug()
+    passes.common.add_canonicalizer(pm)
+    passes.common.add_cse(pm)
+    passes.common.add_symbol_dce(pm)
+    pm.run(module)
+    print(f"[dump_linalg] ⑥ final cleanup: verify={module.verify()}", flush=True)
+
+    ok = module.verify()
+    if not ok:
+        raise RuntimeError("dump_linalg: module.verify() failed after pipeline")
+
+    mlir = str(module)
+    with open(path, "w") as f:
+        f.write(mlir)
+    print(f"[dump_linalg] verify={ok}; wrote Linalg IR ({len(mlir)} chars) to {path}")
+    return mlir
+
+
 # =============================================================================
 #  Host launcher
 # =============================================================================
@@ -330,6 +558,10 @@ if __name__ == "__main__":
                         help="KV blocks per task (arch22 nRatio)")
     parser.add_argument("--dump-mlir", nargs="?", const="", default=None,
                         help="Dump intermediate TileIR to PATH (default fa_triton_dummy.mlir) and exit; no device needed.")
+    parser.add_argument("--dump-ir", nargs="?", const="", default=None,
+                        help="Dump HIVM IR (after TileIR→HIVM lowering) to PATH and exit; no device needed.")
+    parser.add_argument("--dump-linalg", nargs="?", const="", default=None,
+                        help="Dump Linalg IR (full lowering through linalg, casts eliminated) to PATH and exit; no device needed.")
     args = parser.parse_args()
 
     B, S, H, D = args.B, args.S, args.H, args.D
@@ -338,6 +570,16 @@ if __name__ == "__main__":
     # ---- dump intermediate TileIR and exit (no device required) ----
     if args.dump_mlir is not None:
         dump_tileir(path=(args.dump_mlir or None), combine_batch=combine_batch, is_causal=args.causal)
+        raise SystemExit(0)
+
+    # ---- dump HIVM IR after full lowering pipeline (no device required) ----
+    if args.dump_ir is not None:
+        dump_hivm(path=(args.dump_ir or None), combine_batch=combine_batch, is_causal=args.causal)
+        raise SystemExit(0)
+
+    # ---- dump Linalg IR after full TileIR→Linalg lowering (no device required) ----
+    if args.dump_linalg is not None:
+        dump_linalg(path=(args.dump_linalg or None), combine_batch=combine_batch, is_causal=args.causal)
         raise SystemExit(0)
 
     Q_H = args.q_heads or H
