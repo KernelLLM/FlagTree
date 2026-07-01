@@ -43,12 +43,12 @@ EVT_V_MTE3    = ("vector", "cube", 2, PIPE.PIPE_V, PIPE.PIPE_MTE3)     # Vector 
 # first iteration's wait passes; every subsequent set is preceded by the
 # matching wait in the same slot, keeping each id in strictly alternating
 # set→wait→set→... state.
-SEM_S_READY  = 0  # C -> V : workspace_s has data
-SEM_S_FREE   = 1  # V -> C : workspace_s slot free
-SEM_P_READY  = 2  # V -> C : workspace_p has data
-SEM_P_FREE   = 3  # C -> V : workspace_p slot free
-SEM_PV_READY = 4  # C -> V : workspace_pv has data
-SEM_PV_FREE  = 5  # V -> C : workspace_pv slot free
+SEM_S_READY : tl.constexpr = tl.constexpr(0)  # C -> V : workspace_s has data
+SEM_S_FREE  : tl.constexpr = tl.constexpr(1)  # V -> C : workspace_s slot free
+SEM_P_READY : tl.constexpr = tl.constexpr(2)  # V -> C : workspace_p has data
+SEM_P_FREE  : tl.constexpr = tl.constexpr(3)  # C -> V : workspace_p slot free
+SEM_PV_READY: tl.constexpr = tl.constexpr(4)  # C -> V : workspace_pv has data
+SEM_PV_FREE : tl.constexpr = tl.constexpr(5)  # V -> C : workspace_pv slot free
 
 
 # NOTE: The tle tile-DSA layer now has minimal tile.cube_launch / tile.cube_wait
@@ -72,15 +72,15 @@ CBN = tl.constexpr(BLOCK_N)
 CD = tl.constexpr(DIM)
 
 # ---- arch22 "3-task" schedule constants -----------------------------------
-RING = 3   # depth of the task ring  (the "3-task" of the schedule)
+RING: tl.constexpr = tl.constexpr(3)  # depth of the task ring  (the "3-task" of the schedule)
 
 # ---- cross-core semaphore IDs ----------------------------------------------
-SEM_S_READY  = 0   # C->V : workspace_s (S)   has data
-SEM_S_FREE   = 1   # V->C : workspace_s slot  free
-SEM_P_READY  = 2   # V->C : workspace_p (P)   has data
-SEM_P_FREE   = 3   # C->V : workspace_p slot  free
-SEM_PV_READY = 4   # C->V : workspace_pv (PV) has data
-SEM_PV_FREE  = 5   # V->C : workspace_pv slot  free
+SEM_S_READY : tl.constexpr = tl.constexpr(0)  # C->V : workspace_s (S)   has data
+SEM_S_FREE  : tl.constexpr = tl.constexpr(1)  # V->C : workspace_s slot  free
+SEM_P_READY : tl.constexpr = tl.constexpr(2)  # V->C : workspace_p (P)   has data
+SEM_P_FREE  : tl.constexpr = tl.constexpr(3)  # C->V : workspace_p slot  free
+SEM_PV_READY: tl.constexpr = tl.constexpr(4)  # C->V : workspace_pv (PV) has data
+SEM_PV_FREE : tl.constexpr = tl.constexpr(5)  # V->C : workspace_pv slot  free
 
 
 # =============================================================================
