@@ -945,9 +945,9 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
 
     out = torch.empty_like(q)
     # GM ping-pong workspaces (taskId % 2), one slice per core.
-    workspace_s = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=torch.float32, device=q.device)
-    workspace_p = torch.empty((NUM_CORES, PP, BLOCK_M, BLOCK_N), dtype=q.dtype,        device=q.device)
-    workspace_pv = torch.empty((NUM_CORES, PP, BLOCK_M, DIM),     dtype=torch.float32, device=q.device)
+    workspace_s = torch.empty((NUM_CORES, RING, BLOCK_M, BLOCK_N), dtype=torch.float32, device=q.device)
+    workspace_p = torch.empty((NUM_CORES, RING, BLOCK_M, BLOCK_N), dtype=q.dtype,        device=q.device)
+    workspace_pv = torch.empty((NUM_CORES, RING, BLOCK_M, DIM),     dtype=torch.float32, device=q.device)
     workspace_rescale = torch.empty((NUM_CORES, RING, CB, 2, HALF_M), dtype=torch.float32, device=q.device)
     workspace_expsum  = torch.empty((NUM_CORES, RING, CB, 2, HALF_M), dtype=torch.float32, device=q.device)
     sm_scale = (1.0 / D) ** 0.5
