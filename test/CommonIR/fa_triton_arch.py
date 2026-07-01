@@ -100,7 +100,9 @@ def _mm1_qkt(
     # strides
     sQb, sQh, sQs, sQd,
     sKb, sKh, sKs, sKd,
-    S, CB: tl.constexpr,
+    S,
+    CB: tl.constexpr,
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, DIM: tl.constexpr,
 ):
     """MM1: compute S = Q * K^T for CB KV blocks and store into workspace_s.
 
@@ -152,7 +154,9 @@ def _mm2_pv(
     prev_ring_slot,
     # strides
     sKb, sKh, sKs, sKd,
-    S, CB: tl.constexpr,
+    S,
+    CB: tl.constexpr,
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, DIM: tl.constexpr,
 ):
     """MM2: compute O_part = P * V for CB blocks and store into workspace_pv.
 
@@ -207,6 +211,7 @@ def _vec1_softmax(
     block_start, conbined_block_num, num_seq_blocks,
     g,
     CB: tl.constexpr,
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, HALF_M: tl.constexpr,
 ):
     """Vec1: online softmax over CB score blocks -> workspace_p + rescale/expsum.
 
@@ -310,6 +315,7 @@ def _vec2_accumulate(
     acc_o, softmax_denom,
     sOb, sOh, sOs, sOd,
     S, CB: tl.constexpr, NUM_KV_BLOCKS: tl.constexpr,
+    BLOCK_M: tl.constexpr, DIM: tl.constexpr, HALF_M: tl.constexpr,
 ):
     """Vec2: rescale acc_o with each new KV block's P*V; finalize on last block.
 
@@ -399,6 +405,10 @@ def flash_attention_fwd_3task_kernel(
     CB:        tl.constexpr,   # KV blocks per task (combine_batch)
     NUM_KV_BLOCKS: tl.constexpr,   # = num_kv_blocks  (used in causal mask)
     IS_CAUSAL: tl.constexpr,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    DIM:     tl.constexpr,
+    HALF_M:  tl.constexpr,
 ):
     cid = tl.program_id(0)
     vid = tl.program_id(1)   # vector sub-core ID (0 or 1)
@@ -464,6 +474,7 @@ def flash_attention_fwd_3task_kernel(
                     sQb, sQh, sQs, sQd,
                     sKb, sKh, sKs, sKd,
                     S, CB,
+                    BLOCK_M, BLOCK_N, DIM,
                 )
 
             # ===== MM2(g-1): O_part = P*V for CB blocks -> workspace_pv[cid,(g-1)%RING,:] =====
@@ -485,6 +496,7 @@ def flash_attention_fwd_3task_kernel(
                     prev_ring_slot,
                     sKb, sKh, sKs, sKd,
                     S, CB,
+                    BLOCK_M, BLOCK_N, DIM,
                 )
 
             if g == num_global_tasks:
@@ -512,6 +524,7 @@ def flash_attention_fwd_3task_kernel(
                     sm_scale,
                     IS_CAUSAL, block_start, conbined_block_num, num_seq_blocks,
                     g, CB,
+                    BLOCK_M, BLOCK_N, HALF_M,
                 )
 
             # ===== Vec2(g-1): acc_o = acc_o*rescale + pv_acc; finalize at last KV block =====
@@ -533,6 +546,7 @@ def flash_attention_fwd_3task_kernel(
                     acc_o, softmax_denom,
                     sOb, sOh, sOs, sOd,
                     S, CB, NUM_KV_BLOCKS,
+                    BLOCK_M, DIM, HALF_M,
                 )
 
             if g == num_global_tasks:
@@ -577,6 +591,10 @@ def _dump_signature():
     for n in i32_names:
         sig[n] = "i32"
     sig["IS_CAUSAL"] = "constexpr"
+    sig["BLOCK_M"]   = "constexpr"
+    sig["BLOCK_N"]   = "constexpr"
+    sig["DIM"]       = "constexpr"
+    sig["HALF_M"]    = "constexpr"
     return sig
 
 
@@ -605,7 +623,10 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is
     cb = combine_batch
     conbined_block_num = num_kv_blocks // combine_batch
     signature = _dump_signature()
-    constants = {"CB": combine_batch, "NUM_KV_BLOCKS": num_kv_blocks, "IS_CAUSAL": is_causal}
+    constants = {
+        "CB": combine_batch, "NUM_KV_BLOCKS": num_kv_blocks, "IS_CAUSAL": is_causal,
+        "BLOCK_M": 128, "BLOCK_N": 128, "DIM": 128, "HALF_M": 64,
+    }
 
     src = ASTSource(flash_attention_fwd_3task_kernel, signature, constants)
     context = ir.context()
@@ -965,6 +986,10 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
         CB=CB,
         NUM_KV_BLOCKS=num_kv_blocks,
         IS_CAUSAL=is_causal,
+        BLOCK_M=128,
+        BLOCK_N=128,
+        DIM=128,
+        HALF_M=64,
     )
     return out
 
