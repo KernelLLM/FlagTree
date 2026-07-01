@@ -926,7 +926,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
 # =============================================================================
 #  Host launcher
 # =============================================================================
-def flash_attention_fwd(q, k, v, is_causal=False):
+def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
     B, Hq, S, D = q.shape
     Hkv = k.shape[1]
     assert D == DIM and S % BLOCK_N == 0 and Hq % Hkv == 0
@@ -989,28 +989,23 @@ if __name__ == "__main__":
                         help="Dump Linalg IR (full lowering through linalg, casts eliminated) to PATH and exit; no device needed.")
     args = parser.parse_args()
 
+    B, S, H, D = args.B, args.S, args.H, args.D
+    combine_batch = S // BLOCK_N
     # ---- dump intermediate TileIR and exit (no device required) ----
     if args.dump_mlir is not None:
-        B, S, H, D = args.B, args.S, args.H, args.D
-        n_iters = S // BLOCK_N
-        dump_tileir(path=(args.dump_mlir or None), combine_batch=n_iters, is_causal=args.causal)
+        dump_tileir(path=(args.dump_mlir or None), combine_batch=combine_batch, is_causal=args.causal)
         raise SystemExit(0)
 
     # ---- dump HIVM IR after full lowering pipeline (no device required) ----
     if args.dump_ir is not None:
-        B, S, H, D = args.B, args.S, args.H, args.D
-        n_iters = S // BLOCK_N
-        dump_hivm(path=(args.dump_ir or None), combine_batch=n_iters, is_causal=args.causal)
+        dump_hivm(path=(args.dump_ir or None), combine_batch=combine_batch, is_causal=args.causal)
         raise SystemExit(0)
 
     # ---- dump Linalg IR after full TileIR→Linalg lowering (no device required) ----
     if args.dump_linalg is not None:
-        B, S, H, D = args.B, args.S, args.H, args.D
-        n_iters = S // BLOCK_N
-        dump_linalg(path=(args.dump_linalg or None), combine_batch=n_iters, is_causal=args.causal)
+        dump_linalg(path=(args.dump_linalg or None), combine_batch=combine_batch, is_causal=args.causal)
         raise SystemExit(0)
 
-    B, S, H, D = args.B, args.S, args.H, args.D
     Q_H = args.q_heads or H
     KV_H = args.kv_heads or H
 
@@ -1020,7 +1015,7 @@ if __name__ == "__main__":
     k = torch.randn((B, KV_H, S, D), dtype=torch.float16, device=device)
     v = torch.randn((B, KV_H, S, D), dtype=torch.float16, device=device)
 
-    out = flash_attention_fwd(q, k, v, is_causal=args.causal)
+    out = flash_attention_fwd(q, k, v, combine_batch, is_causal=args.causal)
 
     if not args.no_check:
         def ref(q, k, v):
