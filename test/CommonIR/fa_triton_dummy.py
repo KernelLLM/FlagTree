@@ -86,7 +86,7 @@ def flash_attention_fwd_3task_kernel(
     DIM:           tl.constexpr,
 ):
     cid = tl.program_id(0)
-
+    '''
     # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
     block_start       = cid * block_num_per_core + tl.where(cid < rem_block_num, cid, rem_block_num)
     block_num         = block_num_per_core + tl.where(cid < rem_block_num, 1, 0)
@@ -113,6 +113,7 @@ def flash_attention_fwd_3task_kernel(
     # neg_max_even/odd: running -max*scale for even/odd kv index, reset each tile
     neg_max_even  = tl.full((BLOCK_M, 1), 2**30, tl.float32)
     neg_max_odd   = tl.full((BLOCK_M, 1), 2**30, tl.float32)
+    '''
 
 
 # =============================================================================
