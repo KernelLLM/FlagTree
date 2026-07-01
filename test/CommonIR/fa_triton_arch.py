@@ -63,7 +63,6 @@ NUM_CORES = 24
 BLOCK_M = 128
 BLOCK_N = 128
 DIM = 128
-HALF_M = BLOCK_M // 2
 
 # constexpr shape literals for tile.copy (semantic.copy runs scalar_constant on
 # each extent, which requires tl.constexpr rather than a plain int).
@@ -203,7 +202,7 @@ def _mm2_pv(
 @triton.jit
 def _vec1_softmax(
     workspace_s, workspace_p, workspace_rescale, workspace_expsum,
-    cid, vid, idx_in_conbine, ring_slot,
+    cid, idx_in_conbine, ring_slot,
     neg_max_even, neg_max_odd,
     sm_scale,
     # causal mask inputs
@@ -211,7 +210,7 @@ def _vec1_softmax(
     block_start, conbined_block_num, num_seq_blocks,
     g,
     CB: tl.constexpr,
-    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, HALF_M: tl.constexpr,
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
 ):
     """Vec1: online softmax over CB score blocks -> workspace_p + rescale/expsum.
 
@@ -228,28 +227,27 @@ def _vec1_softmax(
 
     # reset running max at the first task of each output tile
     if idx_in_conbine == 0:
-        neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
-        neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
+        neg_max_even = tl.full((BLOCK_M, 1), 2**30, tl.float32)
+        neg_max_odd  = tl.full((BLOCK_M, 1), 2**30, tl.float32)
 
     for cb_idx in range(CB):
         kv_idx = idx_in_conbine * CB + cb_idx
         cur_parity   = kv_idx % 2
         prv_parity   = 1 - cur_parity
 
-        # load score[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_s GM -> UB
+        # load score[0:BLOCK_M, :] from workspace_s GM -> UB
         score_load_bp = tl.make_block_ptr(
             workspace_s + cid * RING * CB * BLOCK_M * BLOCK_N
                            + ring_slot * CB * BLOCK_M * BLOCK_N
-                           + cb_idx * BLOCK_M * BLOCK_N
-                           + vid * HALF_M * BLOCK_N,
-            (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
+                           + cb_idx * BLOCK_M * BLOCK_N,
+            (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
         attn_score_block = tl.load(score_load_bp).to(tl.float32)
 
         if IS_CAUSAL:
             conbined_block_idx   = g // conbined_block_num
             global_block_id = block_start + conbined_block_idx
             q_global_head_idx     = global_block_id % num_seq_blocks
-            q_row_idx      = q_global_head_idx * BLOCK_M + vid * HALF_M + tl.arange(0, HALF_M)
+            q_row_idx      = q_global_head_idx * BLOCK_M + tl.arange(0, BLOCK_M)
             kv_col_idx     = kv_idx * BLOCK_N + tl.arange(0, BLOCK_N)
             causal_mask    = q_row_idx[:, None] >= kv_col_idx[None, :]
             attn_score_block = tl.where(causal_mask, attn_score_block, float("-inf"))
@@ -269,18 +267,17 @@ def _vec1_softmax(
         block_expsum = tl.sum(softmax_p, axis=-1, keep_dims=True)
 
         # store rescale and block_expsum into GM ring-buffers for Vec2
-        # layout: [NUM_CORES, RING, CB, 2 sub-cores, HALF_M]
-        rescale_offset = (cid * RING * CB * 2 * HALF_M
-                          + ring_slot * CB * 2 * HALF_M
-                          + cb_idx * 2 * HALF_M
-                          + vid * HALF_M)
+        # layout: [NUM_CORES, RING, CB, BLOCK_M]
+        rescale_offset = (cid * RING * CB * BLOCK_M
+                          + ring_slot * CB * BLOCK_M
+                          + cb_idx * BLOCK_M)
         rescale_store_bp = tl.make_block_ptr(
             workspace_rescale + rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+            (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
         tl.store(rescale_store_bp, rescale)
         expsum_store_bp = tl.make_block_ptr(
             workspace_expsum + rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+            (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
         tl.store(expsum_store_bp, block_expsum)
 
         # update running max ping-pong
@@ -289,13 +286,12 @@ def _vec1_softmax(
         else:
             neg_max_odd = neg_max_new
 
-        # softmax_p -> workspace_p GM (MTE3): sub-core owns HALF_M rows
+        # softmax_p -> workspace_p GM (MTE3): vector core owns full BLOCK_M rows
         prob_store_bp = tl.make_block_ptr(
             workspace_p + cid * RING * CB * BLOCK_M * BLOCK_N
                            + ring_slot * CB * BLOCK_M * BLOCK_N
-                           + cb_idx * BLOCK_M * BLOCK_N
-                           + vid * HALF_M * BLOCK_N,
-            (HALF_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (HALF_M, BLOCK_N), (1, 0))
+                           + cb_idx * BLOCK_M * BLOCK_N,
+            (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
         tl.store(prob_store_bp, softmax_p.to(workspace_p.dtype.element_ty))
 
     # all CB P-blocks written -> release workspace_s[ring_slot]; notify MM2
@@ -309,13 +305,13 @@ def _vec1_softmax(
 def _vec2_accumulate(
     Out,
     workspace_pv, workspace_rescale, workspace_expsum,
-    cid, vid,
+    cid,
     prev_idx_in_conbine, prev_global_head_idx, prev_batch_idx, prev_head_idx,
     prev_ring_slot,
     acc_o, softmax_denom,
     sOb, sOh, sOs, sOd,
     S, CB: tl.constexpr, NUM_KV_BLOCKS: tl.constexpr,
-    BLOCK_M: tl.constexpr, DIM: tl.constexpr, HALF_M: tl.constexpr,
+    BLOCK_M: tl.constexpr, DIM: tl.constexpr,
 ):
     """Vec2: rescale acc_o with each new KV block's P*V; finalize on last block.
 
@@ -331,27 +327,25 @@ def _vec2_accumulate(
     for cb_idx in range(CB):
         prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
 
-        # load pv_acc[vid*HALF_M:(vid+1)*HALF_M, :] from workspace_pv (MTE2)
+        # load pv_acc[0:BLOCK_M, :] from workspace_pv (MTE2)
         pv_load_bp = tl.make_block_ptr(
             workspace_pv + cid * RING * CB * BLOCK_M * DIM
                             + prev_ring_slot * CB * BLOCK_M * DIM
-                            + cb_idx * BLOCK_M * DIM
-                            + vid * HALF_M * DIM,
-            (HALF_M, DIM), (DIM, 1), (0, 0), (HALF_M, DIM), (1, 0))
+                            + cb_idx * BLOCK_M * DIM,
+            (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
         pv_acc = tl.load(pv_load_bp).to(tl.float32)
 
         # load rescale and block_expsum written by Vec1 for this slot
-        prev_rescale_offset = (cid * RING * CB * 2 * HALF_M
-                           + prev_ring_slot * CB * 2 * HALF_M
-                           + cb_idx * 2 * HALF_M
-                           + vid * HALF_M)
+        prev_rescale_offset = (cid * RING * CB * BLOCK_M
+                           + prev_ring_slot * CB * BLOCK_M
+                           + cb_idx * BLOCK_M)
         rescale_load_bp = tl.make_block_ptr(
             workspace_rescale + prev_rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+            (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
         rescale = tl.load(rescale_load_bp).to(tl.float32)
         expsum_load_bp = tl.make_block_ptr(
             workspace_expsum + prev_rescale_offset,
-            (HALF_M, 1), (1, 1), (0, 0), (HALF_M, 1), (1, 0))
+            (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
         block_expsum = tl.load(expsum_load_bp).to(tl.float32)
 
         if prev_kv_idx == 0:
@@ -360,17 +354,17 @@ def _vec2_accumulate(
             softmax_denom = block_expsum
         else:
             # rescale acc_o and accumulate
-            rescale_bc    = tl.broadcast_to(rescale, (HALF_M, DIM))
+            rescale_bc    = tl.broadcast_to(rescale, (BLOCK_M, DIM))
             acc_o         = acc_o * rescale_bc + pv_acc
             softmax_denom = softmax_denom * rescale + block_expsum
 
         if prev_kv_idx == NUM_KV_BLOCKS - 1:
             # last KV block: divide by softmax denominator and write output
-            denom_bc    = tl.broadcast_to(softmax_denom, (HALF_M, DIM))
+            denom_bc    = tl.broadcast_to(softmax_denom, (BLOCK_M, DIM))
             output_block = (acc_o / denom_bc).to(Out.dtype.element_ty)
             o_bp = tl.make_block_ptr(
                 Out + prev_batch_idx * sOb + prev_head_idx * sOh, (S, DIM), (sOs, sOd),
-                ((prev_global_head_idx * BLOCK_M + vid * HALF_M).to(tl.int32), 0), (HALF_M, DIM), (1, 0))
+                ((prev_global_head_idx * BLOCK_M).to(tl.int32), 0), (BLOCK_M, DIM), (1, 0))
             tl.store(o_bp, output_block)
 
     # all CB blocks consumed -> release workspace_pv[prev_ring_slot]
@@ -408,10 +402,8 @@ def flash_attention_fwd_3task_kernel(
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     DIM:     tl.constexpr,
-    HALF_M:  tl.constexpr,
 ):
     cid = tl.program_id(0)
-    vid = tl.program_id(1)   # vector sub-core ID (0 or 1)
 
     # ---- static task distribution  (== AICPU GetFASectionInfo metadata) ----
     block_start          = cid * block_num_per_core + tl.where(cid < rem_block_num, cid, rem_block_num)
@@ -431,13 +423,14 @@ def flash_attention_fwd_3task_kernel(
     pv_l0c = tile_alloc([BLOCK_M, DIM],     tl.float32,         L0C)  # MM2 out
 
     # -- Vector side (UB registers): full online-softmax state ---------------
-    # acc_o uses HALF_M rows; state per (ring_slot, cb_idx) stored as flat GM-backed
-    # workspaces; running max uses a ping-pong register pair (one per kv parity).
-    acc_o  = tl.zeros((HALF_M, DIM), tl.float32)
-    softmax_denom = tl.zeros((HALF_M, 1), tl.float32)   # running denominator l
+    # acc_o and running max span the full BLOCK_M rows; state per (ring_slot, cb_idx)
+    # stored as flat GM-backed workspaces; running max uses a ping-pong register
+    # pair (one per kv parity).
+    acc_o  = tl.zeros((BLOCK_M, DIM), tl.float32)
+    softmax_denom = tl.zeros((BLOCK_M, 1), tl.float32)   # running denominator l
     # neg_max_even/odd: running -max*scale for even/odd kv index, reset each tile
-    neg_max_even = tl.full((HALF_M, 1), 2**30, tl.float32)
-    neg_max_odd  = tl.full((HALF_M, 1), 2**30, tl.float32)
+    neg_max_even = tl.full((BLOCK_M, 1), 2**30, tl.float32)
+    neg_max_odd  = tl.full((BLOCK_M, 1), 2**30, tl.float32)
 
     # =========================================================================
     #  ② + ③ 3-task pipeline: Cube (MM1/MM2) and Vector (Vec1/Vec2) scopes
@@ -519,12 +512,12 @@ def flash_attention_fwd_3task_kernel(
                 ring_slot    = g % RING
                 neg_max_even, neg_max_odd = _vec1_softmax(
                     workspace_s, workspace_p, workspace_rescale, workspace_expsum,
-                    cid, vid, idx_in_conbine, ring_slot,
+                    cid, idx_in_conbine, ring_slot,
                     neg_max_even, neg_max_odd,
                     sm_scale,
                     IS_CAUSAL, block_start, conbined_block_num, num_seq_blocks,
                     g, CB,
-                    BLOCK_M, BLOCK_N, HALF_M,
+                    BLOCK_M, BLOCK_N,
                 )
 
             # ===== Vec2(g-1): acc_o = acc_o*rescale + pv_acc; finalize at last KV block =====
@@ -541,12 +534,12 @@ def flash_attention_fwd_3task_kernel(
                 acc_o, softmax_denom = _vec2_accumulate(
                     Out,
                     workspace_pv, workspace_rescale, workspace_expsum,
-                    cid, vid, prev_idx_in_conbine, prev_global_head_idx, prev_batch_idx, prev_head_idx,
+                    cid, prev_idx_in_conbine, prev_global_head_idx, prev_batch_idx, prev_head_idx,
                     prev_ring_slot,
                     acc_o, softmax_denom,
                     sOb, sOh, sOs, sOd,
                     S, CB, NUM_KV_BLOCKS,
-                    BLOCK_M, DIM, HALF_M,
+                    BLOCK_M, DIM,
                 )
 
             if g == num_global_tasks:
@@ -594,7 +587,6 @@ def _dump_signature():
     sig["BLOCK_M"]   = "constexpr"
     sig["BLOCK_N"]   = "constexpr"
     sig["DIM"]       = "constexpr"
-    sig["HALF_M"]    = "constexpr"
     return sig
 
 
@@ -625,7 +617,7 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is
     signature = _dump_signature()
     constants = {
         "CB": combine_batch, "NUM_KV_BLOCKS": num_kv_blocks, "IS_CAUSAL": is_causal,
-        "BLOCK_M": 128, "BLOCK_N": 128, "DIM": 128, "HALF_M": 64,
+        "BLOCK_M": 128, "BLOCK_N": 128, "DIM": 128,
     }
 
     src = ASTSource(flash_attention_fwd_3task_kernel, signature, constants)
@@ -970,8 +962,8 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
     workspace_s = torch.empty((NUM_CORES, RING, BLOCK_M, BLOCK_N), dtype=torch.float16, device=q.device)
     workspace_p = torch.empty((NUM_CORES, RING, BLOCK_M, BLOCK_N), dtype=q.dtype,        device=q.device)
     workspace_pv = torch.empty((NUM_CORES, RING, BLOCK_M, DIM),     dtype=torch.float16, device=q.device)
-    workspace_rescale = torch.empty((NUM_CORES, RING, CB, 2, HALF_M), dtype=torch.float32, device=q.device)
-    workspace_expsum  = torch.empty((NUM_CORES, RING, CB, 2, HALF_M), dtype=torch.float32, device=q.device)
+    workspace_rescale = torch.empty((NUM_CORES, RING, CB, BLOCK_M), dtype=torch.float32, device=q.device)
+    workspace_expsum  = torch.empty((NUM_CORES, RING, CB, BLOCK_M), dtype=torch.float32, device=q.device)
     sm_scale = (1.0 / D) ** 0.5
 
     grid = (NUM_CORES,)  # one program per AI core; one Cube + one Vector stream (MIX_1_1)
@@ -990,7 +982,6 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
         BLOCK_M=128,
         BLOCK_N=128,
         DIM=128,
-        HALF_M=64,
     )
     return out
 
