@@ -159,7 +159,9 @@ def matmul_kernel(
                             [BLOCK_K, BLOCK_N],
                             [1, 1])
 
-    # ② prologue: 向 slot 0/1/2 分别预加载 iter[0]/[1]/[2] 的切片
+    # ② prologue: 向 slot 0/1/2 分别预加载循环第 0/1/2 次迭代对应的切片
+    # main loop 步长为 iter_step，第 i 次迭代对应全局 iter = iter_start + i*iter_step，
+    # 因此三个槽分别加载 iter_start、iter_start+iter_step、iter_start+2*iter_step。
     task_m, task_n = grouped_launch_diagonal(
         iter_start // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
     m_start = task_m * BLOCK_M
@@ -176,25 +178,25 @@ def matmul_kernel(
         (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(0), [BLOCK_K, BLOCK_N])
 
     task_m, task_n = grouped_launch_diagonal(
-        (iter_start + 1) // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
+        (iter_start + iter_step) // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
     m_nxt1 = task_m * BLOCK_M
     n_nxt1 = task_n * BLOCK_N
     tile_copy(tl.make_block_ptr(
-        mat_a, (M, K), (K, 1), (m_nxt1, ((iter_start + 1) % NUM_K_BLOCKS) * BLOCK_K),
+        mat_a, (M, K), (K, 1), (m_nxt1, ((iter_start + iter_step) % NUM_K_BLOCKS) * BLOCK_K),
         (BLOCK_M, BLOCK_K), (1, 0)), _a_slot(1), [BLOCK_M, BLOCK_K])
     tile_copy(tl.make_block_ptr(
-        mat_b, (K, N), (N, 1), (((iter_start + 1) % NUM_K_BLOCKS) * BLOCK_K, n_nxt1),
+        mat_b, (K, N), (N, 1), (((iter_start + iter_step) % NUM_K_BLOCKS) * BLOCK_K, n_nxt1),
         (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(1), [BLOCK_K, BLOCK_N])
 
     task_m, task_n = grouped_launch_diagonal(
-        (iter_start + 2) // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
+        (iter_start + 2 * iter_step) // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
     m_nxt2 = task_m * BLOCK_M
     n_nxt2 = task_n * BLOCK_N
     tile_copy(tl.make_block_ptr(
-        mat_a, (M, K), (K, 1), (m_nxt2, ((iter_start + 2) % NUM_K_BLOCKS) * BLOCK_K),
+        mat_a, (M, K), (K, 1), (m_nxt2, ((iter_start + 2 * iter_step) % NUM_K_BLOCKS) * BLOCK_K),
         (BLOCK_M, BLOCK_K), (1, 0)), _a_slot(2), [BLOCK_M, BLOCK_K])
     tile_copy(tl.make_block_ptr(
-        mat_b, (K, N), (N, 1), (((iter_start + 2) % NUM_K_BLOCKS) * BLOCK_K, n_nxt2),
+        mat_b, (K, N), (N, 1), (((iter_start + 2 * iter_step) % NUM_K_BLOCKS) * BLOCK_K, n_nxt2),
         (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(2), [BLOCK_K, BLOCK_N])
 
     # ③ main loop
@@ -234,8 +236,11 @@ def matmul_kernel(
             (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(s), [BLOCK_K, BLOCK_N])
 
     # ④ epilogue: 消费 nxt1（倒数第二）和 nxt2（倒数第一）
-    s_ep1 = ((iter_end - iter_step)     // iter_step) % 3
-    s_ep2 = ((iter_end - iter_step + 1) // iter_step) % 3
+    # main loop 在 range(..., iter_end - iter_step, iter_step) 退出，
+    # 最后执行的迭代是 iter_end - 2*iter_step（slot s_ep1），
+    # 未执行的最后一次迭代是 iter_end - iter_step（slot s_ep2）。
+    s_ep1 = ((iter_end - 2 * iter_step) // iter_step) % 3
+    s_ep2 = ((iter_end -     iter_step) // iter_step) % 3
 
     if (iter_end - iter_step) // NUM_K_BLOCKS != prev_block_idx:
         tl.store(tl.make_block_ptr(
