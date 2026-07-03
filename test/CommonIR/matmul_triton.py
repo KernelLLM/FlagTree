@@ -124,29 +124,59 @@ def matmul_kernel(
     NUM_BLOCKS_M = tl.cdiv(M, BLOCK_M)
     NUM_BLOCKS_N = tl.cdiv(N, BLOCK_N)
     NUM_BLOCKS = NUM_BLOCKS_M * NUM_BLOCKS_N
-    for block_idx in range(pid, NUM_BLOCKS, NUM_CORES):
-        task_m_idx, task_n_idx = grouped_launch_diagonal(
-            block_idx, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD
-        )
-        m_start = task_m_idx * BLOCK_M
-        n_start = task_n_idx * BLOCK_N
-        mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-        for k_start in range(0, K, BLOCK_K):
-            mat_a_offset = ((m_start + tl.arange(0, BLOCK_M)) * K)[:, None] + (
-                k_start + tl.arange(0, BLOCK_K)
-            )[None, :]
-            mat_a_mask = ((m_start + tl.arange(0, BLOCK_M)) < M)[:, None] & (
-                (k_start + tl.arange(0, BLOCK_K)) < K
-            )[None, :]
-            mat_a_block = tl.load(mat_a + mat_a_offset, mask=mat_a_mask, other=0.0)
-            mat_b_offset = ((k_start + tl.arange(0, BLOCK_K)) * N)[:, None] + (
-                n_start + tl.arange(0, BLOCK_N)
-            )[None, :]
-            mat_b_mask = ((k_start + tl.arange(0, BLOCK_K)) < K)[:, None] & (
-                (n_start + tl.arange(0, BLOCK_N)) < N
-            )[None, :]
-            mat_b_block = tl.load(mat_b + mat_b_offset, mask=mat_b_mask, other=0.0)
-            mat_c_block = tl.dot(mat_a_block, mat_b_block, mat_c_block)
+    NUM_K_BLOCKS = tl.cdiv(K, BLOCK_K)
+    # 将外层 block 循环与内层 K 循环合并为单层循环。
+    # iter 编码为 (block_idx, k_block_idx)，其中 k 变化最快。
+    # 每次进入新的 block_idx 时重置累加器；遍历完最后一个 k 块后写回结果。
+    mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    prev_block_idx = -1
+    m_start = 0
+    n_start = 0
+    for iter in range(pid * NUM_K_BLOCKS, NUM_BLOCKS * NUM_K_BLOCKS, NUM_CORES * NUM_K_BLOCKS):
+        block_idx = iter // NUM_K_BLOCKS
+        k_block_idx = iter % NUM_K_BLOCKS
+        k_start = k_block_idx * BLOCK_K
+
+        # 进入新的输出块时，先将上一块的结果写回，再重置累加器
+        if block_idx != prev_block_idx:
+            if prev_block_idx >= 0:
+                mat_c_offset = ((m_start + tl.arange(0, BLOCK_M)) * N)[:, None] + (
+                    n_start + tl.arange(0, BLOCK_N)
+                )[None, :]
+                mat_c_mask = ((m_start + tl.arange(0, BLOCK_M)) < M)[:, None] & (
+                    (n_start + tl.arange(0, BLOCK_N)) < N
+                )[None, :]
+                tl.store(
+                    mat_c + mat_c_offset,
+                    mat_c_block.to(mat_c.dtype.element_ty),
+                    mask=mat_c_mask,
+                )
+            task_m_idx, task_n_idx = grouped_launch_diagonal(
+                block_idx, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD
+            )
+            m_start = task_m_idx * BLOCK_M
+            n_start = task_n_idx * BLOCK_N
+            mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+            prev_block_idx = block_idx
+
+        mat_a_offset = ((m_start + tl.arange(0, BLOCK_M)) * K)[:, None] + (
+            k_start + tl.arange(0, BLOCK_K)
+        )[None, :]
+        mat_a_mask = ((m_start + tl.arange(0, BLOCK_M)) < M)[:, None] & (
+            (k_start + tl.arange(0, BLOCK_K)) < K
+        )[None, :]
+        mat_a_block = tl.load(mat_a + mat_a_offset, mask=mat_a_mask, other=0.0)
+        mat_b_offset = ((k_start + tl.arange(0, BLOCK_K)) * N)[:, None] + (
+            n_start + tl.arange(0, BLOCK_N)
+        )[None, :]
+        mat_b_mask = ((k_start + tl.arange(0, BLOCK_K)) < K)[:, None] & (
+            (n_start + tl.arange(0, BLOCK_N)) < N
+        )[None, :]
+        mat_b_block = tl.load(mat_b + mat_b_offset, mask=mat_b_mask, other=0.0)
+        mat_c_block = tl.dot(mat_a_block, mat_b_block, mat_c_block)
+
+    # 写回最后一个输出块
+    if prev_block_idx >= 0:
         mat_c_offset = ((m_start + tl.arange(0, BLOCK_M)) * N)[:, None] + (
             n_start + tl.arange(0, BLOCK_N)
         )[None, :]
