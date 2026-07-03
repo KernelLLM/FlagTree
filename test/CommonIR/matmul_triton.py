@@ -9,6 +9,10 @@ import triton.language as tl
 # https://github.com/DeepLink-org/DLBlas/blob/main/dlblas/utils/op_helper.py
 # Original project licensed under the MIT License.
 
+import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
+from triton.experimental.tle.language.dsa.ascend import L1, L0C  # noqa: F401
+from triton.experimental.tle.language.dsa import tile_alloc, tile_copy, tile_to_tensor  # noqa: F401
+
 # =============================================================================
 #  Compile-time configuration
 # =============================================================================
@@ -16,7 +20,6 @@ _DEFAULT_M = 1024
 _DEFAULT_N = 1024
 _DEFAULT_K = 1024
 _DEFAULT_NUM_CORES = 24
-
 
 def get_number_cores():
     """Return the number of AI cores to use as the launch grid size."""
@@ -123,146 +126,109 @@ def matmul_kernel(
     pid = tl.program_id(axis=0)
     NUM_BLOCKS_M = tl.cdiv(M, BLOCK_M)
     NUM_BLOCKS_N = tl.cdiv(N, BLOCK_N)
-    NUM_BLOCKS = NUM_BLOCKS_M * NUM_BLOCKS_N
-    NUM_K_BLOCKS = tl.cdiv(K, BLOCK_K)
-    # 循环合并后的单层循环，经首尾展开拆分为：
-    #   prologue  — 预加载第 0、1 个 K 块的输入切片
-    #   main loop — 每次迭代消费当前切片（dot）并预加载下下个切片（prefetch i+2）
-    #   epilogue  — 消费最后两个预加载切片，写回输出块
-    #
-    # iter 步长为 NUM_CORES * NUM_K_BLOCKS，保证同一 core 连续处理同一输出块
-    # 的全部 K 切片，block_idx 跳变时先写回上一块再重置累加器。
+    NUM_BLOCKS    = NUM_BLOCKS_M * NUM_BLOCKS_N
+    NUM_K_BLOCKS  = tl.cdiv(K, BLOCK_K)
+    # prologue + main loop + epilogue:
+    #   片上内存：A/B 输入放 L1，C 输出累加放 L0C。
+    #   iter 步长 = NUM_CORES * NUM_K_BLOCKS，保证同一 core 连续消费同一输出块的全部 K 切片。
 
-    # ---------- helpers: 给定 (m_start, n_start, k_start) 加载两个输入切片 ----------
-    # (内联以避免跨调用的 constexpr 传递问题)
+    # ① 片上工作集
+    mat_a_l1  = tile_alloc([BLOCK_M, BLOCK_K], mat_a.dtype.element_ty, L1)
+    mat_b_l1  = tile_alloc([BLOCK_K, BLOCK_N], mat_b.dtype.element_ty, L1)
+    mat_c_l0c = tile_alloc([BLOCK_M, BLOCK_N], tl.float32,              L0C)
 
-    mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-    prev_block_idx = -1
-    m_start = 0
-    n_start = 0
-
-    # 迭代起点与终点
     iter_start = pid * NUM_K_BLOCKS
     iter_end   = NUM_BLOCKS * NUM_K_BLOCKS
     iter_step  = NUM_CORES * NUM_K_BLOCKS
 
-    # ---- prologue: 预加载 iter[0] 和 iter[1] 的切片 -------------------------
-    # iter 0
-    iter0      = iter_start
-    block_idx0 = iter0 // NUM_K_BLOCKS
-    k_start0   = (iter0 % NUM_K_BLOCKS) * BLOCK_K
-    task_m0, task_n0 = grouped_launch_diagonal(
-        block_idx0, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD
-    )
-    m_start = task_m0 * BLOCK_M
-    n_start = task_n0 * BLOCK_N
-    prev_block_idx = block_idx0
+    # ② prologue: 预加载 iter[0]（cur）和 iter[1]（nxt）到 L1
+    task_m, task_n = grouped_launch_diagonal(
+        iter_start // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
+    m_start = task_m * BLOCK_M
+    n_start = task_n * BLOCK_N
+    prev_block_idx = iter_start // NUM_K_BLOCKS
     mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
-    a0_off  = ((m_start + tl.arange(0, BLOCK_M)) * K)[:, None] + (k_start0 + tl.arange(0, BLOCK_K))[None, :]
-    a0_mask = ((m_start + tl.arange(0, BLOCK_M)) < M)[:, None] & ((k_start0 + tl.arange(0, BLOCK_K)) < K)[None, :]
-    mat_a_block_cur = tl.load(mat_a + a0_off, mask=a0_mask, other=0.0)
+    tile_copy(tl.make_block_ptr(
+        mat_a, (M, K), (K, 1), (m_start, (iter_start % NUM_K_BLOCKS) * BLOCK_K),
+        (BLOCK_M, BLOCK_K), (1, 0)), mat_a_l1, [BLOCK_M, BLOCK_K])
+    mat_a_block_cur = tile_to_tensor(mat_a_l1, writable=False)
+    tile_copy(tl.make_block_ptr(
+        mat_b, (K, N), (N, 1), ((iter_start % NUM_K_BLOCKS) * BLOCK_K, n_start),
+        (BLOCK_K, BLOCK_N), (1, 0)), mat_b_l1, [BLOCK_K, BLOCK_N])
+    mat_b_block_cur = tile_to_tensor(mat_b_l1, writable=False)
 
-    b0_off  = ((k_start0 + tl.arange(0, BLOCK_K)) * N)[:, None] + (n_start + tl.arange(0, BLOCK_N))[None, :]
-    b0_mask = ((k_start0 + tl.arange(0, BLOCK_K)) < K)[:, None] & ((n_start + tl.arange(0, BLOCK_N)) < N)[None, :]
-    mat_b_block_cur = tl.load(mat_b + b0_off, mask=b0_mask, other=0.0)
+    task_m, task_n = grouped_launch_diagonal(
+        (iter_start + 1) // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
+    m_next = task_m * BLOCK_M
+    n_next = task_n * BLOCK_N
 
-    # iter 1 (预加载 next)
-    iter1      = iter_start + 1
-    block_idx1 = iter1 // NUM_K_BLOCKS
-    k_start1   = (iter1 % NUM_K_BLOCKS) * BLOCK_K
-    task_m1, task_n1 = grouped_launch_diagonal(
-        block_idx1, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD
-    )
-    m_next = task_m1 * BLOCK_M
-    n_next = task_n1 * BLOCK_N
+    tile_copy(tl.make_block_ptr(
+        mat_a, (M, K), (K, 1), (m_next, ((iter_start + 1) % NUM_K_BLOCKS) * BLOCK_K),
+        (BLOCK_M, BLOCK_K), (1, 0)), mat_a_l1, [BLOCK_M, BLOCK_K])
+    mat_a_block_nxt = tile_to_tensor(mat_a_l1, writable=False)
+    tile_copy(tl.make_block_ptr(
+        mat_b, (K, N), (N, 1), (((iter_start + 1) % NUM_K_BLOCKS) * BLOCK_K, n_next),
+        (BLOCK_K, BLOCK_N), (1, 0)), mat_b_l1, [BLOCK_K, BLOCK_N])
+    mat_b_block_nxt = tile_to_tensor(mat_b_l1, writable=False)
 
-    a1_off  = ((m_next + tl.arange(0, BLOCK_M)) * K)[:, None] + (k_start1 + tl.arange(0, BLOCK_K))[None, :]
-    a1_mask = ((m_next + tl.arange(0, BLOCK_M)) < M)[:, None] & ((k_start1 + tl.arange(0, BLOCK_K)) < K)[None, :]
-    mat_a_block_nxt = tl.load(mat_a + a1_off, mask=a1_mask, other=0.0)
-
-    b1_off  = ((k_start1 + tl.arange(0, BLOCK_K)) * N)[:, None] + (n_next + tl.arange(0, BLOCK_N))[None, :]
-    b1_mask = ((k_start1 + tl.arange(0, BLOCK_K)) < K)[:, None] & ((n_next + tl.arange(0, BLOCK_N)) < N)[None, :]
-    mat_b_block_nxt = tl.load(mat_b + b1_off, mask=b1_mask, other=0.0)
-
-    # ---- main loop: 消费 cur，prefetch i+2，推进 cur←nxt -------------------
-    # 循环从 iter[0] 跑到 iter[end-2]（含），每次处理一个 iter，
-    # 同时预加载两步后的切片。
+    # ③ main loop: 消费 cur，prefetch i+step+1，cur ← nxt
     for iter in range(iter_start, iter_end - iter_step, iter_step):
-        # 消费当前切片
-        block_idx_cur = iter // NUM_K_BLOCKS
-        # 跨输出块边界：写回上一块，重置累加器
-        if block_idx_cur != prev_block_idx:
-            c_off  = ((m_start + tl.arange(0, BLOCK_M)) * N)[:, None] + (n_start + tl.arange(0, BLOCK_N))[None, :]
-            c_mask = ((m_start + tl.arange(0, BLOCK_M)) < M)[:, None] & ((n_start + tl.arange(0, BLOCK_N)) < N)[None, :]
-            tl.store(mat_c + c_off, mat_c_block.to(mat_c.dtype.element_ty), mask=c_mask)
+        if iter // NUM_K_BLOCKS != prev_block_idx:
+            tl.store(tl.make_block_ptr(
+                mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
+                mat_c_block.to(mat_c.dtype.element_ty))
             m_start = m_next
             n_start = n_next
             mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-            prev_block_idx = block_idx_cur
+            prev_block_idx = iter // NUM_K_BLOCKS
 
-        mat_c_block = tl.dot(mat_a_block_cur, mat_b_block_cur, mat_c_block)
-
-        # 将 nxt → cur
+        mat_c_block = tl.dot(mat_a_block_cur, mat_b_block_cur, mat_c_block,
+                             out_dtype=tl.float32)
         mat_a_block_cur = mat_a_block_nxt
         mat_b_block_cur = mat_b_block_nxt
 
-        # prefetch iter + 2*step
-        iter_pf      = iter + iter_step + 1
-        block_idx_pf = iter_pf // NUM_K_BLOCKS
-        k_start_pf   = (iter_pf % NUM_K_BLOCKS) * BLOCK_K
-        task_m_pf, task_n_pf = grouped_launch_diagonal(
-            block_idx_pf, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD
-        )
-        m_pf = task_m_pf * BLOCK_M
-        n_pf = task_n_pf * BLOCK_N
-        m_next = m_pf
-        n_next = n_pf
+        iter_pf = iter + iter_step + 1
+        task_m, task_n = grouped_launch_diagonal(
+            iter_pf // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
+        m_next = task_m * BLOCK_M
+        n_next = task_n * BLOCK_N
 
-        apf_off  = ((m_pf + tl.arange(0, BLOCK_M)) * K)[:, None] + (k_start_pf + tl.arange(0, BLOCK_K))[None, :]
-        apf_mask = ((m_pf + tl.arange(0, BLOCK_M)) < M)[:, None] & ((k_start_pf + tl.arange(0, BLOCK_K)) < K)[None, :]
-        mat_a_block_nxt = tl.load(mat_a + apf_off, mask=apf_mask, other=0.0)
+        tile_copy(tl.make_block_ptr(
+            mat_a, (M, K), (K, 1), (m_next, (iter_pf % NUM_K_BLOCKS) * BLOCK_K),
+            (BLOCK_M, BLOCK_K), (1, 0)), mat_a_l1, [BLOCK_M, BLOCK_K])
+        mat_a_block_nxt = tile_to_tensor(mat_a_l1, writable=False)
+        tile_copy(tl.make_block_ptr(
+            mat_b, (K, N), (N, 1), ((iter_pf % NUM_K_BLOCKS) * BLOCK_K, n_next),
+            (BLOCK_K, BLOCK_N), (1, 0)), mat_b_l1, [BLOCK_K, BLOCK_N])
+        mat_b_block_nxt = tile_to_tensor(mat_b_l1, writable=False)
 
-        bpf_off  = ((k_start_pf + tl.arange(0, BLOCK_K)) * N)[:, None] + (n_pf + tl.arange(0, BLOCK_N))[None, :]
-        bpf_mask = ((k_start_pf + tl.arange(0, BLOCK_K)) < K)[:, None] & ((n_pf + tl.arange(0, BLOCK_N)) < N)[None, :]
-        mat_b_block_nxt = tl.load(mat_b + bpf_off, mask=bpf_mask, other=0.0)
-
-    # ---- epilogue: 消费主循环退出时手中持有的两份预加载切片 ------------------
-    # 主循环在 range(iter_start, iter_end - iter_step) 结束后，
-    # mat_a/b_block_cur 对应 iter_end - iter_step（倒数第二个 iter），
-    # mat_a/b_block_nxt 对应 iter_end - iter_step + 1（倒数第一个 iter）。
-
-    # epilogue step 1: 消费 cur（倒数第二个 iter 的切片）
-    iter_sec_last    = iter_end - iter_step
-    block_idx_sec    = iter_sec_last // NUM_K_BLOCKS
-    if block_idx_sec != prev_block_idx:
-        # 跨输出块边界：写回上一块
-        c_off  = ((m_start + tl.arange(0, BLOCK_M)) * N)[:, None] + (n_start + tl.arange(0, BLOCK_N))[None, :]
-        c_mask = ((m_start + tl.arange(0, BLOCK_M)) < M)[:, None] & ((n_start + tl.arange(0, BLOCK_N)) < N)[None, :]
-        tl.store(mat_c + c_off, mat_c_block.to(mat_c.dtype.element_ty), mask=c_mask)
+    # ④ epilogue: 消费 cur（倒数第二）和 nxt（倒数第一）
+    if (iter_end - iter_step) // NUM_K_BLOCKS != prev_block_idx:
+        tl.store(tl.make_block_ptr(
+            mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
+            mat_c_block.to(mat_c.dtype.element_ty))
         m_start = m_next
         n_start = n_next
         mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-        prev_block_idx = block_idx_sec
-    mat_c_block = tl.dot(mat_a_block_cur, mat_b_block_cur, mat_c_block)
+        prev_block_idx = (iter_end - iter_step) // NUM_K_BLOCKS
+    mat_c_block = tl.dot(mat_a_block_cur, mat_b_block_cur, mat_c_block,
+                         out_dtype=tl.float32)
 
-    # epilogue step 2: 消费 nxt（倒数第一个 iter 的切片）
-    iter_last     = iter_end - iter_step + 1
-    block_idx_last = iter_last // NUM_K_BLOCKS
-    if block_idx_last != prev_block_idx:
-        # 跨输出块边界：写回上一块
-        c_off  = ((m_start + tl.arange(0, BLOCK_M)) * N)[:, None] + (n_start + tl.arange(0, BLOCK_N))[None, :]
-        c_mask = ((m_start + tl.arange(0, BLOCK_M)) < M)[:, None] & ((n_start + tl.arange(0, BLOCK_N)) < N)[None, :]
-        tl.store(mat_c + c_off, mat_c_block.to(mat_c.dtype.element_ty), mask=c_mask)
+    if (iter_end - iter_step + 1) // NUM_K_BLOCKS != prev_block_idx:
+        tl.store(tl.make_block_ptr(
+            mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
+            mat_c_block.to(mat_c.dtype.element_ty))
         m_start = m_next
         n_start = n_next
         mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-    mat_c_block = tl.dot(mat_a_block_nxt, mat_b_block_nxt, mat_c_block)
+    mat_c_block = tl.dot(mat_a_block_nxt, mat_b_block_nxt, mat_c_block,
+                         out_dtype=tl.float32)
 
     # 写回最后一个输出块
-    c_off  = ((m_start + tl.arange(0, BLOCK_M)) * N)[:, None] + (n_start + tl.arange(0, BLOCK_N))[None, :]
-    c_mask = ((m_start + tl.arange(0, BLOCK_M)) < M)[:, None] & ((n_start + tl.arange(0, BLOCK_N)) < N)[None, :]
-    tl.store(mat_c + c_off, mat_c_block.to(mat_c.dtype.element_ty), mask=c_mask)
+    tl.store(tl.make_block_ptr(
+        mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
+        mat_c_block.to(mat_c.dtype.element_ty))
 
 
 def call(mat_a, mat_b):
