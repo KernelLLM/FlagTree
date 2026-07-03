@@ -158,6 +158,7 @@ def matmul_kernel(
     # ② prologue: 向 slot 0/1/2 分别预加载循环第 0/1/2 次迭代对应的切片
     # main loop 步长为 iter_step，第 i 次迭代对应全局 iter = iter_start + i*iter_step，
     # 因此三个槽分别加载 iter_start、iter_start+iter_step、iter_start+2*iter_step。
+    # 对于 slot 1/2，需要检查是否越界（当分配给此 core 的迭代不足 3 次时）。
     task_m, task_n = grouped_launch_diagonal(
         iter_start // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
     m_start = task_m * BLOCK_M
@@ -173,27 +174,33 @@ def matmul_kernel(
         mat_b, (K, N), (N, 1), ((iter_start % NUM_K_BLOCKS) * BLOCK_K, n_start),
         (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(0), [BLOCK_K, BLOCK_N])
 
-    task_m, task_n = grouped_launch_diagonal(
-        (iter_start + iter_step) // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
-    m_nxt1 = task_m * BLOCK_M
-    n_nxt1 = task_n * BLOCK_N
-    tile_copy(tl.make_block_ptr(
-        mat_a, (M, K), (K, 1), (m_nxt1, ((iter_start + iter_step) % NUM_K_BLOCKS) * BLOCK_K),
-        (BLOCK_M, BLOCK_K), (1, 0)), _a_slot(1), [BLOCK_M, BLOCK_K])
-    tile_copy(tl.make_block_ptr(
-        mat_b, (K, N), (N, 1), (((iter_start + iter_step) % NUM_K_BLOCKS) * BLOCK_K, n_nxt1),
-        (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(1), [BLOCK_K, BLOCK_N])
+    m_nxt1 = m_start
+    n_nxt1 = n_start
+    m_nxt2 = m_start
+    n_nxt2 = n_start
+    if iter_start + iter_step < iter_end:
+        task_m, task_n = grouped_launch_diagonal(
+            (iter_start + iter_step) // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
+        m_nxt1 = task_m * BLOCK_M
+        n_nxt1 = task_n * BLOCK_N
+        tile_copy(tl.make_block_ptr(
+            mat_a, (M, K), (K, 1), (m_nxt1, ((iter_start + iter_step) % NUM_K_BLOCKS) * BLOCK_K),
+            (BLOCK_M, BLOCK_K), (1, 0)), _a_slot(1), [BLOCK_M, BLOCK_K])
+        tile_copy(tl.make_block_ptr(
+            mat_b, (K, N), (N, 1), (((iter_start + iter_step) % NUM_K_BLOCKS) * BLOCK_K, n_nxt1),
+            (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(1), [BLOCK_K, BLOCK_N])
 
-    task_m, task_n = grouped_launch_diagonal(
-        (iter_start + 2 * iter_step) // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
-    m_nxt2 = task_m * BLOCK_M
-    n_nxt2 = task_n * BLOCK_N
-    tile_copy(tl.make_block_ptr(
-        mat_a, (M, K), (K, 1), (m_nxt2, ((iter_start + 2 * iter_step) % NUM_K_BLOCKS) * BLOCK_K),
-        (BLOCK_M, BLOCK_K), (1, 0)), _a_slot(2), [BLOCK_M, BLOCK_K])
-    tile_copy(tl.make_block_ptr(
-        mat_b, (K, N), (N, 1), (((iter_start + 2 * iter_step) % NUM_K_BLOCKS) * BLOCK_K, n_nxt2),
-        (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(2), [BLOCK_K, BLOCK_N])
+    if iter_start + 2 * iter_step < iter_end:
+        task_m, task_n = grouped_launch_diagonal(
+            (iter_start + 2 * iter_step) // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
+        m_nxt2 = task_m * BLOCK_M
+        n_nxt2 = task_n * BLOCK_N
+        tile_copy(tl.make_block_ptr(
+            mat_a, (M, K), (K, 1), (m_nxt2, ((iter_start + 2 * iter_step) % NUM_K_BLOCKS) * BLOCK_K),
+            (BLOCK_M, BLOCK_K), (1, 0)), _a_slot(2), [BLOCK_M, BLOCK_K])
+        tile_copy(tl.make_block_ptr(
+            mat_b, (K, N), (N, 1), (((iter_start + 2 * iter_step) % NUM_K_BLOCKS) * BLOCK_K, n_nxt2),
+            (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(2), [BLOCK_K, BLOCK_N])
 
     # ③ main loop
     # s = (iter // iter_step) % 3 是当前消费的 slot，编译时可静态推导（循环步长固定）。
@@ -219,24 +226,23 @@ def matmul_kernel(
         n_nxt1 = n_nxt2
 
         # prefetch 3 步后的切片，写回同一个 slot s（已消费，可安全复用）
+        # 仅当 prefetch 目标未越界时才发起搬运
         iter_pf = iter + 3 * iter_step
-        task_m, task_n = grouped_launch_diagonal(
-            iter_pf // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
-        m_nxt2 = task_m * BLOCK_M
-        n_nxt2 = task_n * BLOCK_N
-        tile_copy(tl.make_block_ptr(
-            mat_a, (M, K), (K, 1), (m_nxt2, (iter_pf % NUM_K_BLOCKS) * BLOCK_K),
-            (BLOCK_M, BLOCK_K), (1, 0)), _a_slot(s), [BLOCK_M, BLOCK_K])
-        tile_copy(tl.make_block_ptr(
-            mat_b, (K, N), (N, 1), ((iter_pf % NUM_K_BLOCKS) * BLOCK_K, n_nxt2),
-            (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(s), [BLOCK_K, BLOCK_N])
+        if iter_pf < iter_end:
+            task_m, task_n = grouped_launch_diagonal(
+                iter_pf // NUM_K_BLOCKS, NUM_BLOCKS_M, NUM_BLOCKS_N, BLOCK_TRESHHOLD)
+            m_nxt2 = task_m * BLOCK_M
+            n_nxt2 = task_n * BLOCK_N
+            tile_copy(tl.make_block_ptr(
+                mat_a, (M, K), (K, 1), (m_nxt2, (iter_pf % NUM_K_BLOCKS) * BLOCK_K),
+                (BLOCK_M, BLOCK_K), (1, 0)), _a_slot(s), [BLOCK_M, BLOCK_K])
+            tile_copy(tl.make_block_ptr(
+                mat_b, (K, N), (N, 1), ((iter_pf % NUM_K_BLOCKS) * BLOCK_K, n_nxt2),
+                (BLOCK_K, BLOCK_N), (1, 0)), _b_slot(s), [BLOCK_K, BLOCK_N])
 
-    # ④ epilogue: 消费 nxt1（倒数第二）和 nxt2（倒数第一）
-    # main loop 在 range(..., iter_end - iter_step, iter_step) 退出，
-    # 最后执行的迭代是 iter_end - 2*iter_step（slot s_ep1），
-    # 未执行的最后一次迭代是 iter_end - iter_step（slot s_ep2）。
-    s_ep1 = ((iter_end - 2 * iter_step) // iter_step) % 3
-    s_ep2 = ((iter_end -     iter_step) // iter_step) % 3
+    # ④ epilogue: 消费最后一次迭代 iter_end - iter_step
+    # main loop range(..., iter_end - iter_step) 不包含最后一次迭代，需要在此处理。
+    s_ep = ((iter_end - iter_step) // iter_step) % 3
 
     if (iter_end - iter_step) // NUM_K_BLOCKS != prev_block_idx:
         tl.store(tl.make_block_ptr(
@@ -246,21 +252,8 @@ def matmul_kernel(
         n_start = n_nxt1
         mat_c_acc = tile_to_tensor(mat_c_l0c, writable=True)
         mat_c_acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-        prev_block_idx = (iter_end - iter_step) // NUM_K_BLOCKS
-    mat_c_acc = tl.dot(tile_to_tensor(_a_slot(s_ep1), writable=False),
-                       tile_to_tensor(_b_slot(s_ep1), writable=False),
-                       mat_c_acc, out_dtype=tl.float32)
-
-    if (iter_end - iter_step) // NUM_K_BLOCKS != prev_block_idx:
-        tl.store(tl.make_block_ptr(
-            mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
-            tile_to_tensor(mat_c_l0c, writable=False).to(mat_c.dtype.element_ty))
-        m_start = m_nxt2
-        n_start = n_nxt2
-        mat_c_acc = tile_to_tensor(mat_c_l0c, writable=True)
-        mat_c_acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-    mat_c_acc = tl.dot(tile_to_tensor(_a_slot(s_ep2), writable=False),
-                       tile_to_tensor(_b_slot(s_ep2), writable=False),
+    mat_c_acc = tl.dot(tile_to_tensor(_a_slot(s_ep), writable=False),
+                       tile_to_tensor(_b_slot(s_ep), writable=False),
                        mat_c_acc, out_dtype=tl.float32)
 
     # 写回最后一个输出块
@@ -302,6 +295,7 @@ class _DumpOptions:
     allowed_dot_input_precisions = ("tf32", "tf32x3", "ieee")
     max_num_imprecise_acc_default = 0
     default_dot_input_precision = "ieee"
+    sanitize_overflow = False
 
 
 def _matmul_signature(N: int, K: int, BLOCK_M: int, BLOCK_N: int, BLOCK_K: int,
