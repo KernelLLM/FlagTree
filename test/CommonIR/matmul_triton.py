@@ -56,11 +56,7 @@ def grouped_launch_diagonal(pid, num_pid_m, num_pid_n, BLOCK_TRESHHOLD: tl.const
             + pid // (BLOCK_TRESHHOLD * num_pid_n) * BLOCK_TRESHHOLD
         )
         # 求最小公倍数，方便求基本块的坐标
-        x, y = (
-            curThresholdM,
-            curThresholdN if curThresholdM > curThresholdN else curThresholdN,
-            curThresholdM,
-        )
+        x, y = curThresholdM, curThresholdN
         while y != 0:
             x, y = y, x % y
         lcm = curThresholdM * curThresholdN // x
@@ -255,7 +251,7 @@ def matmul_kernel(
                        tile_to_tensor(_b_slot(s_ep1), writable=False),
                        mat_c_acc, out_dtype=tl.float32)
 
-    if (iter_end - iter_step + 1) // NUM_K_BLOCKS != prev_block_idx:
+    if (iter_end - iter_step) // NUM_K_BLOCKS != prev_block_idx:
         tl.store(tl.make_block_ptr(
             mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
             tile_to_tensor(mat_c_l0c, writable=False).to(mat_c.dtype.element_ty))
