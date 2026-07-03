@@ -147,7 +147,8 @@ def matmul_kernel(
     m_start = task_m * BLOCK_M
     n_start = task_n * BLOCK_N
     prev_block_idx = iter_start // NUM_K_BLOCKS
-    mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    mat_c_acc = tile_to_tensor(mat_c_l0c, writable=True)
+    mat_c_acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
     tile_copy(tl.make_block_ptr(
         mat_a, (M, K), (K, 1), (m_start, (iter_start % NUM_K_BLOCKS) * BLOCK_K),
@@ -177,14 +178,15 @@ def matmul_kernel(
         if iter // NUM_K_BLOCKS != prev_block_idx:
             tl.store(tl.make_block_ptr(
                 mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
-                mat_c_block.to(mat_c.dtype.element_ty))
+                tile_to_tensor(mat_c_l0c, writable=False).to(mat_c.dtype.element_ty))
             m_start = m_next
             n_start = n_next
-            mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+            mat_c_acc = tile_to_tensor(mat_c_l0c, writable=True)
+            mat_c_acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
             prev_block_idx = iter // NUM_K_BLOCKS
 
-        mat_c_block = tl.dot(mat_a_block_cur, mat_b_block_cur, mat_c_block,
-                             out_dtype=tl.float32)
+        mat_c_acc = tl.dot(mat_a_block_cur, mat_b_block_cur, mat_c_acc,
+                           out_dtype=tl.float32)
         mat_a_block_cur = mat_a_block_nxt
         mat_b_block_cur = mat_b_block_nxt
 
@@ -207,28 +209,30 @@ def matmul_kernel(
     if (iter_end - iter_step) // NUM_K_BLOCKS != prev_block_idx:
         tl.store(tl.make_block_ptr(
             mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
-            mat_c_block.to(mat_c.dtype.element_ty))
+            tile_to_tensor(mat_c_l0c, writable=False).to(mat_c.dtype.element_ty))
         m_start = m_next
         n_start = n_next
-        mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+        mat_c_acc = tile_to_tensor(mat_c_l0c, writable=True)
+        mat_c_acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
         prev_block_idx = (iter_end - iter_step) // NUM_K_BLOCKS
-    mat_c_block = tl.dot(mat_a_block_cur, mat_b_block_cur, mat_c_block,
-                         out_dtype=tl.float32)
+    mat_c_acc = tl.dot(mat_a_block_cur, mat_b_block_cur, mat_c_acc,
+                       out_dtype=tl.float32)
 
     if (iter_end - iter_step + 1) // NUM_K_BLOCKS != prev_block_idx:
         tl.store(tl.make_block_ptr(
             mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
-            mat_c_block.to(mat_c.dtype.element_ty))
+            tile_to_tensor(mat_c_l0c, writable=False).to(mat_c.dtype.element_ty))
         m_start = m_next
         n_start = n_next
-        mat_c_block = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-    mat_c_block = tl.dot(mat_a_block_nxt, mat_b_block_nxt, mat_c_block,
-                         out_dtype=tl.float32)
+        mat_c_acc = tile_to_tensor(mat_c_l0c, writable=True)
+        mat_c_acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    mat_c_acc = tl.dot(mat_a_block_nxt, mat_b_block_nxt, mat_c_acc,
+                       out_dtype=tl.float32)
 
     # 写回最后一个输出块
     tl.store(tl.make_block_ptr(
         mat_c, (M, N), (N, 1), (m_start, n_start), (BLOCK_M, BLOCK_N), (1, 0)),
-        mat_c_block.to(mat_c.dtype.element_ty))
+        tile_to_tensor(mat_c_l0c, writable=False).to(mat_c.dtype.element_ty))
 
 
 def call(mat_a, mat_b):
