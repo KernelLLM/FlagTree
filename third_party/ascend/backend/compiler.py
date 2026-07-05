@@ -90,7 +90,10 @@ def make_ttir(mod, metadata, opt):
     passes.common.add_canonicalizer(pm)
     passes.ttir.add_reorder_broadcast(pm)
     passes.common.add_cse(pm)
-    passes.common.add_licm(pm)
+    # NOTE: LICM is intentionally omitted — it hoists tile.to_tensor above
+    # tile.copy in loops, breaking the read-after-write ordering required by
+    # Ascend's buffer semantics. This causes "operand does not dominate this use"
+    # errors in bishengir downstream.
     passes.common.add_symbol_dce(pm)
     passes.ttir.add_loop_unroll(pm)
     pm.run(mod)
@@ -103,8 +106,7 @@ def make_ttir(mod, metadata, opt):
 
 
 def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
-    # use triton_adapter to lower Triton-MLIR to linalg
-    # Get Triton-MLIR as string
+    # Full TileIR → Linalg lowering pipeline.
 
     enable_nd2nz_on_vector = metadata["enable_nd2nz_on_vector"]
     enable_select_analysis = metadata["enable_select_analysis"]
@@ -113,24 +115,53 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
     enable_mask_fallback_conversion = metadata["enable_mask_fallback_conversion"]
     optimize_dynamic_offset = metadata["optimize_dynamic_offset"]
 
-    pm = ir.pass_manager(mod.context)
+    context = mod.context
+    pm = ir.pass_manager(context)
     pm.enable_debug()
 
-    # Add pass here.
+    # ── ① TileIR → HIVM ──────────────────────────────────────────────────
+    passes.common.add_inliner(pm)
     ascend.passes.ttir.add_tileir_to_hivm(pm)
-    ascend.passes.ttir.add_triton_to_structure_incubated(pm, enable_mask_fallback_conversion, optimize_dynamic_offset,
-                                                         compile_on_910_95)
+
+    # ── ①b Erase unrealized_conversion_cast ops ──────────────────────────
+    ascend.passes.ttir.add_erase_linalg_casts(pm)
+    passes.common.add_canonicalizer(pm)
+
+    # ── ② Structured (r1) + discrete mask ────────────────────────────────
+    ascend.passes.ttir.add_triton_to_structure_incubated(pm, enable_mask_fallback_conversion,
+                                                         optimize_dynamic_offset, compile_on_910_95)
     ascend.passes.ttir.add_discrete_mask_access_conversion(pm, compile_on_910_95, force_simt_template)
-    # ascend.passes.ttir.add_triton_to_annotation(pm)
+
+    # ── ③ Unstructured + HIVM + HFusion + LLVM ──────────────────────────
     ascend.passes.ttir.add_triton_to_unstructure_incubated(pm, compile_on_910_95, force_simt_template)
     ascend.passes.ttir.add_triton_to_hivm(pm)
     ascend.passes.ttir.add_triton_to_hfusion(pm)
     ascend.passes.ttir.add_triton_to_llvm(pm)
+
+    # ── ④ Bubble-up + structured (r2) ────────────────────────────────────
     ascend.passes.ttir.add_bubble_up_operation(pm)
-    ascend.passes.ttir.add_triton_to_structure_incubated(pm, enable_mask_fallback_conversion, optimize_dynamic_offset,
-                                                         compile_on_910_95)
+    ascend.passes.ttir.add_triton_to_structure_incubated(pm, enable_mask_fallback_conversion,
+                                                         optimize_dynamic_offset, compile_on_910_95)
+
+    # ── ④b Inline + canonicalize ─────────────────────────────────────────
+    passes.common.add_inliner(pm)
+    passes.common.add_canonicalizer(pm)
+
+    # ── ⑤ Triton → Linalg ───────────────────────────────────────────────
     ascend.passes.ttir.add_triton_to_linalg_incubated(pm, False, named_ops, enable_nd2nz_on_vector,
                                                       enable_select_analysis, compile_on_910_95)
+
+    # ── ⑤c Fold staging copies ──────────────────────────────────────────
+    ascend.passes.ttir.add_fold_staging_copy(pm)
+
+    # ── ⑤b Erase linalg casts (post) ────────────────────────────────────
+    ascend.passes.ttir.add_erase_linalg_casts(pm)
+
+    # ── ⑥ Final canonicalize + CSE + DCE ─────────────────────────────────
+    passes.common.add_canonicalizer(pm)
+    passes.common.add_cse(pm)
+    passes.common.add_symbol_dce(pm)
+
     pm.run(mod)
 
     if opt.debug:
@@ -655,11 +686,21 @@ def linalg_to_bin_enable_npu_compile_A2_A3(linalg: str, metadata, opt):
                 bishengir_hivm_opt,
                 "--enable-triton-kernel-compile=true",
             ]
+        # _compile_option_list += ["--mlir-print-ir-after-all"]
         cmd_list = ([npu_compiler_path, ttadapter_path] + _compile_option_list + ["-o", bin_file])
         auto_tile_and_bind_subblock = metadata["auto_tile_and_bind_subblock"]
         if auto_tile_and_bind_subblock is False:
             cmd_list += ["--enable-auto-bind-sub-block=false"]
+        # DEBUG: save input mlir for inspection
+        import shutil
+        shutil.copy2(ttadapter_path, "/tmp/debug_kernel_input.mlir")
         ret = subprocess.run(cmd_list, env=env, capture_output=True, check=True)
+        # Dump bishengir-compile pass IR output if --mlir-print-ir-after-all was used
+        if "--mlir-print-ir-after-all" in _compile_option_list:
+            dump_path = os.environ.get("BISHENGIR_DUMP_PATH", os.path.join(tmpdir, "bishengir_pass_dump.log"))
+            with open(dump_path, "w") as f:
+                f.write(ret.stderr.decode("utf-8", errors="replace"))
+            print(f"[bishengir] Pass IR dump written to: {dump_path}")
         match = re.search(r'UB\s+size\s*=\s*(\d+)\s*bits', ret.stdout.decode('utf-8'))
         if match:
             # get the ub bits of triton kernel from bisheng for inductor autotune using
