@@ -414,90 +414,31 @@ void TileIRToHIVMPass::runOnOperation() {
   // This avoids the type-conversion complexity of the dialect conversion
   // framework: tile.alloc → memref.alloc replaces !tile.buf with memref,
   // then tile.copy (now seeing memref operands) → hivm.copy, etc.
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<TileAllocToMemRef>(&getContext());
 
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<TileSubviewToMemrefSubview>(&getContext());
+// apply pattern separately to ensure their relative order
+// template lambda is a C++ 20 feature, so we'll have to use MACRO
+#define APPLY_REWRITE_PATTERN(pattern)                                     \
+{                                                                          \
+  RewritePatternSet patterns(&getContext());                               \
+  patterns.add<pattern>(&getContext());                                    \
+  if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns)))) { \
+    return signalPassFailure();                                            \
+  }                                                                        \
+}                                                                          \
 
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<TileToTensorEliminate>(&getContext());
+  APPLY_REWRITE_PATTERN(TileAllocToMemRef);
+  APPLY_REWRITE_PATTERN(TileSubviewToMemrefSubview);
+  APPLY_REWRITE_PATTERN(TileToTensorEliminate);
+  APPLY_REWRITE_PATTERN(TileCopyToHIVM);
+  APPLY_REWRITE_PATTERN(TileStoreTensorToHIVM);
+  APPLY_REWRITE_PATTERN(TileLoadToHIVM);
+  APPLY_REWRITE_PATTERN(TileStoreToHIVM);
+  APPLY_REWRITE_PATTERN(TileSetFlagToHIVM);
+  APPLY_REWRITE_PATTERN(TileWaitFlagToHIVM);
+  APPLY_REWRITE_PATTERN(TilePipeBarrierToHIVM);
+  APPLY_REWRITE_PATTERN(TileCubeWaitToHIVM);
+  APPLY_REWRITE_PATTERN(TileGmOffsetToHIVM);
 
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<TileCopyToHIVM>(&getContext());
-
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<TileStoreTensorToHIVM>(&getContext());
-
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<TileLoadToHIVM>(&getContext());
-
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<TileStoreToHIVM>(&getContext());
-
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<TileSetFlagToHIVM >(&getContext());
-
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add< TileWaitFlagToHIVM >(&getContext());
-
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add< TilePipeBarrierToHIVM >(&getContext());
-
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add< TileCubeWaitToHIVM>(&getContext());
-
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
-  {
-    RewritePatternSet patterns(&getContext());
-    patterns.add<TileGmOffsetToHIVM>(&getContext());
-
-    if (failed(applyPatternsAndFoldGreedily(module, std::move(patterns))))
-      return signalPassFailure();
-  }
   // Step N: After all tile ops are lowered, convert !tile.buf types remaining
   // in tt.func signatures and tt.call ops (these arise when tile.alloc results
   // are passed across function boundaries).
