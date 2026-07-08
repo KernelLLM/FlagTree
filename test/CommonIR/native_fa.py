@@ -9,6 +9,8 @@ import triton.language as tl
 #  TLE / tile-dialect registration (needed for the dump pipeline)
 # =============================================================================
 import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
+from triton.experimental.tle.language.dsa.ascend import L1
+from triton.experimental.tle.language.dsa import tile_alloc, tile_copy, tile_to_tensor
 
 # =============================================================================
 #  Compile-time configuration
@@ -23,9 +25,15 @@ DIM = 32
 # =============================================================================
 
 
+# constexpr shape literals for tile_copy (must be tl.constexpr)
+CBM = tl.constexpr(BLOCK_M)
+CBN = tl.constexpr(BLOCK_N)
+CD  = tl.constexpr(DIM)
+
+
 @triton.jit
-def _attn_fwd_inner(acc, l_i, m_i, q,  #
-                    K, V,  #
+def _attn_fwd_inner(acc, l_i, m_i, q_l1,  #
+                    K, V, k_l1, v_l1,  #
                     stride_kn, stride_kd, stride_vn, stride_vd,  #
                     start_m, qk_scale,  #
                     BLOCK_M: tl.constexpr, HEAD_DIM: tl.constexpr, BLOCK_N: tl.constexpr,  #
@@ -42,10 +50,13 @@ def _attn_fwd_inner(acc, l_i, m_i, q,  #
     # loop over k, v and update accumulator
     for start_n in tl.range(lo, hi, BLOCK_N):
         start_n = tl.multiple_of(start_n, BLOCK_N)
-        # -- compute qk ----
+        # DMA K block: GM -> L1
         k_bp = tl.make_block_ptr(K, (N_CTX, HEAD_DIM), (stride_kn, stride_kd),
                                  (start_n, 0), (BLOCK_N, HEAD_DIM), (1, 0))
-        k = tl.load(k_bp)
+        tile_copy(k_bp, k_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
+        # -- compute qk from L1 buffers --
+        q = tile_to_tensor(q_l1, writable=False)
+        k = tile_to_tensor(k_l1, writable=False)
         qk = tl.dot(q, tl.trans(k))
         if STAGE == 2:
             mask = offs_m[:, None] >= (start_n + offs_n[None, :])
@@ -61,10 +72,11 @@ def _attn_fwd_inner(acc, l_i, m_i, q,  #
         l_ij = tl.sum(p, 1)
         # -- update output accumulator --
         acc = acc * alpha[:, None]
-        # prepare v and compute p*v
+        # DMA V block: GM -> L1
         v_bp = tl.make_block_ptr(V, (N_CTX, HEAD_DIM), (stride_vn, stride_vd),
                                  (start_n, 0), (BLOCK_N, HEAD_DIM), (1, 0))
-        v = tl.load(v_bp)
+        tile_copy(v_bp, v_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
+        v = tile_to_tensor(v_l1, writable=False)
         acc = tl.dot(p.to(tl.float16), v, acc)
         # update m_i and l_i
         l_i = l_i * alpha + l_ij
@@ -121,6 +133,16 @@ def _attn_fwd(Q, K, V, sm_scale, M, Out,  #
     V_ptr = V + off_z * stride_vb + off_h * stride_vh
     O_ptr = Out + off_z * stride_ob + off_h * stride_oh
 
+    # ---- allocate L1 buffers for Q, K, V ----
+    q_l1 = tile_alloc([tl.constexpr(BLOCK_M), tl.constexpr(HEAD_DIM)], tl.float16, L1)
+    k_l1 = tile_alloc([tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)], tl.float16, L1)
+    v_l1 = tile_alloc([tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)], tl.float16, L1)
+
+    # DMA Q tile into L1 once; it stays resident for the full KV loop
+    q_bp = tl.make_block_ptr(Q_ptr, (N_CTX, HEAD_DIM), (stride_qm, stride_qd),
+                             (start_m * BLOCK_M, 0), (BLOCK_M, HEAD_DIM), (1, 0))
+    tile_copy(q_bp, q_l1, [tl.constexpr(BLOCK_M), tl.constexpr(HEAD_DIM)])
+
     # initialize offsets
     offs_m = start_m * BLOCK_M + tl.arange(0, BLOCK_M)
     offs_n = tl.arange(0, BLOCK_N)
@@ -130,24 +152,20 @@ def _attn_fwd(Q, K, V, sm_scale, M, Out,  #
     acc = tl.zeros([BLOCK_M, HEAD_DIM], dtype=tl.float32)
     # load scales
     qk_scale = sm_scale * 1.44269504  # 1/log(2)
-    # load q: it will stay in SRAM throughout
-    q_bp = tl.make_block_ptr(Q_ptr, (N_CTX, HEAD_DIM), (stride_qm, stride_qd),
-                             (start_m * BLOCK_M, 0), (BLOCK_M, HEAD_DIM), (1, 0))
-    q = tl.load(q_bp)
     # stage 1: off-band (causal only); stage 3: full non-causal
     # For causal=True,  STAGE=3 → inner called with STAGE=1 (off-band) then STAGE=2 (on-band)
     # For causal=False, STAGE=1 → inner called with STAGE=3 (all)
     if STAGE & 1:
-        acc, l_i, m_i = _attn_fwd_inner(acc, l_i, m_i, q,  #
-                                        K_ptr, V_ptr,  #
+        acc, l_i, m_i = _attn_fwd_inner(acc, l_i, m_i, q_l1,  #
+                                        K_ptr, V_ptr, k_l1, v_l1,  #
                                         stride_kn, stride_kd, stride_vn, stride_vd,  #
                                         start_m, qk_scale,  #
                                         BLOCK_M, HEAD_DIM, BLOCK_N,  #
                                         4 - STAGE, offs_m, offs_n, N_CTX)
     # stage 2: on-band (diagonal, causal mask)
     if STAGE & 2:
-        acc, l_i, m_i = _attn_fwd_inner(acc, l_i, m_i, q,  #
-                                        K_ptr, V_ptr,  #
+        acc, l_i, m_i = _attn_fwd_inner(acc, l_i, m_i, q_l1,  #
+                                        K_ptr, V_ptr, k_l1, v_l1,  #
                                         stride_kn, stride_kd, stride_vn, stride_vd,  #
                                         start_m, qk_scale,  #
                                         BLOCK_M, HEAD_DIM, BLOCK_N,  #
