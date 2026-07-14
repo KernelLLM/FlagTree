@@ -34,6 +34,11 @@ def get_number_cores():
 #
 #  grid = (NUM_CORES,). Each core handles multiple (M_tile, N_tile) output
 #  blocks in round-robin fashion, iterating over K dimension.
+#
+#  The 2x L1 buffers are used in a ping-pong / alternating fashion: even K
+#  iterations use slot 0, odd iterations use slot 1.  Both halves are read
+#  and written on every two iterations, so the compiler cannot eliminate
+#  either slot or shrink the allocation.
 # =============================================================================
 @triton.jit
 def matmul_kernel(
@@ -55,8 +60,12 @@ def matmul_kernel(
     NUM_K_BLOCKS = tl.cdiv(K, BLOCK_K)
 
     # On-chip buffers: allocate 2x size in L1 to exercise insert_slice/extract_slice.
-    # mat_a_l1 holds [2*BLOCK_M, BLOCK_K] — twice the rows needed for one tile.
-    # mat_b_l1 holds [BLOCK_K, 2*BLOCK_N] — twice the columns needed for one tile.
+    # mat_a_l1 holds [2*BLOCK_M, BLOCK_K]:
+    #   slot 0 → rows [0      : BLOCK_M  ]  (even K iterations)
+    #   slot 1 → rows [BLOCK_M : 2*BLOCK_M] (odd  K iterations)
+    # mat_b_l1 holds [BLOCK_K, 2*BLOCK_N]:
+    #   slot 0 → cols [0      : BLOCK_N  ]  (even K iterations)
+    #   slot 1 → cols [BLOCK_N : 2*BLOCK_N] (odd  K iterations)
     mat_a_l1 = tle.dsa.alloc(
         [2 * BLOCK_M, BLOCK_K], dtype=mat_a.dtype.element_ty, mem_addr_space=tle.dsa.ascend.L1)
     mat_b_l1 = tle.dsa.alloc(
@@ -81,39 +90,45 @@ def matmul_kernel(
             (BLOCK_K, BLOCK_N), (1, 0))
 
         mat_c_acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-        # K-loop: exercise insert_slice / extract_slice on double-sized L1 buffers.
+        # K-loop: ping-pong between slot 0 and slot 1 of each 2x L1 buffer.
         #
-        # Layout convention:
-        #   mat_a_l1 is [2*BLOCK_M, BLOCK_K] — active tile lives in row-slot 0
-        #                                       (rows [0 : BLOCK_M]).
-        #   mat_b_l1 is [BLOCK_K, 2*BLOCK_N] — active tile lives in col-slot 0
-        #                                       (cols [0 : BLOCK_N]).
+        # k_idx % 2 == 0  →  A slot: row-offset 0,       B slot: col-offset 0
+        # k_idx % 2 == 1  →  A slot: row-offset BLOCK_M,  B slot: col-offset BLOCK_N
+        #
+        # Because both slots are written and read on alternating iterations the
+        # compiler cannot prove either half is dead and must keep the full 2x
+        # allocation live.
         for k_idx in range(0, NUM_K_BLOCKS):
-            # ── A: get a writable view of the 2x buffer, write the incoming
-            #    [BLOCK_M, BLOCK_K] GM tile into slot [0, 0] via insert_slice,
-            #    then extract the same slot back via extract_slice.
+            # Compute the row / col offset for this iteration's slot.
+            # tl.where on constexpr-shaped scalars gives a runtime-varying
+            # but type-stable offset that prevents constant folding.
+            a_row_off = tl.where(k_idx % 2 == 0, 0, BLOCK_M)
+            b_col_off = tl.where(k_idx % 2 == 0, 0, BLOCK_N)
+
+            # ── A: insert the incoming GM tile into the active slot, then
+            #    extract it back out for use in tl.dot.
             a_l1_full = tle.dsa.to_tensor(mat_a_l1, writable=True)
             a_l1_updated = tle.dsa.insert_slice(
                 a_l1_full, tl.load(a_block_ptr),
-                offsets=[0, 0],
+                offsets=[a_row_off, 0],
                 sizes=[BLOCK_M, BLOCK_K],
                 strides=[1, 1])
             a_tile = tle.dsa.extract_slice(
                 a_l1_updated,
-                offsets=[0, 0],
+                offsets=[a_row_off, 0],
                 sizes=[BLOCK_M, BLOCK_K],
                 strides=[1, 1])
 
-            # ── B: same pattern for the [BLOCK_K, 2*BLOCK_N] buffer.
+            # ── B: same ping-pong pattern for the [BLOCK_K, 2*BLOCK_N] buffer.
             b_l1_full = tle.dsa.to_tensor(mat_b_l1, writable=True)
             b_l1_updated = tle.dsa.insert_slice(
                 b_l1_full, tl.load(b_block_ptr),
-                offsets=[0, 0],
+                offsets=[0, b_col_off],
                 sizes=[BLOCK_K, BLOCK_N],
                 strides=[1, 1])
             b_tile = tle.dsa.extract_slice(
                 b_l1_updated,
-                offsets=[0, 0],
+                offsets=[0, b_col_off],
                 sizes=[BLOCK_K, BLOCK_N],
                 strides=[1, 1])
 
