@@ -80,6 +80,21 @@ class buffer_type(tl.dtype):
     def __ne__(self, other) -> bool:
         return not self.__eq__(other)
 
+    def is_ptr(self):
+        return False
+
+    def is_int(self):
+        return False
+
+    def is_floating(self):
+        return False
+
+    def is_block(self):
+        return False
+
+    def is_void(self):
+        return False
+
     @property
     def scalar(self):
         return self.element_ty

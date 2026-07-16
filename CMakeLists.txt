@@ -32,6 +32,7 @@ elseif(FLAGTREE_BACKEND STREQUAL "mthreads")
 elseif(FLAGTREE_BACKEND STREQUAL "ascend")
   set(CMAKE_C_COMPILER clang)
   set(CMAKE_CXX_COMPILER clang++)
+  add_definitions(-D__ASCEND__)
   set(FLIR_BUILD_INCUBATED ON CACHE BOOL "Build FLIR incubated passes" FORCE)
   set(LLVM_MAJOR_VERSION_21_COMPATIBLE ON CACHE BOOL "AscendNPU-IR build with llvm major version 21 or later" FORCE)
   add_definitions(-D__LLVM_MAJOR_VERSION_21_COMPATIBLE__)
@@ -237,6 +238,16 @@ if(FLAGTREE_BACKEND STREQUAL "ascend")
   add_subdirectory(${ASCENDNPU_IR_SRC_DIR} ${ASCENDNPU_IR_BINARY_DIR})
 endif()
 
+# TileIR dialect (FLIR) is needed by the TLE frontend for both Ascend DSA and
+# CUDA/NVIDIA GPGPU POC paths. For the default CUDA/NVIDIA build, only bring in
+# the TileIR dialect instead of all FLIR conversions.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/flir/CMakeLists.txt AND NOT TARGET TileIRIR)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/flir/include)
+  include_directories(${CMAKE_CURRENT_BINARY_DIR}/third_party/flir/include)
+  add_subdirectory(third_party/flir/include/mlir-ext/Dialect/TileIR)
+  add_subdirectory(third_party/flir/lib/Dialect/TileIR)
+endif()
+
 # -----
 
 # ------
@@ -290,9 +301,9 @@ if(TRITON_BUILD_PYTHON_MODULE)
     add_subdirectory(third_party/proton)
   endif()
 
-  # add TLE plugin
-  # just support ascend backend so far
-  if(FLAGTREE_BACKEND STREQUAL "ascend")
+  # add TLE plugin for Ascend and the default CUDA/NVIDIA build when FLIR is
+  # available.
+  if((FLAGTREE_BACKEND STREQUAL "ascend" OR NOT FLAGTREE_BACKEND) AND TARGET TileIRIR)
     list(APPEND TRITON_PLUGIN_NAMES "tle")
     add_subdirectory(third_party/tle/dsa)
   endif()

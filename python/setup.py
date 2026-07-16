@@ -705,13 +705,15 @@ def get_packages():
     if helper.flagtree_backend:
         if helper.flagtree_backend in helper.configs.language_extra_backends:
             packages.append(f"triton/language/extra/{helper.get_device_name()}")
-        if helper.flagtree_backend in helper.configs.experimental_tle_backends:
-            packages += [
-                "triton/experimental",
-                "triton/experimental/tle",
-                "triton/experimental/tle/language",
-                "triton/experimental/tle/language/dsa",
-            ]
+    if (not helper.flagtree_backend) or helper.flagtree_backend in helper.configs.experimental_tle_backends:
+        packages += [
+            "triton/experimental",
+            "triton/experimental/tle",
+            "triton/experimental/tle/language",
+            "triton/experimental/tle/language/dsa",
+            "triton/experimental/tle/language/gpu",
+        ]
+        if helper.flagtree_backend and helper.flagtree_backend in helper.configs.experimental_tle_backends:
             packages.append(f"triton/experimental/tle/language/dsa/{helper.get_device_name()}")
     packages += helper.get_extra_packages()
     packages += get_language_extra_packages()

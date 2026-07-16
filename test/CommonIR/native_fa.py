@@ -9,8 +9,6 @@ import triton.language as tl
 #  TLE / tile-dialect registration (needed for the dump pipeline)
 # =============================================================================
 import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
-from triton.experimental.tle.language.dsa.ascend import L1
-from triton.experimental.tle.language.dsa import tile_alloc, tile_copy, tile_to_tensor
 
 # =============================================================================
 #  Compile-time configuration
@@ -25,15 +23,15 @@ DIM = 32
 # =============================================================================
 
 
-# constexpr shape literals for tile_copy (must be tl.constexpr)
+# constexpr shape literals for tle.gpu.copy (must be tl.constexpr)
 CBM = tl.constexpr(BLOCK_M)
 CBN = tl.constexpr(BLOCK_N)
 CD  = tl.constexpr(DIM)
 
 
 @triton.jit
-def _attn_fwd_inner(acc, l_i, m_i, q_l1,  #
-                    K, V, k_l1, v_l1,  #
+def _attn_fwd_inner(acc, l_i, m_i, q,  #
+                    K, V,  #
                     stride_kn, stride_kd, stride_vn, stride_vd,  #
                     start_m, qk_scale,  #
                     BLOCK_M: tl.constexpr, HEAD_DIM: tl.constexpr, BLOCK_N: tl.constexpr,  #
@@ -47,16 +45,21 @@ def _attn_fwd_inner(acc, l_i, m_i, q_l1,  #
         lo = tl.multiple_of(lo, BLOCK_M)
     else:  # causal = False
         lo, hi = 0, N_CTX
+
+    k_l1 = tle.gpu.alloc(
+        [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)], dtype=tl.float16, mem_addr_space=tle.gpu.shared)
+    v_l1 = tle.gpu.alloc(
+        [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)], dtype=tl.float16, mem_addr_space=tle.gpu.shared)
+
     # loop over k, v and update accumulator
     for start_n in tl.range(lo, hi, BLOCK_N):
         start_n = tl.multiple_of(start_n, BLOCK_N)
         # DMA K block: GM -> L1
         k_bp = tl.make_block_ptr(K, (N_CTX, HEAD_DIM), (stride_kn, stride_kd),
                                  (start_n, 0), (BLOCK_N, HEAD_DIM), (1, 0))
-        tile_copy(k_bp, k_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
+        tle.gpu.copy(k_bp, k_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
         # -- compute qk from L1 buffers --
-        q = tile_to_tensor(q_l1, writable=False)
-        k = tile_to_tensor(k_l1, writable=False)
+        k = tle.gpu.to_tensor(k_l1, writable=False)
         qk = tl.dot(q, tl.trans(k))
         if STAGE == 2:
             mask = offs_m[:, None] >= (start_n + offs_n[None, :])
@@ -75,8 +78,8 @@ def _attn_fwd_inner(acc, l_i, m_i, q_l1,  #
         # DMA V block: GM -> L1
         v_bp = tl.make_block_ptr(V, (N_CTX, HEAD_DIM), (stride_vn, stride_vd),
                                  (start_n, 0), (BLOCK_N, HEAD_DIM), (1, 0))
-        tile_copy(v_bp, v_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
-        v = tile_to_tensor(v_l1, writable=False)
+        tle.gpu.copy(v_bp, v_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
+        v = tle.gpu.to_tensor(v_l1, writable=False)
         acc = tl.dot(p.to(tl.float16), v, acc)
         # update m_i and l_i
         l_i = l_i * alpha + l_ij
@@ -134,14 +137,17 @@ def _attn_fwd(Q, K, V, sm_scale, M, Out,  #
     O_ptr = Out + off_z * stride_ob + off_h * stride_oh
 
     # ---- allocate L1 buffers for Q, K, V ----
-    q_l1 = tile_alloc([tl.constexpr(BLOCK_M), tl.constexpr(HEAD_DIM)], tl.float16, L1)
-    k_l1 = tile_alloc([tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)], tl.float16, L1)
-    v_l1 = tile_alloc([tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)], tl.float16, L1)
-
+    q_l1 = tle.gpu.alloc(
+        [tl.constexpr(BLOCK_M), tl.constexpr(HEAD_DIM)], dtype=tl.float16, mem_addr_space=tle.gpu.shared)
     # DMA Q tile into L1 once; it stays resident for the full KV loop
     q_bp = tl.make_block_ptr(Q_ptr, (N_CTX, HEAD_DIM), (stride_qm, stride_qd),
                              (start_m * BLOCK_M, 0), (BLOCK_M, HEAD_DIM), (1, 0))
-    tile_copy(q_bp, q_l1, [tl.constexpr(BLOCK_M), tl.constexpr(HEAD_DIM)])
+    tle.gpu.copy(q_bp, q_l1, [tl.constexpr(BLOCK_M), tl.constexpr(HEAD_DIM)])
+    q = tle.gpu.to_tensor(q_l1, writable=False)
+    k_l1 = tle.gpu.alloc(
+        [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)], dtype=tl.float16, mem_addr_space=tle.gpu.shared)
+    v_l1 = tle.gpu.alloc(
+        [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)], dtype=tl.float16, mem_addr_space=tle.gpu.shared)
 
     # initialize offsets
     offs_m = start_m * BLOCK_M + tl.arange(0, BLOCK_M)
@@ -153,23 +159,57 @@ def _attn_fwd(Q, K, V, sm_scale, M, Out,  #
     # load scales
     qk_scale = sm_scale * 1.44269504  # 1/log(2)
     # stage 1: off-band (causal only); stage 3: full non-causal
-    # For causal=True,  STAGE=3 → inner called with STAGE=1 (off-band) then STAGE=2 (on-band)
-    # For causal=False, STAGE=1 → inner called with STAGE=3 (all)
     if STAGE & 1:
-        acc, l_i, m_i = _attn_fwd_inner(acc, l_i, m_i, q_l1,  #
-                                        K_ptr, V_ptr, k_l1, v_l1,  #
-                                        stride_kn, stride_kd, stride_vn, stride_vd,  #
-                                        start_m, qk_scale,  #
-                                        BLOCK_M, HEAD_DIM, BLOCK_N,  #
-                                        4 - STAGE, offs_m, offs_n, N_CTX)
+        if STAGE == 1:
+            lo, hi = 0, N_CTX
+        else:
+            lo, hi = 0, start_m * BLOCK_M
+        for start_n in tl.range(lo, hi, BLOCK_N):
+            start_n = tl.multiple_of(start_n, BLOCK_N)
+            k_bp = tl.make_block_ptr(K_ptr, (N_CTX, HEAD_DIM), (stride_kn, stride_kd),
+                                     (start_n, 0), (BLOCK_N, HEAD_DIM), (1, 0))
+            tle.gpu.copy(k_bp, k_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
+            k = tle.gpu.to_tensor(k_l1, writable=False)
+            qk = tl.dot(q, tl.trans(k))
+            m_ij = tl.maximum(m_i, tl.max(qk, 1) * qk_scale)
+            qk = qk * qk_scale - m_ij[:, None]
+            p = tl.math.exp2(qk)
+            alpha = tl.math.exp2(m_i - m_ij)
+            l_ij = tl.sum(p, 1)
+            acc = acc * alpha[:, None]
+            v_bp = tl.make_block_ptr(V_ptr, (N_CTX, HEAD_DIM), (stride_vn, stride_vd),
+                                     (start_n, 0), (BLOCK_N, HEAD_DIM), (1, 0))
+            tle.gpu.copy(v_bp, v_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
+            v = tle.gpu.to_tensor(v_l1, writable=False)
+            acc = tl.dot(p.to(tl.float16), v, acc)
+            l_i = l_i * alpha + l_ij
+            m_i = m_ij
     # stage 2: on-band (diagonal, causal mask)
     if STAGE & 2:
-        acc, l_i, m_i = _attn_fwd_inner(acc, l_i, m_i, q_l1,  #
-                                        K_ptr, V_ptr, k_l1, v_l1,  #
-                                        stride_kn, stride_kd, stride_vn, stride_vd,  #
-                                        start_m, qk_scale,  #
-                                        BLOCK_M, HEAD_DIM, BLOCK_N,  #
-                                        2, offs_m, offs_n, N_CTX)
+        lo, hi = start_m * BLOCK_M, (start_m + 1) * BLOCK_M
+        lo = tl.multiple_of(lo, BLOCK_M)
+        for start_n in tl.range(lo, hi, BLOCK_N):
+            start_n = tl.multiple_of(start_n, BLOCK_N)
+            k_bp = tl.make_block_ptr(K_ptr, (N_CTX, HEAD_DIM), (stride_kn, stride_kd),
+                                     (start_n, 0), (BLOCK_N, HEAD_DIM), (1, 0))
+            tle.gpu.copy(k_bp, k_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
+            k = tle.gpu.to_tensor(k_l1, writable=False)
+            qk = tl.dot(q, tl.trans(k))
+            mask = offs_m[:, None] >= (start_n + offs_n[None, :])
+            qk = qk * qk_scale + tl.where(mask, 0, -1.0e6)
+            m_ij = tl.maximum(m_i, tl.max(qk, 1))
+            qk -= m_ij[:, None]
+            p = tl.math.exp2(qk)
+            alpha = tl.math.exp2(m_i - m_ij)
+            l_ij = tl.sum(p, 1)
+            acc = acc * alpha[:, None]
+            v_bp = tl.make_block_ptr(V_ptr, (N_CTX, HEAD_DIM), (stride_vn, stride_vd),
+                                     (start_n, 0), (BLOCK_N, HEAD_DIM), (1, 0))
+            tle.gpu.copy(v_bp, v_l1, [tl.constexpr(BLOCK_N), tl.constexpr(HEAD_DIM)])
+            v = tle.gpu.to_tensor(v_l1, writable=False)
+            acc = tl.dot(p.to(tl.float16), v, acc)
+            l_i = l_i * alpha + l_ij
+            m_i = m_ij
     # epilogue
     m_i += tl.math.log2(l_i)
     acc = acc / l_i[:, None]
@@ -198,6 +238,7 @@ class _DumpOptions:
     allowed_dot_input_precisions = ("tf32", "tf32x3", "ieee")
     max_num_imprecise_acc_default = 0
     default_dot_input_precision = "ieee"
+    sanitize_overflow = False
 
 
 def _dump_signature():
@@ -207,11 +248,12 @@ def _dump_signature():
     HEAD_DIM, BLOCK_M, BLOCK_N, STAGE.
     """
     sig = {}
-    # tensor pointers
-    for name in ("Q", "K", "V", "Out"):
-        sig[name] = "*fp16"
+    sig["Q"] = "*fp16"
+    sig["K"] = "*fp16"
+    sig["V"] = "*fp16"
     sig["sm_scale"] = "fp32"
     sig["M"] = "*fp32"
+    sig["Out"] = "*fp16"
     # strides: q, k, v, o — each has b/h/m/d
     for t in ("q", "k", "v", "o"):
         for dim in ("b", "h", ("m" if t in ("q", "o") else "n"), "d"):
@@ -219,12 +261,11 @@ def _dump_signature():
     sig["Z"]     = "i32"
     sig["H"]     = "i32"
     sig["N_CTX"] = "i32"
-    # constexprs
-    sig["HEAD_DIM"] = "constexpr"
-    sig["BLOCK_M"]  = "constexpr"
-    sig["BLOCK_N"]  = "constexpr"
-    sig["STAGE"]    = "constexpr"
     return sig
+
+
+def _attn_fwd_jit():
+    return getattr(_attn_fwd, "fn", _attn_fwd)
 
 
 def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is_causal=False):
@@ -258,7 +299,8 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is
         "STAGE":    stage,
     }
 
-    src = ASTSource(_attn_fwd, signature, constants)
+    kernel = _attn_fwd_jit()
+    src = ASTSource(kernel.fn, signature, constants)
     context = ir.context()
     ir.load_dialects(context)
     tle_ir.load_dialects(context)
@@ -273,7 +315,7 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is
     # codegen_fns: tl.dot needs a target-provided "min_dot_size"; the ascend
     # backend simply returns (1,1,1), so supply that inline (no full backend).
     codegen_fns = {"min_dot_size": lambda lhsType, rhsType: (1, 1, 1)}
-    module = ast_to_ttir(_attn_fwd, src, context, _DumpOptions(), codegen_fns, {})
+    module = ast_to_ttir(kernel, src, context, _DumpOptions(), codegen_fns, {})
 
     # Ensure the produced IR is legal before writing it out.
     ok = module.verify()

@@ -30,7 +30,10 @@ from .core import (
     tile_cube_wait,
 )
 
-from . import ascend
+try:
+    from . import ascend
+except ModuleNotFoundError:
+    ascend = None
 
 __all__ = [
     "alloc",
@@ -60,5 +63,7 @@ __all__ = [
     "tile_gm_offset",
     "tile_cube_launch",
     "tile_cube_wait",
-    "ascend",
 ]
+
+if ascend is not None:
+    __all__.append("ascend")

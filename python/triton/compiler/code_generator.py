@@ -31,6 +31,13 @@ def mangle_ty(ty):
         elt = mangle_ty(ty.scalar)
         shape = '_'.join(map(str, ty.shape))
         return f'{elt}S{shape}S'
+    if hasattr(ty, "element_ty") and hasattr(ty, "shape"):
+        elt = mangle_ty(ty.element_ty)
+        shape = '_'.join(map(str, ty.shape))
+        space = getattr(ty, "space", None)
+        space_name = str(space) if space is not None else "default"
+        space_name = re.sub(r'\W+', '_', space_name)
+        return f'B{elt}S{shape}S{space_name}'
     if ty.is_void():
         return 'V'
     raise TypeError(f'Unsupported type {ty}')
@@ -54,6 +61,16 @@ def _is_triton_value(o: Any) -> bool:
 
 def _is_triton_tensor(o: Any) -> bool:
     return isinstance(o, tensor)
+
+
+def _wrap_ir_value(handle, ty):
+    if hasattr(ty, "element_ty") and hasattr(ty, "shape"):
+        try:
+            from triton.experimental.tle.language.dsa.types import buffer as tle_buffer
+            return tle_buffer(handle, ty)
+        except Exception:
+            pass
+    return tensor(handle, ty)
 
 
 def _is_constexpr(o: Any) -> bool:
@@ -430,7 +447,7 @@ class CodeGenerator(ast.NodeVisitor):
                 if isinstance(self.prototype.param_types[idx], nv_tma_desc_type):
                     self.fn.set_arg_attr(idx, "tt.nv_tma_desc", 1)
 
-                arg_values.append(tensor(self.fn.args(idx), self.prototype.param_types[idx]))
+                arg_values.append(_wrap_ir_value(self.fn.args(idx), self.prototype.param_types[idx]))
                 idx += 1
 
         insert_pt = self.builder.get_insertion_block()
@@ -881,9 +898,8 @@ class CodeGenerator(ast.NodeVisitor):
             self.lscope[name] = new_def
             self.local_defs[name] = new_def
 
-        for stmt in node.orelse:
-            assert False, "Not implemented"
-            ast.NodeVisitor.generic_visit(self, stmt)
+        if node.orelse:
+            raise RuntimeError("while-else is not supported")
 
     def visit_Subscript(self, node):
         assert node.ctx.__class__.__name__ == "Load"
@@ -1027,9 +1043,8 @@ class CodeGenerator(ast.NodeVisitor):
         for i, name in enumerate(names):
             self.set_value(name, language.core.tensor(for_op.get_result(i), yields[i].type))
 
-        for stmt in node.orelse:
-            assert False, "Don't know what to do with else after for"
-            ast.NodeVisitor.generic_visit(self, stmt)
+        if node.orelse:
+            raise RuntimeError("for-else is not supported")
 
     def visit_Slice(self, node):
         lower = self.visit(node.lower)

@@ -156,9 +156,10 @@ def extract_tle_hints_scope(generator: TleCodeGenerator):
 triton_compiler.compile = tle_patch_for_triton_compile()
 code_generator.CodeGenerator = TleCodeGenerator
 
-from .language import dsa
+from .language import dsa, gpu
 
 __all__ = [
     "dsa",
+    "gpu",
     "scope",
 ]

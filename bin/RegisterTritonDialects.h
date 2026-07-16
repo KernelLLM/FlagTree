@@ -10,7 +10,9 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
 #include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
+#ifdef __ASCEND__
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
+#endif
 #ifdef __NVIDIA__
 #include "triton/Dialect/TritonNvidiaGPU/IR/Dialect.h"
 #endif
@@ -94,7 +96,9 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
   // TODO: register Triton & TritonGPU passes
   registry.insert<
       mlir::triton::TritonDialect, mlir::triton::tile::TileIRDialect,
+#ifdef __ASCEND__
       mlir::hivm::HIVMDialect,
+#endif
       mlir::cf::ControlFlowDialect,
 #ifdef __NVIDIA__
       mlir::triton::nvidia_gpu::TritonNvidiaGPUDialect,

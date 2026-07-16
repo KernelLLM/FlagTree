@@ -74,6 +74,10 @@ static hivm::AddressSpace mapMemSpaceToHIVM(tile::MemorySpace tileSpace) {
   case tile::MemorySpace::L0B: return hivm::AddressSpace::L0B;
   case tile::MemorySpace::L0C: return hivm::AddressSpace::L0C;
   case tile::MemorySpace::UB:  return hivm::AddressSpace::UB;
+  case tile::MemorySpace::Global: return hivm::AddressSpace::GM;
+  case tile::MemorySpace::Shared: return hivm::AddressSpace::UB;
+  case tile::MemorySpace::Local: return hivm::AddressSpace::UB;
+  case tile::MemorySpace::Register: return hivm::AddressSpace::UB;
   }
   llvm_unreachable("unknown TileIR memory space");
 }

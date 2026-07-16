@@ -1,5 +1,8 @@
 // Copyright 2026- Xcoresigma Technology Co., Ltd
 
+#include <algorithm>
+#include <cctype>
+
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -11,13 +14,15 @@
 
 #include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
 
-#include "bishengir/Dialect/HIVM/IR/HIVM.h"
-
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "ir.h"
 
@@ -28,33 +33,151 @@ constexpr unsigned kIntegerAttrBitWidth = 64;
 
 struct DSAOpBuilder : public TritonOpBuilder {};
 
-// Convert an address-space attribute to a TileIR MemorySpace enum. The DSA
-// layer passes a hivm::AddressSpaceAttr (from ascend's get_target_attribute);
-// decode it so buffers carry their real space (L1/L0A/...). Falls back to UB.
+static std::string attrToLowerString(Attribute attr) {
+  if (!attr)
+    return "";
+  std::string text;
+  llvm::raw_string_ostream os(text);
+  attr.print(os);
+  os.flush();
+  std::transform(text.begin(), text.end(), text.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  return text;
+}
+
+// Convert an address-space attribute to a TileIR MemorySpace enum. Keep this
+// independent from target-specific dialect classes so TLE can be built for
+// CUDA/NVIDIA as well as Ascend.
 static mlir::triton::tile::MemorySpace attrToMemSpace(Attribute attr) {
   using MS = mlir::triton::tile::MemorySpace;
-  if (auto as = attr.dyn_cast_or_null<mlir::hivm::AddressSpaceAttr>()) {
-    switch (as.getAddressSpace()) {
-    case mlir::hivm::AddressSpace::GM:  return MS::GM;
-    case mlir::hivm::AddressSpace::L1:  return MS::L1;
-    case mlir::hivm::AddressSpace::L0A: return MS::L0A;
-    case mlir::hivm::AddressSpace::L0B: return MS::L0B;
-    case mlir::hivm::AddressSpace::L0C: return MS::L0C;
-    case mlir::hivm::AddressSpace::UB:  return MS::UB;
-    default: return MS::UB;
-    }
-  }
-  // Legacy / string-based fallback.
-  if (auto strAttr = attr.dyn_cast_or_null<StringAttr>()) {
-    auto name = strAttr.getValue();
-    if (name == "GM")  return MS::GM;
-    if (name == "L1")  return MS::L1;
-    if (name == "L0A") return MS::L0A;
-    if (name == "L0B") return MS::L0B;
-    if (name == "L0C") return MS::L0C;
-    if (name == "UB")  return MS::UB;
-  }
+  auto text = attrToLowerString(attr);
+  if (text.find("register") != std::string::npos)
+    return MS::Register;
+  if (text.find("shared") != std::string::npos)
+    return MS::Shared;
+  if (text.find("global") != std::string::npos)
+    return MS::Global;
+  if (text.find("local") != std::string::npos)
+    return MS::Local;
+  if (text.find("l0a") != std::string::npos)
+    return MS::L0A;
+  if (text.find("l0b") != std::string::npos)
+    return MS::L0B;
+  if (text.find("l0c") != std::string::npos)
+    return MS::L0C;
+  if (text.find("l1") != std::string::npos)
+    return MS::L1;
+  if (text.find("gm") != std::string::npos)
+    return MS::GM;
+  if (text.find("ub") != std::string::npos)
+    return MS::UB;
   return MS::UB;
+}
+
+static bool isTileBuffer(Value value) {
+  return value && isa<mlir::triton::tile::BufType>(value.getType());
+}
+
+static bool isTTTensorOrPointer(Value value) {
+  if (!value)
+    return false;
+  auto type = value.getType();
+  return isa<RankedTensorType, mlir::triton::PointerType>(type);
+}
+
+static Value materializeTileBuffer(Value value,
+                                   llvm::DenseMap<Value, Value> &bufferValues) {
+  while (isTileBuffer(value)) {
+    auto it = bufferValues.find(value);
+    if (it == bufferValues.end())
+      return Value();
+    value = it->second;
+  }
+  return value;
+}
+
+static void eraseIfUnused(Operation *op) {
+  if (!op)
+    return;
+  if (llvm::all_of(op->getResults(),
+                   [](Value result) { return result.use_empty(); })) {
+    op->erase();
+  }
+}
+
+static void lowerGpuTileIRToTTIR(ModuleOp module) {
+  OpBuilder builder(module.getContext());
+  llvm::DenseMap<Value, Value> bufferValues;
+  SmallVector<Operation *> eraseOps;
+
+  module.walk([&](Operation *op) {
+    if (auto copyOp = dyn_cast<mlir::triton::tile::CopyOp>(op)) {
+      Value src = materializeTileBuffer(copyOp.getSrc(), bufferValues);
+      if (!src)
+        src = copyOp.getSrc();
+      Value dst = copyOp.getDst();
+      if (isTileBuffer(dst)) {
+        bufferValues[dst] = src;
+        eraseOps.push_back(op);
+        return;
+      }
+      if (isTTTensorOrPointer(dst) && isTTTensorOrPointer(src)) {
+        builder.setInsertionPoint(op);
+        builder.create<mlir::triton::StoreOp>(
+            op->getLoc(), dst, src, mlir::triton::CacheModifier::NONE,
+            mlir::triton::EvictionPolicy::NORMAL);
+        eraseOps.push_back(op);
+      }
+      return;
+    }
+
+    if (auto storeTensorOp = dyn_cast<mlir::triton::tile::StoreTensorOp>(op)) {
+      bufferValues[storeTensorOp.getDst()] = storeTensorOp.getSrc();
+      eraseOps.push_back(op);
+      return;
+    }
+
+    if (auto subviewOp = dyn_cast<mlir::triton::tile::SubViewOp>(op)) {
+      if (Value src = materializeTileBuffer(subviewOp.getSource(), bufferValues))
+        bufferValues[subviewOp.getResult()] = src;
+      eraseOps.push_back(op);
+      return;
+    }
+
+    if (auto toTensorOp = dyn_cast<mlir::triton::tile::ToTensorOp>(op)) {
+      Value value = materializeTileBuffer(toTensorOp.getSrc(), bufferValues);
+      if (!value) {
+        toTensorOp.emitError("cannot lower tile.to_tensor without a preceding "
+                             "tile.copy or tile.store_tensor");
+        return;
+      }
+
+      builder.setInsertionPoint(op);
+      Value replacement = value;
+      if (isa<mlir::triton::PointerType>(value.getType())) {
+        auto load = builder.create<mlir::triton::LoadOp>(
+            op->getLoc(), value, mlir::triton::CacheModifier::NONE,
+            mlir::triton::EvictionPolicy::NORMAL, false);
+        replacement = load.getResult();
+      }
+      toTensorOp.getResult().replaceAllUsesWith(replacement);
+      eraseOps.push_back(op);
+    }
+  });
+
+  for (Operation *op : llvm::reverse(eraseOps))
+    eraseIfUnused(op);
+
+  SmallVector<Operation *> cleanupOps;
+  module.walk([&](Operation *op) {
+    if (isa<mlir::triton::tile::AllocOp, mlir::triton::tile::SubViewOp,
+            mlir::triton::tile::CopyOp, mlir::triton::tile::StoreTensorOp,
+            mlir::triton::tile::ToTensorOp>(op)) {
+      cleanupOps.push_back(op);
+    }
+  });
+  for (Operation *op : llvm::reverse(cleanupOps))
+    eraseIfUnused(op);
 }
 
 void init_triton_tle(py::module &&m) {
@@ -67,10 +190,23 @@ void init_triton_tle(py::module &&m) {
     context.loadAllAvailableDialects();
   });
 
-  auto tle_cls = py::class_<DSAOpBuilder, TritonOpBuilder>(
+  auto tle_cls = py::class_<DSAOpBuilder>(
       m, "tle_builder", py::module_local(), py::dynamic_attr())
       .def(py::init<mlir::MLIRContext *>())
+      .def("restore_insertion_point",
+           [](DSAOpBuilder &self, OpBuilder::InsertPoint pt) {
+             self.restoreInsertionPoint(pt);
+           })
+      .def("set_loc",
+           [](DSAOpBuilder &self, Location loc) { self.setLastLoc(loc); })
+      .def("set_loc",
+           [](DSAOpBuilder &self, const std::string &fileName, int line,
+              int column) { self.setLastLoc(fileName, line, column); })
       .def("dsa_get_null_attr", [](DSAOpBuilder &self) { return Attribute(); })
+      .def("dsa_get_string_attr",
+           [](DSAOpBuilder &self, const std::string &name) -> Attribute {
+             return self.getBuilder().getStringAttr(name);
+           })
       .def("dsa_get_buffer_type",
            [](DSAOpBuilder &self, std::vector<int64_t> &shape,
               Type &elementType, const Attribute &memorySpace) -> Type {
@@ -337,6 +473,8 @@ void init_triton_tle(py::module &&m) {
     context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
   });
+  m.def("lower_gpu_tileir_to_ttir",
+        [](ModuleOp &module) { lowerGpuTileIRToTTIR(module); });
 
   // TileIR buffer / tensor type construction
   tle_cls.def("tile_get_buffer_type",
@@ -362,7 +500,8 @@ void init_triton_tle(py::module &&m) {
              tileBufType, bufType.getMemorySpace(),
              /*shape=*/mlir::ArrayAttr(), /*dtype=*/mlir::TypeAttr(),
              /*policy=*/mlir::triton::tile::PolicyAttr(),
-             /*layout=*/mlir::triton::tile::LayoutAttr(),
+             /*layout=*/mlir::triton::tile::LayoutAttr::get(
+                 self.getBuilder().getContext(), mlir::triton::tile::Layout::ND),
              /*lifetime=*/mlir::triton::tile::LifetimeAttr(),
              /*comment=*/mlir::StringAttr());
        })
@@ -373,7 +512,8 @@ void init_triton_tle(py::module &&m) {
           std::vector<Value> & /*shape*/, bool inter_no_alias) -> void {
          auto op = self.create<mlir::triton::tile::CopyOp>(
              src, dst, /*engine=*/mlir::triton::tile::EngineAttr(),
-             /*src_layout=*/mlir::triton::tile::LayoutAttr(),
+             /*src_layout=*/mlir::triton::tile::LayoutAttr::get(
+                 self.getBuilder().getContext(), mlir::triton::tile::Layout::ND),
              /*dst_nz_layout=*/mlir::triton::tile::NZLayoutAttr(),
              /*transpose=*/mlir::UnitAttr(), /*comment=*/mlir::StringAttr());
          if (inter_no_alias) {
