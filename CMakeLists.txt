@@ -258,6 +258,17 @@ endif()
 include_directories(${PROJECT_SOURCE_DIR}/third_party)
 include_directories(${PROJECT_BINARY_DIR}/third_party) # Tablegen'd files
 
+# TileIR dialect from FLIR is used by the TLE GPU -> Common IR POC path.
+# Keep it optional at configure time so non-POC builds without FLIR are not
+# forced to download the dependency.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/flir/CMakeLists.txt" AND NOT TARGET TileIRIR)
+  add_definitions(-D__FLIR_TILEIR__)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/flir/include)
+  include_directories(${CMAKE_CURRENT_BINARY_DIR}/third_party/flir/include)
+  add_subdirectory(third_party/flir/include/mlir-ext/Dialect/TileIR)
+  add_subdirectory(third_party/flir/lib/Dialect/TileIR)
+endif()
+
 # link_directories(${LLVM_LIBRARY_DIR})
 if (FLAGTREE_BACKEND MATCHES "^(cambricon|aipu|tsingmicro|enflame|rpu|thrive)$")
   include_directories(${PROJECT_SOURCE_DIR}/include)

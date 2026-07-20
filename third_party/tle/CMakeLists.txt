@@ -7,6 +7,14 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/utils/include)
 
 add_subdirectory(dialect)
 if(TRITON_BUILD_PYTHON_MODULE)
+  set(TLE_TILEIR_LINK_LIBS "")
+  if(TARGET TileIRIR)
+    list(APPEND TLE_TILEIR_LINK_LIBS TileIRIR)
+  endif()
+  if(TARGET TileIRTransforms)
+    list(APPEND TLE_TILEIR_LINK_LIBS TileIRTransforms)
+  endif()
+
   add_triton_plugin(TritonTLE
     ${CMAKE_CURRENT_SOURCE_DIR}/triton_tle.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/triton_tle_raw.cc
@@ -16,6 +24,7 @@ if(TRITON_BUILD_PYTHON_MODULE)
     MLIRTargetLLVMIRImport
     TritonTLETransforms
     TritonIR
+    ${TLE_TILEIR_LINK_LIBS}
     )
 
   target_link_libraries(TritonTLE PRIVATE Python3::Module pybind11::headers MLIRTargetLLVMIRImport)
