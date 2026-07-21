@@ -250,6 +250,10 @@ class CUDABackend(BaseBackend):
 
     def load_dialects(self, ctx):
         nvidia.load_dialects(ctx)
+        if hasattr(tle, "load_dialects"):
+            tle.load_dialects(ctx)
+        if hasattr(tle, "load_tile_dialects"):
+            tle.load_tile_dialects(ctx)
         if CUDABackend.instrumentation:
             CUDABackend.instrumentation.load_dialects(ctx)
 
@@ -258,6 +262,13 @@ class CUDABackend(BaseBackend):
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
         passes.common.add_inliner(pm)
+        pm.run(mod, 'make_ttir.inliner')
+
+        if hasattr(tle, "lower_gpu_tileir_to_ttir"):
+            tle.lower_gpu_tileir_to_ttir(mod)
+
+        pm = ir.pass_manager(mod.context)
+        pm.enable_debug()
         passes.ttir.add_rewrite_tensor_pointer(pm)
         if capability // 10 < 9:
             passes.ttir.add_rewrite_tensor_descriptor_to_pointer(pm)

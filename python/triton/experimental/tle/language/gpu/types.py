@@ -1,5 +1,6 @@
 # flagtree tle
 
+import os
 import triton.language.core as tl
 from typing import Optional, List, Tuple
 from abc import abstractmethod
@@ -32,6 +33,29 @@ def _storage_to_memdesc_space(storage: scope) -> str:
     if storage is tmem:
         return "tmem"
     raise ValueError(f"Unsupported TLE buffered_tensor storage: {storage}")
+
+
+def _storage_to_tile_space(storage: scope) -> str:
+    if storage is smem:
+        return "shared"
+    if storage is tmem:
+        return "local"
+    raise ValueError(f"Unsupported TLE TileIR storage: {storage}")
+
+
+def _tileir_mode() -> bool:
+    return os.environ.get("TLE_GPU_TILEIR_MODE") == "1"
+
+
+_TILE_PIPE_V = 1
+_TILE_PIPE_S = 6
+_TILE_EVENT_READY = 0
+_TILE_EVENT_CLOSE = 1
+
+
+def _tile_sync_available(builder) -> bool:
+    return (_tileir_mode() and hasattr(builder, "create_tile_pipe_barrier")
+            and hasattr(builder, "create_tile_set_flag") and hasattr(builder, "create_tile_wait_flag"))
 
 
 class layout:
@@ -312,6 +336,16 @@ class buffered_tensor(tl.base_value):
         slot_layout = _make_slot_layout(self.type.layout, slot_shape)
         slot_ty = buffered_tensor_type(self.dtype, slot_shape, self.type.storage, slot_layout, _semantic,
                                        alloc_shape=slot_shape)
+        if _tileir_mode():
+            if not hasattr(_semantic.builder, "create_tile_subview"):
+                raise RuntimeError("TLE GPU TileIR mode requires a TileIR-enabled TLE builder")
+            offsets = [stage_tensor.handle]
+            for _ in range(len(self.shape) - 1):
+                offsets.append(_semantic.to_tensor(0).handle)
+            slot_handle = _semantic.builder.create_tile_subview(self.handle, offsets, slot_shape,
+                                                                [1] * len(slot_shape))
+            return buffered_tensor(slot_handle, self.dtype, slot_shape, self.type.storage, slot_layout, _semantic,
+                                   alloc_shape=slot_ty.alloc_shape)
         slot_handle = _semantic.builder.create_memdesc_index(slot_ty.to_ir(_semantic.builder), self.handle,
                                                              stage_tensor.handle)
         return buffered_tensor(slot_handle, self.dtype, slot_shape, self.type.storage, slot_layout, _semantic,
@@ -408,6 +442,13 @@ class buffered_tensor_type(tl.block_type):
     def to_ir(self, builder: ir.builder) -> None:
         shape = self.shape
         builder = self.semantic.builder
+        if _tileir_mode() and hasattr(builder, "tile_get_buffer_type"):
+            memory_space = builder.tile_get_string_attr(_storage_to_tile_space(self.storage))
+            return builder.tile_get_buffer_type(
+                [int(tl._unwrap_if_constexpr(dim)) for dim in shape],
+                self.element_ty.to_ir(builder),
+                memory_space,
+            )
         return builder.get_memdesc_type(
             shape,
             self.element_ty.to_ir(builder),
@@ -747,6 +788,9 @@ class pipe_writer(_pipe_endpoint):
     @tl.builtin
     def acquire(self, iter, _semantic=None):
         stage, phase = self.pipe._stage_phase(iter, _semantic=_semantic)
+        if _tile_sync_available(_semantic.builder):
+            _semantic.builder.create_tile_pipe_barrier(_TILE_PIPE_S)
+            return self.pipe._make_slot(stage, _semantic=_semantic)
         _semantic.builder.create_pipe_writer_acquire(self.pipe._field_handles(), stage.handle, phase.handle,
                                                      self.pipe.capacity, self.pipe.scope, self.pipe._ir_name(),
                                                      self.pipe._field_names())
@@ -755,6 +799,9 @@ class pipe_writer(_pipe_endpoint):
     @tl.builtin
     def commit(self, iter, _semantic=None):
         stage, _ = self.pipe._stage_phase(iter, _semantic=_semantic)
+        if _tile_sync_available(_semantic.builder):
+            _semantic.builder.create_tile_set_flag(_TILE_PIPE_S, _TILE_PIPE_V, _TILE_EVENT_READY)
+            return
         _semantic.builder.create_pipe_writer_commit(self.pipe._field_handles(), stage.handle, self.pipe.capacity,
                                                     self.pipe.scope, self.pipe._ir_name(), self.pipe._field_names())
 
@@ -763,6 +810,9 @@ class pipe_writer(_pipe_endpoint):
         if self.pipe.one_shot:
             raise ValueError("tle.pipe one_shot pipes do not support close")
         stage, phase = self.pipe._stage_phase(iter, _semantic=_semantic)
+        if _tile_sync_available(_semantic.builder):
+            _semantic.builder.create_tile_set_flag(_TILE_PIPE_S, _TILE_PIPE_V, _TILE_EVENT_CLOSE)
+            return
         _semantic.builder.create_pipe_writer_close(self.pipe._field_handles(), stage.handle, phase.handle,
                                                    self.pipe.capacity, self.pipe.scope, self.pipe._ir_name(),
                                                    self.pipe._field_names())
@@ -780,6 +830,10 @@ class pipe_reader(_pipe_endpoint):
     @tl.builtin
     def wait(self, iter, _semantic=None):
         stage, phase = self.pipe._stage_phase(iter, _semantic=_semantic)
+        if _tile_sync_available(_semantic.builder):
+            _semantic.builder.create_tile_wait_flag(_TILE_PIPE_S, _TILE_PIPE_V, _TILE_EVENT_READY)
+            slot = self.pipe._make_slot(stage, _semantic=_semantic, field_names=self.field_names)
+            return pipe_wait_result(slot, _semantic.to_tensor(False))
         is_closed = _semantic.builder.create_pipe_reader_wait(self.pipe._field_handles(), stage.handle, phase.handle,
                                                               self.pipe.capacity, self.pipe.scope, self.pipe._ir_name(),
                                                               self.pipe._field_names(), self.reader_name or "",
@@ -790,6 +844,9 @@ class pipe_reader(_pipe_endpoint):
     @tl.builtin
     def release(self, iter, _semantic=None):
         stage, _ = self.pipe._stage_phase(iter, _semantic=_semantic)
+        if _tile_sync_available(_semantic.builder):
+            _semantic.builder.create_tile_set_flag(_TILE_PIPE_V, _TILE_PIPE_S, _TILE_EVENT_READY)
+            return
         _semantic.builder.create_pipe_reader_release(self.pipe._field_handles(), stage.handle,
                                                      self.pipe.capacity, self.pipe.scope, self.pipe._ir_name(),
                                                      self.pipe._field_names(), self.reader_name or "",
