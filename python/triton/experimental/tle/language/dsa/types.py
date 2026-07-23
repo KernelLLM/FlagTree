@@ -1,6 +1,6 @@
 from triton._C.libtriton import ir
 
-from typing import List
+from typing import List, Tuple
 import triton.language.core as tl
 from functools import wraps
 
@@ -83,6 +83,9 @@ class buffer_type(tl.dtype):
     @property
     def scalar(self):
         return self.element_ty
+
+    def _unflatten_ir(self, handles: List[ir.value], cursor: int) -> Tuple[tl.base_value, int]:
+        return buffer(handles[cursor], self), cursor + 1
 
 
 # -----------------------
