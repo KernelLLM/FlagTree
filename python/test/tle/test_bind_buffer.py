@@ -23,7 +23,7 @@ def compile_kernel(kernel, signature, constants):
     context = ir.context()
     ir.load_dialects(context)
     tle_ir.load_dialects(context)
-    tle_ir.load_tile_dialects(context)
+    tle_ir.dsa_ir.load_tile_dialects(context)
     ascend_ir.load_dialects(context)
     module = ast_to_ttir(kernel, src, context, Options(), {}, {})
     if not module.verify():
