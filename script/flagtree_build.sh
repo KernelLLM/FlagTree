@@ -36,7 +36,11 @@ export FLAGTREE_BACKEND=ascend
 # Use the bundled clang 21 (system clang is too old for the LLVM-21 headers).
 export CC="$LLVM_SYSPATH/bin/clang"
 export CXX="$LLVM_SYSPATH/bin/clang++"
-export PATH="$LLVM_SYSPATH/bin:$PATH"
+# Prefer build tools from the selected Python environment.  Some LLVM bundles
+# also contain an old `cmake`; placing LLVM first made the build silently use
+# CMake 3.22 even when the selected conda environment provided CMake 4.x.
+PYTHON_BIN_DIR="$(cd "$(dirname "$PYTHON")" && pwd)"
+export PATH="$PYTHON_BIN_DIR:$LLVM_SYSPATH/bin:$PATH"
 export LIBRARY_PATH="$LLVM_SYSPATH/lib:${LIBRARY_PATH:-}"
 export LD_LIBRARY_PATH="$LLVM_SYSPATH/lib:${LD_LIBRARY_PATH:-}"
 export TRITON_BUILD_PROTON=OFF
@@ -69,5 +73,3 @@ echo ">>> building flagtree (ascend, editable, --no-build-isolation) ..."
 "$PYTHON" -m pip install -e . --no-build-isolation -v
 
 echo ">>> build finished."
-echo ">>> NOTE: the dlcompiler env ships its own upstream 'triton' 3.5.0 that"
-echo ">>>       shadows this editable build; use a clean env to 'import triton'."

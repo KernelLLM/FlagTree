@@ -151,6 +151,51 @@ static bool isTritonPointerLike(Type ty) {
   return false;
 }
 
+/// A raw Triton pointer tensor is produced by expressions such as
+/// `base_ptr + tl.arange(...)`.  It is distinct from a block pointer, whose
+/// type is `!tt.ptr<tensor<...>>`.
+static bool isRawPointerTensor(Type ty) {
+  auto rankedTy = dyn_cast<RankedTensorType>(ty);
+  return rankedTy &&
+         isa<triton::PointerType>(rankedTy.getElementType());
+}
+
+/// Return the value-tensor type addressed by a raw pointer tensor or block
+/// pointer.  This is the type consumed/produced by tt.load/tt.store.
+static RankedTensorType getPointedTensorType(Type ty) {
+  if (auto rankedTy = dyn_cast<RankedTensorType>(ty)) {
+    auto ptrElemTy = dyn_cast<triton::PointerType>(rankedTy.getElementType());
+    if (!ptrElemTy)
+      return {};
+    return RankedTensorType::get(rankedTy.getShape(),
+                                 ptrElemTy.getPointeeType(),
+                                 rankedTy.getEncoding());
+  }
+  if (auto ptrTy = dyn_cast<triton::PointerType>(ty))
+    return dyn_cast<RankedTensorType>(ptrTy.getPointeeType());
+  return {};
+}
+
+/// Materialize values addressed by a raw pointer tensor and expose them as a
+/// GM memref.  The previous implementation emitted only an unrealized cast
+/// from tensor<...x!tt.ptr<T>> to memref<...xT>; EraseLinalgCasts handles
+/// block pointers but could not legalize this raw-pointer form.
+static Value loadRawPointerTensorAsMemRef(Value ptrs,
+                                          PatternRewriter &rewriter) {
+  auto valueTy = getPointedTensorType(ptrs.getType());
+  assert(valueTy && "expected a raw pointer tensor");
+  auto gmSpace = hivm::AddressSpaceAttr::get(ptrs.getContext(),
+                                             hivm::AddressSpace::GM);
+  auto memrefTy = MemRefType::get(valueTy.getShape(),
+                                  valueTy.getElementType(),
+                                  MemRefLayoutAttrInterface{}, gmSpace);
+  Value loaded = rewriter.create<triton::LoadOp>(
+      ptrs.getLoc(), ptrs, triton::CacheModifier::NONE,
+      triton::EvictionPolicy::NORMAL, /*isVolatile=*/false);
+  return rewriter.create<bufferization::ToMemrefOp>(
+      ptrs.getLoc(), memrefTy, loaded);
+}
+
 static hivm::PIPE mapPipe(int64_t tilePipe) {
   switch (static_cast<tile::Pipe>(tilePipe)) {
   case tile::Pipe::PIPE_M:    return hivm::PIPE::PIPE_M;
@@ -252,19 +297,49 @@ struct TileToTensorEliminate : OpRewritePattern<tile::ToTensorOp> {
 };
 
 // =============================================================================
-// Step 3: tile.copy → hivm.copy / memref.copy
-//   - tile.* source  → hivm.copy (on-chip buffer DMA)
-//   - !tt.ptr source → memref.copy (GM→local DMA; later passes lower it)
+// Step 3: tile.copy → hivm.copy / memref.copy / tt.load / tt.store
+//   - on-chip buffer source/destination → hivm.copy
+//   - raw pointer tensor source         → tt.load + memref.copy
+//   - raw/block pointer destination     → tt.store
 // =============================================================================
 struct TileCopyToHIVM : OpRewritePattern<tile::CopyOp> {
   using OpRewritePattern<tile::CopyOp>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(tile::CopyOp op,
                                 PatternRewriter &rewriter) const final {
-    Value srcMem = getAsMemRef(op.getOperand(0), rewriter);
-    Value dstMem = getAsMemRef(op.getOperand(1), rewriter);
+    Value src = op.getOperand(0);
+    Value dst = op.getOperand(1);
+    Value srcMem = isRawPointerTensor(src.getType())
+                       ? loadRawPointerTensorAsMemRef(src, rewriter)
+                       : getAsMemRef(src, rewriter);
 
-    if (isTritonPointerLike(op.getOperand(0).getType())) {
+    // A pointer destination denotes GM scatter/block-store semantics, not an
+    // on-chip HIVM copy.  Convert the source buffer to the value tensor expected
+    // by tt.store so the normal Triton-to-Linalg store lowering handles both
+    // raw pointer tensors and block pointers.
+    if (isTritonPointerLike(dst.getType())) {
+      auto srcMemTy = dyn_cast<MemRefType>(srcMem.getType());
+      auto valueTy = getPointedTensorType(dst.getType());
+      if (!srcMemTy || !valueTy ||
+          srcMemTy.getShape() != valueTy.getShape() ||
+          srcMemTy.getElementType() != valueTy.getElementType()) {
+        return rewriter.notifyMatchFailure(
+            op, "copy source buffer and pointer destination must have the "
+                "same ranked value type");
+      }
+      Value values = rewriter.create<bufferization::ToTensorOp>(
+          op.getLoc(), valueTy, srcMem, /*restrict=*/true,
+          /*writable=*/false);
+      rewriter.create<triton::StoreOp>(
+          op.getLoc(), dst, values, triton::CacheModifier::NONE,
+          triton::EvictionPolicy::NORMAL);
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    Value dstMem = getAsMemRef(dst, rewriter);
+
+    if (isTritonPointerLike(src.getType())) {
       rewriter.replaceOpWithNewOp<memref::CopyOp>(op, srcMem, dstMem);
       return success();
     }
