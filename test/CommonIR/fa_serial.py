@@ -29,14 +29,6 @@ from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
 from triton.experimental.tle.language.dsa import tile_copy, tile_alloc, tile_to_tensor  # noqa: F401
 # from triton.experimental.tle.language.dsa import tle.dsa.copy  # noqa: F401
 
-# ---- cross-engine sync_block events -----------------------------------------
-# (sender, receiver, event_id, sender_pipe, receiver_pipe). Replaces the old
-# tile.set_flag/wait_flag pipe pairs with core-to-core (cube<->vector) sync via
-# tle.dsa.ascend.sync_block_set / sync_block_wait (hivm.hir.sync_block_*).
-# Constraint: sender != receiver; event_id in [0,15].
-EVT_MTE3_MTE2 = ("vector", "cube", 0, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)  # Vec1 wrote P -> Bmm2 reads
-EVT_MTE2_V    = ("cube", "vector", 1, PIPE.PIPE_MTE2, PIPE.PIPE_V)     # data loaded -> Vector computes
-EVT_V_MTE3    = ("vector", "cube", 2, PIPE.PIPE_V, PIPE.PIPE_MTE3)     # Vector done -> store / next
 # ---- Cross-core semaphores (one id per signal, ids 0-5) --------------------
 # Each id may be set at most once before being waited.  The pipeline is
 # single-slot: init pre-arms exactly one "free" token per workspace so the
@@ -69,18 +61,6 @@ DIM = 32
 CBM = tl.constexpr(BLOCK_M)
 CBN = tl.constexpr(BLOCK_N)
 CD = tl.constexpr(DIM)
-
-# ---- arch22 "3-task" schedule constants -----------------------------------
-RING: tl.constexpr = tl.constexpr(3)  # depth of the task ring  (the "3-task" of the schedule)
-
-# ---- cross-core semaphore IDs ----------------------------------------------
-SEM_S_READY : tl.constexpr = tl.constexpr(0)  # C->V : workspace_s (S)   has data
-SEM_S_FREE  : tl.constexpr = tl.constexpr(1)  # V->C : workspace_s slot  free
-SEM_P_READY : tl.constexpr = tl.constexpr(2)  # V->C : workspace_p (P)   has data
-SEM_P_FREE  : tl.constexpr = tl.constexpr(3)  # C->V : workspace_p slot  free
-SEM_PV_READY: tl.constexpr = tl.constexpr(4)  # C->V : workspace_pv (PV) has data
-SEM_PV_FREE : tl.constexpr = tl.constexpr(5)  # V->C : workspace_pv slot  free
-
 
 # =============================================================================
 #  Step sub-functions (each called from the main kernel; decorated @triton.jit
@@ -736,13 +716,11 @@ def dump_linalg(path=None, is_causal=False):
     # materialization" when it creates memref→!tt.ptr→memref cast chains
     # during partial conversion of !tt.ptr<tensor<>> values.  We handle
     # that in phase ⑤b.
-    linalg_ok = False
     try:
         pm = ir.pass_manager(context); pm.enable_debug()
         ascend.passes.ttir.add_triton_to_linalg_incubated(pm, False, True, False, False, False)
         pm.run(module)
         print(f"[dump_linalg] ⑤ triton_to_linalg_incubated: verify={module.verify()}", flush=True)
-        linalg_ok = True
     except RuntimeError as e:
         print(f"[dump_linalg] ⑤ triton_to_linalg_incubated: partial conversion "
               f"(this is expected — the pass creates cast chains that need "
