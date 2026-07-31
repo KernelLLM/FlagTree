@@ -193,9 +193,9 @@ endfunction()
 
 # Disable warnings that show up in external code (gtest;pybind11)
 if(FLAGTREE_BACKEND)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wno-covered-switch-default")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wno-covered-switch-default -Wno-dangling-assignment-gsl")
 else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wno-covered-switch-default -fvisibility=hidden")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wno-covered-switch-default -Wno-dangling-assignment-gsl -fvisibility=hidden")
 endif()
 
 include_directories(".")
