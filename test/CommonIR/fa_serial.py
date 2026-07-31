@@ -174,8 +174,110 @@ def _mm2_pv(
     sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX,  PIPE.PIPE_MTE2)
 
 
-# =============================================================================
-#  Serial FA kernel — outer loop per output tile, inner loop per KV block.
+@triton.jit
+def _vec1_softmax(
+    workspace_s, workspace_p, workspace_rescale, workspace_expsum,
+    cid, kv_idx,
+    running_neg_max,
+    sm_scale,
+    IS_CAUSAL: tl.constexpr,
+    global_head_idx,
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
+):
+    """Vec1: online softmax for one KV block -> workspace_p + rescale/expsum.
+
+    running_neg_max is passed in and returned as a register value;
+    the caller keeps it alive across kv iterations within one vector scope.
+    """
+    sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX,  PIPE.PIPE_MTE2)
+    sync_block_wait("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+
+    score_bp = tl.make_block_ptr(
+        workspace_s + cid * BLOCK_M * BLOCK_N,
+        (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
+    score = tl.load(score_bp).to(tl.float32)
+
+    if IS_CAUSAL:
+        q_row  = global_head_idx * BLOCK_M + tl.arange(0, BLOCK_M)
+        kv_col = kv_idx * BLOCK_N + tl.arange(0, BLOCK_N)
+        mask   = q_row[:, None] >= kv_col[None, :]
+        score  = tl.where(mask, score, float("-inf"))
+
+    row_max    = tl.max(score, axis=-1, keep_dims=True)
+    new_nm     = tl.minimum(-row_max * sm_scale, running_neg_max)
+    rescale    = tl.exp(new_nm - running_neg_max)    # <= 1
+    softmax_p  = tl.exp(sm_scale * score + new_nm)
+    blk_expsum = tl.sum(softmax_p, axis=-1, keep_dims=True)
+
+    rescale_bp = tl.make_block_ptr(
+        workspace_rescale + cid * BLOCK_M,
+        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
+    tl.store(rescale_bp, rescale)
+    expsum_bp = tl.make_block_ptr(
+        workspace_expsum + cid * BLOCK_M,
+        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
+    tl.store(expsum_bp, blk_expsum)
+
+    prob_bp = tl.make_block_ptr(
+        workspace_p + cid * BLOCK_M * BLOCK_N,
+        (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
+    tl.store(prob_bp, softmax_p.to(workspace_p.dtype.element_ty))
+
+    sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+    sync_block_set("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
+
+    return new_nm
+
+
+@triton.jit
+def _vec2_accumulate(
+    Out,
+    workspace_pv, workspace_rescale, workspace_expsum,
+    cid, kv_idx, global_head_idx, batch_idx, head_idx,
+    acc_o, softmax_denom,
+    sOb, sOh, sOs, sOd,
+    S, NUM_KV_BLOCKS: tl.constexpr,
+    BLOCK_M: tl.constexpr, DIM: tl.constexpr,
+):
+    """Vec2: rescale acc_o and accumulate one P*V block; write output on last block.
+
+    acc_o and softmax_denom are passed in and returned as register values;
+    the caller keeps them alive across kv iterations within one vector scope.
+    """
+    sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
+
+    pv_bp = tl.make_block_ptr(
+        workspace_pv + cid * BLOCK_M * DIM,
+        (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
+    pv_acc = tl.load(pv_bp).to(tl.float32)
+
+    rescale_bp = tl.make_block_ptr(
+        workspace_rescale + cid * BLOCK_M,
+        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
+    r = tl.load(rescale_bp).to(tl.float32)
+    expsum_bp = tl.make_block_ptr(
+        workspace_expsum + cid * BLOCK_M,
+        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
+    e = tl.load(expsum_bp).to(tl.float32)
+
+    rescale_bc    = tl.broadcast_to(r, (BLOCK_M, DIM))
+    acc_o         = acc_o * rescale_bc + pv_acc
+    softmax_denom = softmax_denom * r + e
+
+    if kv_idx == NUM_KV_BLOCKS - 1:
+        denom_bc  = tl.broadcast_to(softmax_denom, (BLOCK_M, DIM))
+        out_block = (acc_o / denom_bc).to(Out.dtype.element_ty)
+        o_bp = tl.make_block_ptr(
+            Out + batch_idx * sOb + head_idx * sOh, (S, DIM), (sOs, sOd),
+            ((global_head_idx * BLOCK_M).to(tl.int32), 0), (BLOCK_M, DIM), (1, 0))
+        tl.store(o_bp, out_block)
+
+    sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+
+    return acc_o, softmax_denom
+
+
+
 #
 #  Each output tile uses ONE cube scope (inner kv loop) + ONE vector scope
 #  (inner kv loop).  All softmax accumulators (acc_o, softmax_denom,
@@ -257,74 +359,27 @@ def flash_attention_fwd_3task_kernel(
         # ===== Vector scope: Vec1+Vec2 inner loop over all KV blocks =====
         # All accumulators are LOCAL REGISTERS within this single scope invocation.
         with tle.scope(core_mode="vector"):
-            acc_o         = tl.zeros((BLOCK_M, DIM), tl.float32)
-            softmax_denom = tl.zeros((BLOCK_M, 1),   tl.float32)
+            acc_o           = tl.zeros((BLOCK_M, DIM), tl.float32)
+            softmax_denom   = tl.zeros((BLOCK_M, 1),   tl.float32)
             running_neg_max = tl.full((BLOCK_M, 1), 2**30, tl.float32)
 
             for kv_idx in range(NUM_KV_BLOCKS):
-                # ---- Vec1: softmax ----
-                sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX,  PIPE.PIPE_MTE2)
-                sync_block_wait("cube", "vector", SEM_P_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
-
-                score_bp = tl.make_block_ptr(
-                    workspace_s + cid * BLOCK_M * BLOCK_N,
-                    (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                score = tl.load(score_bp).to(tl.float32)
-
-                if IS_CAUSAL:
-                    q_row = global_head_idx * BLOCK_M + tl.arange(0, BLOCK_M)
-                    kv_col = kv_idx * BLOCK_N + tl.arange(0, BLOCK_N)
-                    mask = q_row[:, None] >= kv_col[None, :]
-                    score = tl.where(mask, score, float("-inf"))
-
-                row_max    = tl.max(score, axis=-1, keep_dims=True)
-                new_nm     = tl.minimum(-row_max * sm_scale, running_neg_max)
-                rescale    = tl.exp(new_nm - running_neg_max)    # <= 1
-                softmax_p  = tl.exp(sm_scale * score + new_nm)
-                blk_expsum = tl.sum(softmax_p, axis=-1, keep_dims=True)
-                running_neg_max = new_nm
-
-                rescale_bp = tl.make_block_ptr(
-                    workspace_rescale + cid * BLOCK_M,
-                    (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
-                tl.store(rescale_bp, rescale)
-                expsum_bp = tl.make_block_ptr(
-                    workspace_expsum + cid * BLOCK_M,
-                    (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
-                tl.store(expsum_bp, blk_expsum)
-
-                prob_bp = tl.make_block_ptr(
-                    workspace_p + cid * BLOCK_M * BLOCK_N,
-                    (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-                tl.store(prob_bp, softmax_p.to(workspace_p.dtype.element_ty))
-
-                sync_block_set("vector", "cube", SEM_S_FREE,  PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-                sync_block_set("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
-
-                # ---- Vec2: accumulate ----
-                sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
-
-                pv_bp = tl.make_block_ptr(
-                    workspace_pv + cid * BLOCK_M * DIM,
-                    (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-                pv_acc = tl.load(pv_bp).to(tl.float32)
-
-                r = tl.load(rescale_bp).to(tl.float32)
-                e = tl.load(expsum_bp).to(tl.float32)
-
-                rescale_bc    = tl.broadcast_to(r, (BLOCK_M, DIM))
-                acc_o         = acc_o * rescale_bc + pv_acc
-                softmax_denom = softmax_denom * r + e
-
-                sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-
-            # ---- finalize: write output for this tile ----
-            denom_bc    = tl.broadcast_to(softmax_denom, (BLOCK_M, DIM))
-            out_block   = (acc_o / denom_bc).to(Out.dtype.element_ty)
-            o_bp = tl.make_block_ptr(
-                Out + batch_idx * sOb + head_idx * sOh, (S, DIM), (sOs, sOd),
-                ((global_head_idx * BLOCK_M).to(tl.int32), 0), (BLOCK_M, DIM), (1, 0))
-            tl.store(o_bp, out_block)
+                running_neg_max = _vec1_softmax(
+                    workspace_s, workspace_p, workspace_rescale, workspace_expsum,
+                    cid, kv_idx,
+                    running_neg_max,
+                    sm_scale,
+                    IS_CAUSAL, global_head_idx,
+                    BLOCK_M, BLOCK_N,
+                )
+                acc_o, softmax_denom = _vec2_accumulate(
+                    Out,
+                    workspace_pv, workspace_rescale, workspace_expsum,
+                    cid, kv_idx, global_head_idx, batch_idx, head_idx,
+                    acc_o, softmax_denom,
+                    sOb, sOh, sOs, sOd,
+                    S, NUM_KV_BLOCKS, BLOCK_M, DIM,
+                )
 
     # ---- global destroy: drain outstanding tokens ----
     with tle.scope(core_mode="cube"):
