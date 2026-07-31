@@ -6,47 +6,12 @@ import triton
 import triton.language as tl
 
 # =============================================================================
-#  Real TLE tile-DSA API (replaces the old dl.dsa executable mock)
-#
-#  These are the genuine TileIR builders from
-#    python/triton/experimental/tle/language/dsa/{core,semantic}.py
-#  Each `tile_*` builtin emits a tile.* op into the Triton IR module, so the
-#  compiled TTIR *is* the intermediate TileIR we want to dump.
-#
-#  IMPORTANT — they are @triton.language `@builtin`s: they must be called
-#  DIRECTLY inside the @triton.jit body (so the code-generator injects the
-#  MLIR builder). Wrapping them in plain Python helpers would break tracing,
-#  which is exactly why the old `_DL_DSA` static-method mock never lowered to
-#  real ops. Here we call them directly.
-#
-#  `import triton.experimental.tle as tle` also patches triton.compiler so the
-#  tile/tle dialects are registered in the MLIR context during compilation.
-# =============================================================================
-import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
-from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
-    L1, L0C, UB,
-)
-from triton.experimental.tle.language.dsa import tile_copy, tile_alloc, tile_to_tensor  # noqa: F401
-
-
-# NOTE: The tle tile-DSA layer now has minimal tile.cube_launch / tile.cube_wait
-# builder bindings. This architecture dump still keeps Cube matmul as
-# synchronous tl.dot + tl.store until the final cube token semantics and
-# TileIRToHIVM lowering pipeline are confirmed.
-
-# =============================================================================
 #  Compile-time configuration
 # =============================================================================
 NUM_CORES = 24
 BLOCK_M = 32
 BLOCK_N = 32
 DIM = 32
-
-# constexpr shape literals for tile.copy (semantic.copy runs scalar_constant on
-# each extent, which requires tl.constexpr rather than a plain int).
-CBM = tl.constexpr(BLOCK_M)
-CBN = tl.constexpr(BLOCK_N)
-CD = tl.constexpr(DIM)
 
 
 # =============================================================================
@@ -57,33 +22,24 @@ CD = tl.constexpr(DIM)
 @triton.jit
 def _mm1_qkt(
     # inputs
-    Q, K,
-    q_l1, k_l1,
+    K,
+    q_block,        # pre-loaded Q tensor (BLOCK_M, DIM), passed from outer loop
     workspace_s,
     # task geometry
-    cid, kv_idx, global_head_idx, batch_idx, head_idx, kv_head_idx,
+    cid, kv_idx, batch_idx, kv_head_idx,
     # strides
-    sQb, sQh, sQs, sQd,
     sKb, sKh, sKs, sKd,
     S,
     BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, DIM: tl.constexpr,
 ):
     """MM1: compute S = Q * K^T for one KV block and store into workspace_s."""
-    # reload resident Q at the first KV block of each output tile
-    if kv_idx == 0:
-        q_bp = tl.make_block_ptr(
-            Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
-            (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-        tile_copy(q_bp, q_l1, [CBM, CD])
-
     k_bp = tl.make_block_ptr(
         K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
         (kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-    tile_copy(k_bp, k_l1, [CBN, CD])
+    k_block = tl.load(k_bp)
 
-    # attn_score = Q * K^T  (single block, no accumulation across blocks)
-    attn_score = tl.dot(tile_to_tensor(q_l1, writable=False),
-                        tile_to_tensor(k_l1, writable=False),
+    # attn_score = Q * K^T  — K is (BLOCK_N, DIM), transpose to (DIM, BLOCK_N)
+    attn_score = tl.dot(q_block, tl.trans(k_block),
                         tl.zeros((BLOCK_M, BLOCK_N), tl.float32))
 
     score_store_bp = tl.make_block_ptr(
@@ -96,7 +52,6 @@ def _mm1_qkt(
 def _mm2_pv(
     # inputs
     V,
-    v_l1, p_l1,
     workspace_p, workspace_pv,
     # task geometry
     cid, kv_idx, batch_idx, kv_head_idx,
@@ -109,16 +64,15 @@ def _mm2_pv(
     v_bp = tl.make_block_ptr(
         V + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd),
         (kv_idx * BLOCK_N, 0), (BLOCK_N, DIM), (1, 0))
-    tile_copy(v_bp, v_l1, [CBN, CD])
+    v_block = tl.load(v_bp)
 
     prob_load_bp = tl.make_block_ptr(
         workspace_p + cid * BLOCK_M * BLOCK_N,
         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
-    tile_copy(prob_load_bp, p_l1, [CBM, CBN])
+    p_block = tl.load(prob_load_bp)
 
-    # pv_part = P * V  (single block, no accumulation across blocks)
-    pv_part = tl.dot(tile_to_tensor(p_l1, writable=False),
-                     tile_to_tensor(v_l1, writable=False),
+    # pv_part = P * V  — (BLOCK_M, BLOCK_N) @ (BLOCK_N, DIM) = (BLOCK_M, DIM)
+    pv_part = tl.dot(p_block, v_block,
                      tl.zeros((BLOCK_M, DIM), tl.float32))
 
     pv_store_bp = tl.make_block_ptr(
@@ -129,34 +83,20 @@ def _mm2_pv(
 
 @triton.jit
 def _vec1_softmax(
-    workspace_s, workspace_p, workspace_rescale, workspace_expsum,
+    workspace_s, workspace_p,
     cid, kv_idx,
+    running_neg_max,
     sm_scale,
     IS_CAUSAL: tl.constexpr,
     global_head_idx,
-    NUM_CORES: tl.constexpr,
-    NUM_KV_BLOCKS: tl.constexpr,
     BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
 ):
-    """Vec1: softmax over one score block -> workspace_p + rescale/expsum.
+    """Vec1: softmax over one score block -> workspace_p.
 
-    workspace_rescale layout (2*NUM_CORES*BLOCK_M fp32):
-      [cid*BLOCK_M]                : transient rescale  (Vec1->Vec2, this iter)
-      [NUM_CORES*BLOCK_M+cid*BLOCK_M]: persistent neg_max (across iters)
-    workspace_expsum layout (same):
-      [cid*BLOCK_M]                : transient block_expsum
-      [NUM_CORES*BLOCK_M+cid*BLOCK_M]: not used by Vec1
-
-    neg_max init value 2^30 (proxy +inf) is set by the host in the second half.
+    Takes running_neg_max as an in-register accumulator (passed from main loop).
+    Returns (rescale, block_expsum, new_neg_max) for use by Vec2 in the same iter.
     """
-    # load persisted running_neg_max from second half of workspace_rescale
-    neg_max_offset = NUM_CORES * BLOCK_M + cid * BLOCK_M
-    neg_max_bp = tl.make_block_ptr(
-        workspace_rescale + neg_max_offset,
-        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
-    running_neg_max = tl.load(neg_max_bp).to(tl.float32)
-
-    # load score
+    # load score written by MM1
     score_load_bp = tl.make_block_ptr(
         workspace_s + cid * BLOCK_M * BLOCK_N,
         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
@@ -174,114 +114,62 @@ def _vec1_softmax(
     softmax_p     = tl.exp(sm_scale * attn_score_block + new_neg_max)
     block_expsum  = tl.sum(softmax_p, axis=-1, keep_dims=True)
 
-    # persist neg_max (reset to 2^30 at last block so next tile starts clean)
-    if kv_idx == NUM_KV_BLOCKS - 1:
-        tl.store(neg_max_bp, tl.full((BLOCK_M, 1), 2**30, tl.float32).to(workspace_rescale.dtype.element_ty))
-    else:
-        tl.store(neg_max_bp, new_neg_max.to(workspace_rescale.dtype.element_ty))
-
-    # store transient rescale and block_expsum (first half)
-    rescale_bp = tl.make_block_ptr(
-        workspace_rescale + cid * BLOCK_M,
-        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
-    tl.store(rescale_bp, rescale)
-    expsum_bp = tl.make_block_ptr(
-        workspace_expsum + cid * BLOCK_M,
-        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
-    tl.store(expsum_bp, block_expsum)
-
-    # softmax_p -> workspace_p
+    # softmax_p -> workspace_p (read by MM2)
     prob_bp = tl.make_block_ptr(
         workspace_p + cid * BLOCK_M * BLOCK_N,
         (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
     tl.store(prob_bp, softmax_p.to(workspace_p.dtype.element_ty))
 
+    return rescale, block_expsum, new_neg_max
+
 
 @triton.jit
 def _vec2_accumulate(
-    Out,
-    workspace_pv, workspace_rescale, workspace_expsum,
-    workspace_acc_o,
+    workspace_pv,
     cid,
-    kv_idx, global_head_idx, batch_idx, head_idx,
-    sOb, sOh, sOs, sOd,
-    S, NUM_CORES: tl.constexpr, NUM_KV_BLOCKS: tl.constexpr,
+    acc_o, softmax_denom,
+    rescale, block_expsum,
     BLOCK_M: tl.constexpr, DIM: tl.constexpr,
 ):
-    """Vec2: rescale acc_o and accumulate one KV block's P*V; finalize on last block.
+    """Vec2: rescale acc_o and accumulate one KV block's P*V.
 
-    workspace_expsum second half [NUM_CORES*BLOCK_M + cid*BLOCK_M]: persistent
-    softmax_denom. workspace_acc_o [cid*BLOCK_M*DIM]: persistent acc_o (fp32).
-    Both are zeroed by the host so kv_idx==0 works without a special branch.
+    Takes and returns (acc_o, softmax_denom) as in-register accumulators.
+    Finalization (divide by denom) is done in the main loop after the last KV block.
     """
-    # load pv_acc
+    # load pv_part written by MM2
     pv_bp = tl.make_block_ptr(
         workspace_pv + cid * BLOCK_M * DIM,
         (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
     pv_acc = tl.load(pv_bp).to(tl.float32)
 
-    # load transient rescale and block_expsum (first halves)
-    rescale_bp = tl.make_block_ptr(
-        workspace_rescale + cid * BLOCK_M,
-        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
-    rescale = tl.load(rescale_bp).to(tl.float32)
-    expsum_bp = tl.make_block_ptr(
-        workspace_expsum + cid * BLOCK_M,
-        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
-    block_expsum = tl.load(expsum_bp).to(tl.float32)
-
-    # load persistent acc_o — order=(1,0) = row-major, matching host torch.zeros layout
-    acc_o_bp = tl.make_block_ptr(
-        workspace_acc_o + cid * BLOCK_M * DIM,
-        (BLOCK_M, DIM), (DIM, 1), (0, 0), (BLOCK_M, DIM), (1, 0))
-    acc_o = tl.load(acc_o_bp).to(tl.float32)
-    denom_offset = NUM_CORES * BLOCK_M + cid * BLOCK_M
-    denom_bp = tl.make_block_ptr(
-        workspace_expsum + denom_offset,
-        (BLOCK_M, 1), (1, 1), (0, 0), (BLOCK_M, 1), (1, 0))
-    softmax_denom = tl.load(denom_bp).to(tl.float32)
-
-    # rescale and accumulate (auto-init at kv_idx==0: acc_o==0 and denom==0 from host)
+    # rescale and accumulate
     rescale_bc    = tl.broadcast_to(rescale, (BLOCK_M, DIM))
     acc_o         = acc_o * rescale_bc + pv_acc
     softmax_denom = softmax_denom * rescale + block_expsum
 
-    if kv_idx == NUM_KV_BLOCKS - 1:
-        denom_bc     = tl.broadcast_to(softmax_denom, (BLOCK_M, DIM))
-        output_block = (acc_o / denom_bc).to(Out.dtype.element_ty)
-        o_bp = tl.make_block_ptr(
-            Out + batch_idx * sOb + head_idx * sOh, (S, DIM), (sOs, sOd),
-            ((global_head_idx * BLOCK_M).to(tl.int32), 0), (BLOCK_M, DIM), (1, 0))
-        tl.store(o_bp, output_block)
-        # neg_max reset is handled by Vec1; acc_o and denom reset is handled
-        # implicitly: at next tile's kv_idx==0, rescale≈0 wipes old values.
-
-    # always persist acc_o and denom
-    tl.store(acc_o_bp, acc_o.to(workspace_acc_o.dtype.element_ty))
-    tl.store(denom_bp, softmax_denom.to(workspace_expsum.dtype.element_ty))
+    return acc_o, softmax_denom
 
 
 # =============================================================================
 #  Serial single-slot FA kernel — no sync, no tle.scope (TileIR / tle.dsa form)
 #
-#  Each loop iteration processes exactly ONE KV block with four functions
-#  executed strictly in order:  MM1 → Vec1 → MM2 → Vec2.
+#  Outer loop: one output tile per iteration.
+#  Inner loop: MM1 → Vec1 → MM2 → Vec2 for each KV block.
+#  Softmax accumulators (acc_o, softmax_denom, running_neg_max) are local
+#  registers declared before the inner loop; finalization after the inner loop.
 #
 #  grid = (NUM_CORES,). Each program drives one Cube + one Vector engine.
 # =============================================================================
 @triton.jit
 def flash_attention_fwd_3task_kernel(
     Q, K, V, Out,
-    workspace_s, workspace_p, workspace_pv,      # MM handshake workspaces
-    workspace_rescale, workspace_expsum,          # Vec1->Vec2 (doubled: [0:NC] transient, [NC:2NC] persisted)
-    workspace_acc_o,                              # acc_o persisted across iterations (fp32)
+    workspace_s, workspace_p, workspace_pv,      # transient per-KV-block workspaces
     sm_scale,
     B, Hq, Hkv, S,
     sQb, sQh, sQs, sQd,
     sKb, sKh, sKs, sKd,
     sOb, sOh, sOs, sOd,
     block_num_per_core, rem_block_num,
-    NUM_CORES:    tl.constexpr,
     NUM_KV_BLOCKS: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
     BLOCK_M: tl.constexpr,
@@ -290,84 +178,94 @@ def flash_attention_fwd_3task_kernel(
 ):
     cid = tl.program_id(0)
 
-    # ---- derive loop-geometry scalars (avoids extra kernel args) ----
+    # ---- derive loop-geometry scalars ----
     num_seq_blocks = S // BLOCK_M
-    heads_q        = Hq
     gqa_group      = Hq // Hkv
-    num_kv_blocks  = S // BLOCK_N
 
     # ---- static task distribution ----
-    block_start       = cid * block_num_per_core + tl.where(cid < rem_block_num, cid, rem_block_num)
-    block_num         = block_num_per_core + tl.where(cid < rem_block_num, 1, 0)
-    num_global_tasks  = block_num * num_kv_blocks   # one task per KV block per output tile
+    block_start = cid * block_num_per_core + tl.where(cid < rem_block_num, cid, rem_block_num)
+    block_num   = block_num_per_core + tl.where(cid < rem_block_num, 1, 0)
 
     # =========================================================================
-    #  ① on-chip working set  (tile.alloc -> explicit memory hierarchy)
+    #  Outer loop: one output tile per iteration.
     # =========================================================================
-    # -- Cube side: L1 for MMA inputs --
-    q_l1 = tile_alloc([BLOCK_M, DIM],     Q.dtype.element_ty, L1)
-    k_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
-    v_l1 = tile_alloc([BLOCK_N, DIM],     Q.dtype.element_ty, L1)
-    p_l1 = tile_alloc([BLOCK_M, BLOCK_N], Q.dtype.element_ty, L1)
-
-    # -- Vector side: no persistent register accumulators --
-    # acc_o, softmax_denom, running_neg_max are kept in GM workspaces
-    # (workspace_acc_o, workspace_denom, workspace_neg_max) so they survive
-    # re-entry across loop iterations.
-
-    # =========================================================================
-    #  Serial loop: MM1 → Vec1 → MM2 → Vec2 per KV block (no sync, no scope).
-    # =========================================================================
-
-    for g in range(num_global_tasks):
-        # task geometry: one KV block per iteration
-        kv_idx          = g % num_kv_blocks
-        tile_idx        = g // num_kv_blocks
+    for tile_idx in range(block_num):
         output_block_id = block_start + tile_idx
         global_head_idx = output_block_id % num_seq_blocks
-        head_idx        = (output_block_id // num_seq_blocks) % heads_q
-        batch_idx       = output_block_id // (num_seq_blocks * heads_q)
+        head_idx        = (output_block_id // num_seq_blocks) % Hq
+        batch_idx       = output_block_id // (num_seq_blocks * Hq)
         kv_head_idx     = head_idx // gqa_group
 
-        # ===== Step 1: MM1 — S = Q * K^T =====
-        _mm1_qkt(
-            Q, K,
-            q_l1, k_l1,
-            workspace_s,
-            cid, kv_idx, global_head_idx, batch_idx, head_idx, kv_head_idx,
-            sQb, sQh, sQs, sQd,
-            sKb, sKh, sKs, sKd,
-            S, BLOCK_M, BLOCK_N, DIM,
-        )
+        # ---- load Q for this tile once; reused across all KV blocks ----
+        q_bp = tl.make_block_ptr(
+            Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
+            (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
+        q_block = tl.load(q_bp)
 
-        # ===== Step 2: Vec1 — softmax(S) → P =====
-        _vec1_softmax(
-            workspace_s, workspace_p, workspace_rescale, workspace_expsum,
-            cid, kv_idx,
-            sm_scale,
-            IS_CAUSAL, global_head_idx,
-            NUM_CORES, NUM_KV_BLOCKS, BLOCK_M, BLOCK_N,
-        )
+        # ---- per-tile softmax accumulators (local registers) ----
+        acc_o           = tl.zeros((BLOCK_M, DIM), tl.float32)
+        softmax_denom   = tl.zeros((BLOCK_M, 1),   tl.float32)
+        running_neg_max = tl.full((BLOCK_M, 1), 2**30, tl.float32)
 
-        # ===== Step 3: MM2 — O_part = P * V =====
-        _mm2_pv(
-            V,
-            v_l1, p_l1,
-            workspace_p, workspace_pv,
-            cid, kv_idx, batch_idx, kv_head_idx,
-            sKb, sKh, sKs, sKd,
-            S, BLOCK_M, BLOCK_N, DIM,
-        )
+        # =========================================================================
+        #  Inner loop: MM1 → Vec1 → MM2 → Vec2 per KV block (serial, no sync).
+        # =========================================================================
+        for kv_idx in range(NUM_KV_BLOCKS):
 
-        # ===== Step 4: Vec2 — rescale and accumulate =====
-        _vec2_accumulate(
-            Out,
-            workspace_pv, workspace_rescale, workspace_expsum,
-            workspace_acc_o,
-            cid, kv_idx, global_head_idx, batch_idx, head_idx,
-            sOb, sOh, sOs, sOd,
-            S, NUM_CORES, NUM_KV_BLOCKS, BLOCK_M, DIM,
-        )
+            # ===== Step 1: MM1 — S = Q * K^T =====
+            _mm1_qkt(
+                K,
+                q_block,
+                workspace_s,
+                cid, kv_idx, batch_idx, kv_head_idx,
+                sKb, sKh, sKs, sKd,
+                S, BLOCK_M, BLOCK_N, DIM,
+            )
+
+            # Barrier: ensure MM1's store to workspace_s is visible to Vec1's load.
+            tl.sync_block_all("all", 0)
+
+            # ===== Step 2: Vec1 — softmax(S) → P; returns rescale, expsum, new_neg_max =====
+            rescale, block_expsum, running_neg_max = _vec1_softmax(
+                workspace_s, workspace_p,
+                cid, kv_idx,
+                running_neg_max,
+                sm_scale,
+                IS_CAUSAL, global_head_idx,
+                BLOCK_M, BLOCK_N,
+            )
+
+            # Barrier: ensure Vec1's store to workspace_p is visible to MM2's load.
+            tl.sync_block_all("all", 0)
+
+            # ===== Step 3: MM2 — O_part = P * V =====
+            _mm2_pv(
+                V,
+                workspace_p, workspace_pv,
+                cid, kv_idx, batch_idx, kv_head_idx,
+                sKb, sKh, sKs, sKd,
+                S, BLOCK_M, BLOCK_N, DIM,
+            )
+
+            # Barrier: ensure MM2's store to workspace_pv is visible to Vec2's load.
+            tl.sync_block_all("all", 0)
+
+            # ===== Step 4: Vec2 — rescale and accumulate; returns updated accumulators =====
+            acc_o, softmax_denom = _vec2_accumulate(
+                workspace_pv,
+                cid,
+                acc_o, softmax_denom,
+                rescale, block_expsum,
+                BLOCK_M, DIM,
+            )
+
+        # ---- finalize: write output for this tile ----
+        denom_bc    = tl.broadcast_to(softmax_denom, (BLOCK_M, DIM))
+        out_block   = (acc_o / denom_bc).to(Out.dtype.element_ty)
+        o_bp = tl.make_block_ptr(
+            Out + batch_idx * sOb + head_idx * sOh, (S, DIM), (sOs, sOd),
+            ((global_head_idx * BLOCK_M).to(tl.int32), 0), (BLOCK_M, DIM), (1, 0))
+        tl.store(o_bp, out_block)
 
 
 # =============================================================================
@@ -393,9 +291,7 @@ class _DumpOptions:
 def _dump_signature():
     """Static signature for ast_to_ttir (pointers / scalars / i32 / constexpr)."""
     ptr = {"Q": "*fp16", "K": "*fp16", "V": "*fp16", "Out": "*fp16",
-           "workspace_s": "*fp16", "workspace_p": "*fp16", "workspace_pv": "*fp16",
-           "workspace_rescale": "*fp32", "workspace_expsum": "*fp32",
-           "workspace_acc_o": "*fp32"}
+           "workspace_s": "*fp16", "workspace_p": "*fp16", "workspace_pv": "*fp16"}
     i32_names = ["B", "Hq", "Hkv", "S",
             "sQb", "sQh", "sQs", "sQd",
             "sKb", "sKh", "sKs", "sKd",
@@ -405,7 +301,6 @@ def _dump_signature():
     sig["sm_scale"] = "fp32"
     for n in i32_names:
         sig[n] = "i32"
-    sig["NUM_CORES"] = "constexpr"
     sig["NUM_KV_BLOCKS"] = "constexpr"
     sig["IS_CAUSAL"] = "constexpr"
     sig["BLOCK_M"]   = "constexpr"
@@ -425,7 +320,12 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, is_causal=False):
     from triton.compiler.compiler import ASTSource
     from triton.compiler.code_generator import ast_to_ttir
     from triton._C.libtriton import ir
-    from triton._C.libtriton import tle as tle_ir
+    try:
+        from triton._C.libtriton import tle as tle_ir
+        _has_tle_ir = True
+    except Exception:
+        tle_ir = None
+        _has_tle_ir = False
 
     # The kernel reads module-level shape constants (BLOCK_M, DIM, ...) as plain
     # globals; allow that during this front-end-only dump.
@@ -438,15 +338,16 @@ def dump_tileir(path=None, ttir_path=None, num_kv_blocks=32, is_causal=False):
 
     signature = _dump_signature()
     constants = {
-        "NUM_CORES": NUM_CORES, "NUM_KV_BLOCKS": num_kv_blocks, "IS_CAUSAL": is_causal,
+        "NUM_KV_BLOCKS": num_kv_blocks, "IS_CAUSAL": is_causal,
         "BLOCK_M": BLOCK_M, "BLOCK_N": BLOCK_N, "DIM": DIM,
     }
 
     src = ASTSource(flash_attention_fwd_3task_kernel, signature, constants)
     context = ir.context()
     ir.load_dialects(context)
-    tle_ir.load_dialects(context)
-    tle_ir.load_tile_dialects(context)
+    if _has_tle_ir:
+        tle_ir.load_dialects(context)
+        tle_ir.load_tile_dialects(context)
     # Ascend dialect is optional (only needed for ascend-specific ops); load if present.
     try:
         from triton._C.libtriton.ascend import ir as ascend_ir
@@ -548,9 +449,12 @@ def dump_hivm(path=None, is_causal=False):
     # Step 2: parse the TileIR module and run the pass pipeline
     context = ir.context()
     ir.load_dialects(context)
-    from triton._C.libtriton import tle as tle_ir
-    tle_ir.load_dialects(context)
-    tle_ir.load_tile_dialects(context)
+    try:
+        from triton._C.libtriton import tle as tle_ir
+        tle_ir.load_dialects(context)
+        tle_ir.load_tile_dialects(context)
+    except Exception:
+        pass
     try:
         from triton._C.libtriton.ascend import ir as ascend_ir
         ascend_ir.load_dialects(context)
@@ -633,7 +537,6 @@ def dump_linalg(path=None, is_causal=False):
     Returns the final Linalg MLIR string.  No NPU/GPU required.
     """
     from triton._C.libtriton import ir, passes, ascend
-    from triton._C.libtriton import tle as tle_ir
 
     # Step 1: compile to TTIR (TileIR)
     tileir_mlir = dump_tileir(path=None, is_causal=is_causal)
@@ -645,8 +548,12 @@ def dump_linalg(path=None, is_causal=False):
     # Step 2: parse the TileIR module into a fresh context
     context = ir.context()
     ir.load_dialects(context)
-    tle_ir.load_dialects(context)
-    tle_ir.load_tile_dialects(context)
+    try:
+        from triton._C.libtriton import tle as tle_ir
+        tle_ir.load_dialects(context)
+        tle_ir.load_tile_dialects(context)
+    except Exception:
+        pass
     try:
         from triton._C.libtriton.ascend import ir as ascend_ir
         ascend_ir.load_dialects(context)
@@ -788,33 +695,21 @@ def flash_attention_fwd(q, k, v, is_causal=False):
     rem_block_num      = block_num % NUM_CORES
 
     out = torch.empty_like(q)
-    # Single-slot MM handshake workspaces
-    workspace_s   = torch.empty((NUM_CORES, BLOCK_M, BLOCK_N), dtype=torch.float16, device=q.device)
-    workspace_p   = torch.empty((NUM_CORES, BLOCK_M, BLOCK_N), dtype=q.dtype,        device=q.device)
-    workspace_pv  = torch.empty((NUM_CORES, BLOCK_M, DIM),     dtype=torch.float16, device=q.device)
-    # workspace_rescale and workspace_expsum are doubled:
-    #   first half  [0 : NUM_CORES*BLOCK_M]        : transient rescale / block_expsum (Vec1->Vec2)
-    #   second half [NUM_CORES*BLOCK_M : 2*NC*BM]  : persisted neg_max / softmax_denom
-    ws_rescale_full = torch.empty((2 * NUM_CORES, BLOCK_M), dtype=torch.float32, device=q.device)
-    ws_rescale_full[NUM_CORES:].fill_(2**30)          # init neg_max to +inf proxy
-    workspace_rescale = ws_rescale_full
-    workspace_expsum = torch.zeros((2 * NUM_CORES, BLOCK_M), dtype=torch.float32, device=q.device)
-    # acc_o persistence workspace (fp32, zeroed)
-    workspace_acc_o = torch.zeros((NUM_CORES, BLOCK_M, DIM), dtype=torch.float32, device=q.device)
+    # Single-slot transient workspaces (accumulators are local registers in the kernel)
+    workspace_s  = torch.empty((NUM_CORES, BLOCK_M, BLOCK_N), dtype=torch.float16, device=q.device)
+    workspace_p  = torch.empty((NUM_CORES, BLOCK_M, BLOCK_N), dtype=q.dtype,        device=q.device)
+    workspace_pv = torch.empty((NUM_CORES, BLOCK_M, DIM),     dtype=torch.float16, device=q.device)
     sm_scale = (1.0 / D) ** 0.5
 
     grid = (NUM_CORES,)
     flash_attention_fwd_3task_kernel[grid](
         q, k, v, out, workspace_s, workspace_p, workspace_pv,
-        workspace_rescale, workspace_expsum,
-        workspace_acc_o,
         sm_scale,
         B, Hq, Hkv, S,
         q.stride(0), q.stride(1), q.stride(2), q.stride(3),
         k.stride(0), k.stride(1), k.stride(2), k.stride(3),
         out.stride(0), out.stride(1), out.stride(2), out.stride(3),
         block_num_per_core, rem_block_num,
-        NUM_CORES=NUM_CORES,
         NUM_KV_BLOCKS=num_kv_blocks,
         IS_CAUSAL=is_causal,
         BLOCK_M=BLOCK_M,
