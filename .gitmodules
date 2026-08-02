@@ -1,0 +1,6 @@
+[submodule "third_party/flir"]
+	path = third_party/flir
+	url = https://github.com/kateyijian/flir
+[submodule "third_party/ascend/AscendNPU-IR"]
+	path = third_party/ascend/AscendNPU-IR
+	url = https://gitcode.com/ascend/AscendNPU-IR
