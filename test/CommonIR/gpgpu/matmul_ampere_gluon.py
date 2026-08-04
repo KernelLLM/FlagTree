@@ -5,6 +5,7 @@ from triton.experimental import gluon
 from triton.experimental.gluon import language as gl
 from triton.experimental.gluon.language.nvidia.ampere import async_copy as cp, mma_v2
 
+
 def is_ampere_or_newer():
     try:
         target = triton.runtime.driver.active.get_current_target()
@@ -14,7 +15,6 @@ def is_ampere_or_newer():
 
 
 _WARP = 32  # NVIDIA warp size (Ampere / H20)
-
 
 # ---------------------------------------------------------------------------
 # Configuration selection: pick the best (BLOCK_M, BLOCK_N, BLOCK_K, num_warps)
@@ -30,20 +30,20 @@ _CONFIGS = [
     # (BLOCK_M, BLOCK_N, BLOCK_K, num_warps)
     # BLOCK_K=64 variants
     (128, 128, 64, 4),
-    (128, 64,  64, 4),
-    (64,  128, 64, 4),
-    (64,  64,  64, 4),
-    (64,  32,  64, 4),
-    (32,  64,  64, 4),
-    (32,  32,  64, 4),
+    (128, 64, 64, 4),
+    (64, 128, 64, 4),
+    (64, 64, 64, 4),
+    (64, 32, 64, 4),
+    (32, 64, 64, 4),
+    (32, 32, 64, 4),
     # BLOCK_K=32 variants
     (128, 128, 32, 4),
-    (128, 64,  32, 4),
-    (64,  128, 32, 4),
-    (64,  64,  32, 4),
-    (64,  32,  32, 4),
-    (32,  64,  32, 4),
-    (32,  32,  32, 4),
+    (128, 64, 32, 4),
+    (64, 128, 32, 4),
+    (64, 64, 32, 4),
+    (64, 32, 32, 4),
+    (32, 64, 32, 4),
+    (32, 32, 32, 4),
 ]
 
 
@@ -82,8 +82,8 @@ def _select_config(M, N, K):
 
 
 @gluon.constexpr_function
-def _mma_acc_layout(num_warps: gl.constexpr, element_bitwidth: gl.constexpr,
-                    block_m: gl.constexpr, block_n: gl.constexpr) -> gl.constexpr:
+def _mma_acc_layout(num_warps: gl.constexpr, element_bitwidth: gl.constexpr, block_m: gl.constexpr,
+                    block_n: gl.constexpr) -> gl.constexpr:
     # NVMMADistributedLayout(version=[2,0], warps_per_cta, instr_shape=[16,8])
     # instr_shape/version 由 m16n8k16 v2.0 钉死。
     #
@@ -98,6 +98,7 @@ def _mma_acc_layout(num_warps: gl.constexpr, element_bitwidth: gl.constexpr,
     remaining = num_warps // wpc_m
     wpc_n = min(remaining, max_wpc_n)
     return gl.NVMMADistributedLayout([2, 0], [wpc_m, wpc_n], [16, 8])
+
 
 @gluon.constexpr_function
 def _mma_smem_layouts(element_bitwidth: gl.constexpr, block_k: gl.constexpr):
@@ -129,9 +130,7 @@ def _default_blocked_layout(shape: gl.constexpr, num_warps: gl.constexpr) -> gl.
 
 
 @gluon.constexpr_function
-def _ptr_blocked_layout(block0: gl.constexpr, block1: gl.constexpr,
-                        num_warps: gl.constexpr,
-                        contig_dim: gl.constexpr,
+def _ptr_blocked_layout(block0: gl.constexpr, block1: gl.constexpr, num_warps: gl.constexpr, contig_dim: gl.constexpr,
                         cp_async_elem: gl.constexpr = 8) -> gl.constexpr:
     """2D cp.async pointer BlockedLayout for a tile of shape [block0, block1].
 
@@ -151,7 +150,7 @@ def _ptr_blocked_layout(block0: gl.constexpr, block1: gl.constexpr,
         block_slow, block_fast = block1, block0
     assert block_fast % spt_fast == 0, \
         "contiguous block dim must be a multiple of cp_async_elem (16-byte cp.async)"
-    fast_units = block_fast // spt_fast              # == tpw_fast * wpc_fast
+    fast_units = block_fast // spt_fast  # == tpw_fast * wpc_fast
     total_threads = _WARP * num_warps
     tile_area = block_slow * block_fast
     assert tile_area % total_threads == 0, \
@@ -162,8 +161,7 @@ def _ptr_blocked_layout(block0: gl.constexpr, block1: gl.constexpr,
     spt_slow = spt_area // spt_fast
     # Prefer 8 threads on the contiguous dim (one 128-byte cache line per warp row);
     # fall back to smaller powers of two when divisibility does not allow it.
-    candidates = [c for c in (8, 4, 2, 1)
-                  if fast_units % c == 0 and num_warps % (fast_units // c) == 0]
+    candidates = [c for c in (8, 4, 2, 1) if fast_units % c == 0 and num_warps % (fast_units // c) == 0]
     assert candidates, \
         f"no valid pointer-layout factorization for slow={block_slow}, fast={block_fast}, num_warps={num_warps}"
     tpw_fast = candidates[0]
@@ -171,26 +169,23 @@ def _ptr_blocked_layout(block0: gl.constexpr, block1: gl.constexpr,
     tpw_slow = _WARP // tpw_fast
     wpc_slow = num_warps // wpc_fast
     assert block_slow == spt_slow * tpw_slow * wpc_slow, "internal: slow-dim block mismatch"
-    if contig_dim == 1:                               # [slow, fast], fast is dim1
+    if contig_dim == 1:  # [slow, fast], fast is dim1
         spt = [spt_slow, spt_fast]
         tpw = [tpw_slow, tpw_fast]
         wpc = [wpc_slow, wpc_fast]
         order = [1, 0]
-    else:                                             # [fast, slow], fast is dim0
+    else:  # [fast, slow], fast is dim0
         spt = [spt_fast, spt_slow]
         tpw = [tpw_fast, tpw_slow]
         wpc = [wpc_fast, wpc_slow]
         order = [0, 1]
-    return gl.BlockedLayout(size_per_thread=spt, threads_per_warp=tpw,
-                            warps_per_cta=wpc, order=order)
+    return gl.BlockedLayout(size_per_thread=spt, threads_per_warp=tpw, warps_per_cta=wpc, order=order)
 
 
 @gluon.jit
-def matmul_kernel(a_ptr, b_ptr, c_ptr, M, N, K,
-                  stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
-                  BLOCK_M: gl.constexpr, BLOCK_N: gl.constexpr, BLOCK_K: gl.constexpr,
-                  GROUP_M: gl.constexpr, NUM_BUFFERS: gl.constexpr,
-                  DTYPE: gl.constexpr):
+def matmul_kernel(a_ptr, b_ptr, c_ptr, M, N, K, stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+                  BLOCK_M: gl.constexpr, BLOCK_N: gl.constexpr, BLOCK_K: gl.constexpr, GROUP_M: gl.constexpr,
+                  NUM_BUFFERS: gl.constexpr, DTYPE: gl.constexpr):
     """TN matmul kernel (Gluon/Ampere). Supports float16, bfloat16, float32 (tf32 path)."""
     # ---- CTA / tile selection (grouped grid, identical to the MACA reference) ----
     pid = gl.program_id(axis=0)
@@ -210,19 +205,20 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr, M, N, K,
     EBW: gl.constexpr = 32 if DTYPE == 'float32' else 16
     CP_ELEM: gl.constexpr = 4 if DTYPE == 'float32' else 8
     # smem element type mirrors the input dtype so cp.async byte counts are correct.
-    GL_SMEM_DTYPE: gl.constexpr = (gl.float32 if DTYPE == 'float32'
-                                   else (gl.bfloat16 if DTYPE == 'bfloat16'
-                                         else gl.float16))
+    GL_SMEM_DTYPE: gl.constexpr = (gl.float32 if DTYPE == 'float32' else
+                                   (gl.bfloat16 if DTYPE == 'bfloat16' else gl.float16))
     acc_layout: gl.constexpr = _mma_acc_layout(gl.num_warps(), EBW, BLOCK_M, BLOCK_N)
-    KW: gl.constexpr = 32 // EBW                             # k_width: 2 for fp16/bf16, 1 for tf32
+    KW: gl.constexpr = 32 // EBW  # k_width: 2 for fp16/bf16, 1 for tf32
     a_op: gl.constexpr = gl.DotOperandLayout(0, acc_layout, KW)
     b_op: gl.constexpr = gl.DotOperandLayout(1, acc_layout, KW)
     a_smem_layout: gl.constexpr = _mma_smem_layouts(EBW, BLOCK_K)[0]  # transposed=False
     b_smem_layout: gl.constexpr = _mma_smem_layouts(EBW, BLOCK_K)[1]  # transposed=True
     # Pointer tiles: block == tile, 16-byte cp.async vectors on the K dim.
     # CP_ELEM adjusts the vector width to match the element size of the current dtype.
-    a_ptr_layout: gl.constexpr = _ptr_blocked_layout(BLOCK_M, BLOCK_K, gl.num_warps(), 1, CP_ELEM)  # [M,K], K=dim1 contig
-    b_ptr_layout: gl.constexpr = _ptr_blocked_layout(BLOCK_K, BLOCK_N, gl.num_warps(), 0, CP_ELEM)  # [K,N], K=dim0 contig
+    a_ptr_layout: gl.constexpr = _ptr_blocked_layout(BLOCK_M, BLOCK_K, gl.num_warps(), 1,
+                                                     CP_ELEM)  # [M,K], K=dim1 contig
+    b_ptr_layout: gl.constexpr = _ptr_blocked_layout(BLOCK_K, BLOCK_N, gl.num_warps(), 0,
+                                                     CP_ELEM)  # [K,N], K=dim0 contig
     out_layout: gl.constexpr = _default_blocked_layout([BLOCK_M, BLOCK_N], gl.num_warps())
 
     # ---- Index tensors (each 1D arange gets a SliceLayout derived from its 2D parent) ----
@@ -252,7 +248,7 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr, M, N, K,
 
     # ---- Steady state + epilogue: overlap next load with current compute ----
     for k in range(num_k_tiles):
-        cp.wait_group(NUM_BUFFERS - 1)                     # oldest stage ready
+        cp.wait_group(NUM_BUFFERS - 1)  # oldest stage ready
         a_frag = a_smem.index(k % NUM_BUFFERS).load(a_op)  # shared -> register (DotOperandLayout)
         b_frag = b_smem.index(k % NUM_BUFFERS).load(b_op)
         # fp16/bf16 -> fp32: input_precision=None (Triton default "ieee" path)
@@ -264,7 +260,7 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr, M, N, K,
             acc = mma_v2(a_frag, b_frag, acc)
         nk = k + NUM_BUFFERS
 
-        if nk < num_k_tiles:                               # issue the stage NUM_BUFFERS ahead
+        if nk < num_k_tiles:  # issue the stage NUM_BUFFERS ahead
             a_ptrs = a_ptr + offs_m[:, None] * stride_am + (nk * BLOCK_K + offs_k_a)[None, :] * stride_ak
             b_ptrs = b_ptr + (nk * BLOCK_K + offs_k_b)[:, None] * stride_bk + offs_n[None, :] * stride_bn
             cp.async_copy_global_to_shared(a_smem.index(nk % NUM_BUFFERS), a_ptrs)
@@ -272,15 +268,15 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr, M, N, K,
             cp.commit_group()
 
     # ---- Epilogue store: C[M, N] = dtype(acc) ----
-    acc_out = gl.convert_layout(acc, out_layout)           # MMA layout -> plain blocked (fp32)
+    acc_out = gl.convert_layout(acc, out_layout)  # MMA layout -> plain blocked (fp32)
     if DTYPE == 'float32':
-        c = acc_out                                        # accumulator already fp32, no cast needed
+        c = acc_out  # accumulator already fp32, no cast needed
     elif DTYPE == 'bfloat16':
         c = gl.cast(acc_out, gl.bfloat16)
     else:
         c = gl.cast(acc_out, gl.float16)
-    m_out: gl.constexpr = gl.SliceLayout(1, out_layout)    # M-axis (len BLOCK_M)
-    n_out: gl.constexpr = gl.SliceLayout(0, out_layout)    # N-axis (len BLOCK_N)
+    m_out: gl.constexpr = gl.SliceLayout(1, out_layout)  # M-axis (len BLOCK_M)
+    n_out: gl.constexpr = gl.SliceLayout(0, out_layout)  # N-axis (len BLOCK_N)
     offs_m_o = pid_m * BLOCK_M + gl.arange(0, BLOCK_M, layout=m_out)
     offs_n_o = pid_n * BLOCK_N + gl.arange(0, BLOCK_N, layout=n_out)
     c_ptrs = c_ptr + offs_m_o[:, None] * stride_cm + offs_n_o[None, :] * stride_cn
@@ -289,9 +285,9 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr, M, N, K,
 
 
 _DTYPE_STR = {
-    torch.float16:  'float16',
+    torch.float16: 'float16',
     torch.bfloat16: 'bfloat16',
-    torch.float32:  'float32',
+    torch.float32: 'float32',
 }
 
 
@@ -301,8 +297,7 @@ def matmul(a, b, BLOCK_M=None, BLOCK_N=None, BLOCK_K=None, GROUP_M=8, NUM_BUFFER
     # mma_v2 tf32 path (EBW=32) produces incorrect results on this Triton build.
     # For fp32 inputs: downcast to bf16, run the bf16 kernel, upcast output back to fp32.
     if a.dtype == torch.float32:
-        c_bf16 = matmul(a.to(torch.bfloat16), b.to(torch.bfloat16),
-                        BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, NUM_BUFFERS)
+        c_bf16 = matmul(a.to(torch.bfloat16), b.to(torch.bfloat16), BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, NUM_BUFFERS)
         return c_bf16.to(torch.float32)
 
     M, K = a.shape
@@ -355,5 +350,5 @@ def matmul(a, b, BLOCK_M=None, BLOCK_N=None, BLOCK_K=None, GROUP_M=8, NUM_BUFFER
     c = torch.empty((M, N), device=a.device, dtype=a.dtype)
     grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N), )
     matmul_kernel[grid](a, b, c, M, N, K_padded, a.stride(0), a.stride(1), b.stride(1), b.stride(0), c.stride(0),
-                            c.stride(1), BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, NUM_BUFFERS, dtype_str, num_warps=num_warps)
+                        c.stride(1), BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, NUM_BUFFERS, dtype_str, num_warps=num_warps)
     return c
