@@ -65,16 +65,11 @@ Register 分布:
   - acc_o: mma_layout_O 分布, [128,128] fp32
 """
 
-import math
-
 import torch
-import triton
 from triton.experimental import gluon
 from triton.experimental.gluon import language as gl
 from triton.experimental.gluon.language.nvidia.ampere import (
-    mma_v2,
-    async_copy,
-)
+    mma_v2, )
 
 # ============================================================
 # Layout 定义
@@ -239,12 +234,9 @@ def make_load_layout():
       - 64*128/128 threads/8 elems = 64 loads per thread (分多次)
       - 实际: 64 rows * 128 cols / (128 threads * 8 cols/thread) = 8 行/thread 每次
     """
-    return gl.BlockedLayout(
-        size_per_thread=[1, 8],
-        threads_per_warp=[32, 1],
-        warps_per_cta=[4, 1],
-        order=[1, 0],  # 列优先 coalesced
-    )
+    return gl.BlockedLayout(size_per_thread=[1, 8], threads_per_warp=[32, 1], warps_per_cta=[4, 1],
+                            order=[1, 0],  # 列优先 coalesced
+                            )
 
 
 @gluon.constexpr_function
@@ -265,14 +257,28 @@ def make_store_layout():
 # Kernel 实现
 # ============================================================
 
+
 @gluon.jit
 def flash_attn_fwd_inner(
-    Q_ptr, K_ptr, V_ptr, O_ptr, LSE_ptr,
-    stride_qb: gl.constexpr, stride_qh: gl.constexpr, stride_qm: gl.constexpr,
-    stride_kb: gl.constexpr, stride_kh: gl.constexpr, stride_kn: gl.constexpr,
-    stride_vb: gl.constexpr, stride_vh: gl.constexpr, stride_vn: gl.constexpr,
-    stride_ob: gl.constexpr, stride_oh: gl.constexpr, stride_om: gl.constexpr,
-    seqlen_q: gl.constexpr, seqlen_k: gl.constexpr,
+    Q_ptr,
+    K_ptr,
+    V_ptr,
+    O_ptr,
+    LSE_ptr,
+    stride_qb: gl.constexpr,
+    stride_qh: gl.constexpr,
+    stride_qm: gl.constexpr,
+    stride_kb: gl.constexpr,
+    stride_kh: gl.constexpr,
+    stride_kn: gl.constexpr,
+    stride_vb: gl.constexpr,
+    stride_vh: gl.constexpr,
+    stride_vn: gl.constexpr,
+    stride_ob: gl.constexpr,
+    stride_oh: gl.constexpr,
+    stride_om: gl.constexpr,
+    seqlen_q: gl.constexpr,
+    seqlen_k: gl.constexpr,
     scale: gl.constexpr,
     IS_CAUSAL: gl.constexpr,
     BLOCK_M: gl.constexpr,
@@ -378,16 +384,13 @@ def flash_attn_fwd_inner(
     row_layout: gl.constexpr = gl.SliceLayout(dim=1, parent=mma_layout_o)
     # 初始化为大负数而非 -inf，避免 -inf - (-inf) = NaN 的情况
     # (当整个 n_block 都被 causal mask 掉时)
-    m_i = gl.full((BLOCK_M,), -1e6, dtype=gl.float32, layout=row_layout)
-    l_i = gl.zeros((BLOCK_M,), dtype=gl.float32, layout=row_layout)
+    m_i = gl.full((BLOCK_M, ), -1e6, dtype=gl.float32, layout=row_layout)
+    l_i = gl.zeros((BLOCK_M, ), dtype=gl.float32, layout=row_layout)
 
     # --- N-block iteration range ---
     n_block_max = (seqlen_k + BLOCK_N - 1) // BLOCK_N
     if IS_CAUSAL:
-        n_block_max = gl.minimum(
-            n_block_max,
-            (m_start + BLOCK_M + seqlen_k - seqlen_q + BLOCK_N - 1) // BLOCK_N
-        )
+        n_block_max = gl.minimum(n_block_max, (m_start + BLOCK_M + seqlen_k - seqlen_q + BLOCK_N - 1) // BLOCK_N)
 
     # --- Phase 2: Main loop (reverse iteration) ---
     k_offset_base = pid_batch * stride_kb + pid_head_k * stride_kh
@@ -400,7 +403,7 @@ def flash_attn_fwd_inner(
     offs_d_row = gl.arange(0, HEAD_DIM, layout=gl.SliceLayout(dim=1, parent=load_layout_kT))
     offs_n_col = gl.arange(0, BLOCK_N, layout=gl.SliceLayout(dim=0, parent=load_layout_kT))
 
-    scale_log2 = scale * 1.44269504  # log2(e) * scale
+    # scale_log2 = scale * 1.44269504  # log2(e) * scale
 
     # --- Phase 2: N-block loop, split in two ---
     # Phase A (last block, index n_block_max-1): may be a partial block when
@@ -460,7 +463,8 @@ def flash_attn_fwd_inner(
     for n_block in range(n_block_max - 2, -1, -1):
         n_start = n_block * BLOCK_N
 
-        k_ptrs = K_ptr + k_offset_base + gl.expand_dims(offs_d_row, 1) + gl.expand_dims(n_start + offs_n_col, 0) * stride_kn
+        k_ptrs = K_ptr + k_offset_base + gl.expand_dims(offs_d_row,
+                                                        1) + gl.expand_dims(n_start + offs_n_col, 0) * stride_kn
         k_vals = gl.load(k_ptrs)  # full block, no boundary mask
         smem_k.store(k_vals)
         gl.thread_barrier()
@@ -526,6 +530,7 @@ def flash_attn_fwd_inner(
 # Host wrapper
 # ============================================================
 
+
 def flash_attn_fwd(q, k, v, causal=False, scale=None):
     """
     Flash Attention Forward.
@@ -546,7 +551,7 @@ def flash_attn_fwd(q, k, v, causal=False, scale=None):
     assert head_dim == HEAD_DIM, f"This kernel only supports head_dim={HEAD_DIM}"
 
     if scale is None:
-        scale = head_dim ** -0.5
+        scale = head_dim**-0.5
 
     # Reshape to [batch, nheads, seqlen, head_dim] for stride computation
     q = q.transpose(1, 2).contiguous()  # [B, H_q, M, D]
@@ -562,16 +567,32 @@ def flash_attn_fwd(q, k, v, causal=False, scale=None):
     )
 
     flash_attn_fwd_inner[grid](
-        q, k, v, o, lse,
-        q.stride(0), q.stride(1), q.stride(2),   # stride_qb, stride_qh, stride_qm
-        k.stride(0), k.stride(1), k.stride(2),   # stride_kb, stride_kh, stride_kn
-        v.stride(0), v.stride(1), v.stride(2),   # stride_vb, stride_vh, stride_vn
-        o.stride(0), o.stride(1), o.stride(2),   # stride_ob, stride_oh, stride_om
-        seqlen_q_val, seqlen_k_val,
+        q,
+        k,
+        v,
+        o,
+        lse,
+        q.stride(0),
+        q.stride(1),
+        q.stride(2),  # stride_qb, stride_qh, stride_qm
+        k.stride(0),
+        k.stride(1),
+        k.stride(2),  # stride_kb, stride_kh, stride_kn
+        v.stride(0),
+        v.stride(1),
+        v.stride(2),  # stride_vb, stride_vh, stride_vn
+        o.stride(0),
+        o.stride(1),
+        o.stride(2),  # stride_ob, stride_oh, stride_om
+        seqlen_q_val,
+        seqlen_k_val,
         scale,
         causal,
-        BLOCK_M, BLOCK_N, HEAD_DIM,
-        nheads_q_val, nheads_k_val,
+        BLOCK_M,
+        BLOCK_N,
+        HEAD_DIM,
+        nheads_q_val,
+        nheads_k_val,
         gl.float16 if q.dtype == torch.float16 else gl.bfloat16,
         num_warps=NUM_WARPS,
         num_stages=2,
@@ -584,6 +605,7 @@ def flash_attn_fwd(q, k, v, causal=False, scale=None):
 # ============================================================
 # flash_attention_forward-compatible public interface
 # ============================================================
+
 
 def flash_attention_forward(
     query,
@@ -639,12 +661,10 @@ def flash_attention_forward(
 
     head_dim = query.shape[-1]
     if head_dim != HEAD_DIM:
-        raise NotImplementedError(
-            f"This kernel only supports head_dim={HEAD_DIM}, got {head_dim}"
-        )
+        raise NotImplementedError(f"This kernel only supports head_dim={HEAD_DIM}, got {head_dim}")
 
     if scale is None:
-        scale = head_dim ** -0.5
+        scale = head_dim**-0.5
 
     out, lse = flash_attn_fwd(query, key, value, causal=is_causal, scale=scale)
 

@@ -25,17 +25,13 @@ except Exception as e:
     HEAD_DIM, BLOCK_M, BLOCK_N = 128, 128, 64
     IMPORT_ERROR = str(e)
 
-requires_kernel = pytest.mark.skipif(
-    not HAS_KERNEL, reason=f"Kernel import failed: {IMPORT_ERROR}"
-)
-requires_cuda = pytest.mark.skipif(
-    not torch.cuda.is_available(), reason="CUDA not available"
-)
-
+requires_kernel = pytest.mark.skipif(not HAS_KERNEL, reason=f"Kernel import failed: {IMPORT_ERROR}")
+requires_cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 
 # ---------------------------------------------------------------------------
 # PyTorch fp32 参考实现
 # ---------------------------------------------------------------------------
+
 
 def ref_flash_attn(q, k, v, causal=False, scale=None):
     """
@@ -46,7 +42,7 @@ def ref_flash_attn(q, k, v, causal=False, scale=None):
     B, M, H_q, D = q.shape
     _, N, H_k, _ = k.shape
     if scale is None:
-        scale = D ** -0.5
+        scale = D**-0.5
     h_ratio = H_q // H_k
 
     q_t = q.transpose(1, 2).float()
@@ -58,7 +54,7 @@ def ref_flash_attn(q, k, v, causal=False, scale=None):
     if causal:
         row_idx = torch.arange(M, device=q.device).unsqueeze(1)
         col_idx = torch.arange(N, device=q.device).unsqueeze(0)
-        mask = (row_idx - (M - N)) >= col_idx   # 与 kernel 对齐
+        mask = (row_idx - (M - N)) >= col_idx  # 与 kernel 对齐
         scores = scores.masked_fill(~mask, float("-inf"))
 
     lse = torch.logsumexp(scores, dim=-1)
@@ -71,28 +67,25 @@ def ref_flash_attn(q, k, v, causal=False, scale=None):
 # 辅助函数
 # ---------------------------------------------------------------------------
 
-def make_qkv(batch, seqlen_q, seqlen_k, nheads_q, nheads_k,
-             head_dim=HEAD_DIM, seed=42, device="cuda"):
+
+def make_qkv(batch, seqlen_q, seqlen_k, nheads_q, nheads_k, head_dim=HEAD_DIM, seed=42, device="cuda"):
     torch.manual_seed(seed)
-    q = torch.randn(batch, seqlen_q, nheads_q, head_dim,
-                    device=device, dtype=torch.float16) * 0.1
-    k = torch.randn(batch, seqlen_k, nheads_k, head_dim,
-                    device=device, dtype=torch.float16) * 0.1
-    v = torch.randn(batch, seqlen_k, nheads_k, head_dim,
-                    device=device, dtype=torch.float16) * 0.1
+    q = torch.randn(batch, seqlen_q, nheads_q, head_dim, device=device, dtype=torch.float16) * 0.1
+    k = torch.randn(batch, seqlen_k, nheads_k, head_dim, device=device, dtype=torch.float16) * 0.1
+    v = torch.randn(batch, seqlen_k, nheads_k, head_dim, device=device, dtype=torch.float16) * 0.1
     return q, k, v
 
 
 def assert_close(tri, ref, atol=1e-2, rtol=1e-2, name="tensor"):
     max_diff = (tri.float() - ref.float()).abs().max().item()
-    assert torch.allclose(tri.float(), ref.float(), atol=atol, rtol=rtol), (
-        f"[{name}] max_diff={max_diff:.6f} > atol={atol}, rtol={rtol}"
-    )
+    assert torch.allclose(tri.float(), ref.float(), atol=atol,
+                          rtol=rtol), (f"[{name}] max_diff={max_diff:.6f} > atol={atol}, rtol={rtol}")
 
 
 # ---------------------------------------------------------------------------
 # 1. 输出基础属性
 # ---------------------------------------------------------------------------
+
 
 @requires_cuda
 @requires_kernel
@@ -127,7 +120,7 @@ class TestOutputProperties:
     def test_scale_default_equals_explicit(self):
         q, k, v = make_qkv(1, 128, 128, 1, 1)
         o1, l1 = flash_attn_fwd(q, k, v, scale=None)
-        o2, l2 = flash_attn_fwd(q, k, v, scale=HEAD_DIM ** -0.5)
+        o2, l2 = flash_attn_fwd(q, k, v, scale=HEAD_DIM**-0.5)
         assert_close(o1, o2, name="o")
         assert_close(l1, l2, name="lse")
 
@@ -135,6 +128,7 @@ class TestOutputProperties:
 # ---------------------------------------------------------------------------
 # 2. 非因果精度测试
 # ---------------------------------------------------------------------------
+
 
 @requires_cuda
 @requires_kernel
@@ -177,6 +171,7 @@ class TestNonCausalAccuracy:
 # ---------------------------------------------------------------------------
 # 3. 因果注意力精度测试
 # ---------------------------------------------------------------------------
+
 
 @requires_cuda
 @requires_kernel
@@ -222,6 +217,7 @@ class TestCausalAccuracy:
 # ---------------------------------------------------------------------------
 # 4. 边界序列长度测试
 # ---------------------------------------------------------------------------
+
 
 @requires_cuda
 @requires_kernel
@@ -282,6 +278,7 @@ class TestEdgeCases:
 # 5. 数值一致性测试（确定性 / 独立性）
 # ---------------------------------------------------------------------------
 
+
 @requires_cuda
 @requires_kernel
 class TestNumericalConsistency:
@@ -326,6 +323,7 @@ class TestNumericalConsistency:
 # 6. LSE 正确性专项测试
 # ---------------------------------------------------------------------------
 
+
 @requires_cuda
 @requires_kernel
 class TestLSECorrectness:
@@ -333,7 +331,7 @@ class TestLSECorrectness:
     def test_lse_matches_pytorch_logsumexp(self):
         """LSE 与 PyTorch logsumexp(Q@K^T * scale, dim=-1) 对比。"""
         q, k, v = make_qkv(1, 128, 128, 1, 1)
-        scale = HEAD_DIM ** -0.5
+        scale = HEAD_DIM**-0.5
         _, lse_t = flash_attn_fwd(q, k, v, causal=False, scale=scale)
 
         q_t = q.transpose(1, 2).float()
