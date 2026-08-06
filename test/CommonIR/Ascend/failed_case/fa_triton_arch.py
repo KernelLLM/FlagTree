@@ -135,9 +135,12 @@ def _mm1_qkt(
 
     # reload Q at the first task of each output tile
     if idx_in_conbine == 0:
-        q_bp = tl.make_block_ptr(Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
-                                 (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-        tile_copy(q_bp, q_l1, [CBM, CD])
+        q_row_offs = global_head_idx * BLOCK_M + tl.arange(0, BLOCK_M)
+        q_col_offs = tl.arange(0, DIM)
+        q_ptr = (Q + batch_idx * sQb + head_idx * sQh
+                 + q_row_offs[:, None] * sQs
+                 + q_col_offs[None, :] * sQd)
+        q_l1 = tl.load(q_ptr)
 
     for cb_idx in range(CB):
         kv_idx = idx_in_conbine * CB + cb_idx
