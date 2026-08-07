@@ -268,19 +268,6 @@ def alloc(
         dtype = tl._unwrap_if_constexpr(dtype)
         elem_type = dtype.to_ir(_semantic.builder)
 
-        if _tileir_mode():
-            if not hasattr(_semantic.builder, "create_tile_alloc"):
-                raise RuntimeError("TLE GPU TileIR mode requires a TileIR-enabled TLE builder")
-            memory_space = _semantic.builder.tile_get_string_attr(_tile_storage_name(storage))
-            tile_ty = _semantic.builder.tile_get_buffer_type(_tile_shape(unwrapped_shape), elem_type, memory_space)
-            tensor_handle = _semantic.builder.create_tile_alloc(tile_ty)
-            if layout is None:
-                if storage == tle.smem:
-                    layout = tle.nv_mma_shared_layout.make_default(shape, dtype)
-                else:
-                    layout = tle.tensor_memory_layout.make_default(shape)
-            return tle.buffered_tensor(tensor_handle, dtype, unwrapped_shape, storage, layout, _semantic)
-
         if layout is None:
             if storage == tle.smem:
                 if not nv_mma_shared_layout:
@@ -319,6 +306,17 @@ def alloc(
         else:
             # Use provided layout
             layout_handle = layout.to_ir(_semantic.builder)
+
+        if _tileir_mode():
+            if not hasattr(_semantic.builder, "create_tile_alloc"):
+                raise RuntimeError("TLE GPU TileIR mode requires a TileIR-enabled TLE builder")
+            if storage != tle.smem:
+                raise ValueError(f"Storage type {storage} not yet supported")
+            memory_space = _semantic.builder.tile_get_string_attr(_tile_storage_name(storage))
+            tile_ty = _semantic.builder.tile_get_buffer_type(_tile_shape(unwrapped_shape), elem_type, memory_space)
+            memdesc_ty = _semantic.builder.get_memdesc_type(full_shape, elem_type, layout_handle, "smem")
+            tensor_handle = _semantic.builder.create_tile_alloc(tile_ty, memdesc_ty)
+            return tle.buffered_tensor(tensor_handle, dtype, unwrapped_shape, storage, layout, _semantic)
 
         if storage == tle.smem:
             if init_value is not None:
@@ -531,7 +529,17 @@ def copy(
             raise RuntimeError("TLE GPU TileIR mode requires a TileIR-enabled TLE builder")
         src_handle = src.handle
         dst_handle = dst.handle
-        _semantic.builder.create_tile_copy(src_handle, dst_handle, [], False)
+        tile_indices = []
+        if not is_normcopy:
+            desc = dst if isinstance(dst, tl.tensor_descriptor) else src
+            if not isinstance(offsets, (tuple, list)):
+                if hasattr(offsets, '__iter__'):
+                    offsets = tuple(offsets)
+                else:
+                    raise ValueError(f"Offsets parameter must be tuple or list, but got {type(offsets)}")
+            assert len(offsets) == len(desc.shape), "Offsets and descriptor shape must have the same rank"
+            tile_indices = _semantic._convert_to_ir_values(offsets, require_i64=False)
+        _semantic.builder.create_tile_copy(src_handle, dst_handle, tile_indices, False)
         if isinstance(dst, tle.buffered_tensor):
             dst._tle_gpu_tile_src = src
             dst._tle_gpu_last_copy_shape = shape
@@ -691,26 +699,6 @@ def local_ptr(
         import warnings
         warnings.warn("TLE semantic analysis module not available, skipping validation", UserWarning)
 
-    if _tileir_mode():
-        if not hasattr(_semantic.builder, "create_tile_to_tensor"):
-            raise RuntimeError("TLE GPU TileIR mode requires a TileIR-enabled TLE builder")
-        source = buffer.handle
-        result_shape = list(buffer_shape if view_shape is None else view_shape)
-        if not no_indices:
-            if not all_scalar_indices:
-                raise RuntimeError("TLE GPU TileIR local_ptr mode currently supports only full or scalar views")
-            offsets = [idx.handle for idx in idx_tensors]
-            sizes = []
-            strides = []
-            source = _semantic.builder.create_tile_subview(buffer.handle, offsets, sizes, strides)
-            result_shape = []
-        value = _semantic.builder.create_tile_to_tensor(source, False)
-        if result_shape:
-            result_ty = tl.block_type(buffer.dtype, result_shape)
-        else:
-            result_ty = buffer.dtype
-        return tl.tensor(value, result_ty)
-
     ptr_dtype = tl.pointer_type(buffer.type.element_ty, SHARED_MEMORY_ADDRESS_SPACE)
     insert_block = _semantic.builder.get_insertion_block()
     if insert_block is None:
@@ -729,7 +717,13 @@ def local_ptr(
         result_ty = tl.block_type(ptr_dtype, list(view_shape))
         result_ir = result_ty.to_ir(_semantic.builder)
     handles = [idx.handle for idx in idx_tensors]
-    local_ptr_op = _semantic.builder.create_local_pointers(result_ir, buffer.handle, *handles)
+
+    if _tileir_mode():
+        if not hasattr(_semantic.builder, "create_tile_local_ptr"):
+            raise RuntimeError("TLE GPU TileIR mode requires tile.local_ptr builder support")
+        local_ptr_op = _semantic.builder.create_tile_local_ptr(result_ir, buffer.handle, *handles)
+    else:
+        local_ptr_op = _semantic.builder.create_local_pointers(result_ir, buffer.handle, *handles)
 
     result_tensor = tl.tensor(local_ptr_op.get_result(0), result_ty)
 
