@@ -1,13 +1,7 @@
 # flagtree tle
-import os
-
 import triton.language.core as tl
 
 from .gpu import types as gpu_types
-
-
-def _tileir_mode() -> bool:
-    return os.environ.get("TLE_GPU_TILEIR_MODE") == "1"
 
 
 def _unwrap_pipe_constexpr(value):
@@ -109,9 +103,8 @@ def pipe(
             raise ValueError(
                 f"tle.pipe field {field_name!r} leading dimension must equal capacity {capacity}, got {field.shape[0]}")
 
-    if not _tileir_mode():
-        _semantic.builder.create_pipe_create([field.handle for field in fields.values()], capacity, scope, name or "",
-                                             list(fields.keys()), list(reader_names or ()), one_shot)
+    _semantic.builder.create_pipe_create([field.handle for field in fields.values()], capacity, scope, name or "",
+                                         list(fields.keys()), list(reader_names or ()), one_shot)
     return gpu_types.pipe_value(capacity, scope, name, fields, reader_names, one_shot=one_shot)
 
 

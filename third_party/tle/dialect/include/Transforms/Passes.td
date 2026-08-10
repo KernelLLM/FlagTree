@@ -4,6 +4,25 @@
 
 include "mlir/Pass/PassBase.td"
 
+def TritonTleConvertGpuTileToTtgir
+    : Pass<"triton-tle-convert-gpu-tile-to-ttgir", "mlir::ModuleOp"> {
+  let summary = "convert TLE GPU TileIR buffers to TritonGPU descriptors";
+
+  let description = [{
+    Converts the target-independent TileIR produced by tle.gpu primitives into
+    the TritonGPU descriptor form expected by the NVIDIA lowering pipeline.
+    In particular, tile.alloc becomes ttg.local_alloc with a ttg.memdesc result,
+    and tile.local_ptr becomes tle.local_pointers. The conversion runs before
+    the standard TTIR-to-TTGIR pass and must eliminate all GPU buffer TileIR
+    operations.
+  }];
+
+  let dependentDialects = ["mlir::arith::ArithDialect",
+                           "mlir::triton::TritonDialect",
+                           "mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::tle::TleDialect"];
+}
+
 def TritonTleEarlyAssignMemorySpace
     : Pass<"triton-tle-early-assign-memory-space", "mlir::ModuleOp"> {
   let summary = "early assign memory space";

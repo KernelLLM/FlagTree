@@ -1,14 +1,10 @@
 import argparse
-import os
 from pathlib import Path
 
 import torch
 import triton
 import triton.language as tl
 import triton.experimental.tle.language as tle
-
-
-os.environ.setdefault("TLE_GPU_TILEIR_MODE", "1")
 
 
 @triton.jit
@@ -130,10 +126,16 @@ def dump_ttir(path):
     pm = ir.pass_manager(module.context)
     passes.common.add_inliner(pm)
     pm.run(module, "native_matmul_gpu.inliner")
-    tle_ir.lower_gpu_tileir_to_ttir(module)
+    pm = ir.pass_manager(module.context)
+    tle_ir.passes.add_convert_gpu_tile_to_ttgir(pm)
+    pm.run(module, "native_matmul_gpu.tileir_to_ttgir")
     text = str(module)
-    if "tile." in text:
-        raise RuntimeError("TTIR dump still contains TileIR ops")
+    for needle in ("tile.alloc", "tile.copy", "tile.to_tensor", "tile.store_tensor"):
+        if needle in text:
+            raise RuntimeError(f"converted TTIR dump still contains {needle}")
+    for needle in ("ttg.local_alloc", "ttg.local_load", "ttg.local_store"):
+        if needle not in text:
+            raise RuntimeError(f"converted TTIR dump expected {needle}")
     Path(path).write_text(text, encoding="utf-8")
     print(f"[dump-ttir] wrote {path}")
 

@@ -51,7 +51,6 @@
 #include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #endif
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IRReader/IRReader.h"
@@ -109,140 +108,6 @@ static tile::MemorySpace attrToTileMemSpace(Attribute attr) {
   return tile::MemorySpace::Shared;
 }
 
-static bool isTileBuffer(Value value) {
-  return value && isa<tile::BufType>(value.getType());
-}
-
-static bool isTTTensorOrPointer(Value value) {
-  if (!value)
-    return false;
-  auto type = value.getType();
-  return isa<RankedTensorType, triton::PointerType>(type);
-}
-
-static bool isTTPointerLike(Value value) {
-  if (!value)
-    return false;
-  Type type = value.getType();
-  if (isa<triton::PointerType>(type))
-    return true;
-  if (auto tensorType = dyn_cast<RankedTensorType>(type))
-    return isa<triton::PointerType>(tensorType.getElementType());
-  return false;
-}
-
-static Value materializeTileBuffer(Value value,
-                                   llvm::DenseMap<Value, Value> &bufferValues) {
-  while (isTileBuffer(value)) {
-    auto it = bufferValues.find(value);
-    if (it == bufferValues.end())
-      return Value();
-    value = it->second;
-  }
-  return value;
-}
-
-static void eraseIfUnused(Operation *op) {
-  if (!op)
-    return;
-  if (llvm::all_of(op->getResults(),
-                   [](Value result) { return result.use_empty(); }))
-    op->erase();
-}
-
-static void lowerGpuTileIRToTTIR(ModuleOp module) {
-  OpBuilder builder(module.getContext());
-  llvm::DenseMap<Value, Value> bufferValues;
-  SmallVector<Operation *> eraseOps;
-
-  module.walk([&](Operation *op) {
-    if (auto copyOp = dyn_cast<tile::CopyOp>(op)) {
-      Value src = materializeTileBuffer(copyOp.getSrc(), bufferValues);
-      if (!src)
-        src = copyOp.getSrc();
-      Value dst = copyOp.getDst();
-      if (isTileBuffer(dst)) {
-        bufferValues[dst] = src;
-        eraseOps.push_back(op);
-        return;
-      }
-      if (isTTPointerLike(dst) && isTTTensorOrPointer(src)) {
-        builder.setInsertionPoint(op);
-        Value storeValue = src;
-        if (isTTPointerLike(storeValue)) {
-          auto load = builder.create<triton::LoadOp>(
-              op->getLoc(), storeValue, triton::CacheModifier::NONE,
-              triton::EvictionPolicy::NORMAL, false);
-          storeValue = load.getResult();
-        }
-        builder.create<triton::StoreOp>(
-            op->getLoc(), dst, storeValue, triton::CacheModifier::NONE,
-            triton::EvictionPolicy::NORMAL);
-        eraseOps.push_back(op);
-      }
-      return;
-    }
-
-    if (auto storeTensorOp = dyn_cast<tile::StoreTensorOp>(op)) {
-      bufferValues[storeTensorOp.getDst()] = storeTensorOp.getSrc();
-      eraseOps.push_back(op);
-      return;
-    }
-
-    if (auto subviewOp = dyn_cast<tile::SubViewOp>(op)) {
-      if (Value src = materializeTileBuffer(subviewOp.getSource(), bufferValues))
-        bufferValues[subviewOp.getResult()] = src;
-      eraseOps.push_back(op);
-      return;
-    }
-
-    if (auto gmOffsetOp = dyn_cast<tile::GmOffsetOp>(op)) {
-      gmOffsetOp.getResult().replaceAllUsesWith(gmOffsetOp.getBase());
-      eraseOps.push_back(op);
-      return;
-    }
-
-    if (auto toTensorOp = dyn_cast<tile::ToTensorOp>(op)) {
-      Value value = materializeTileBuffer(toTensorOp.getSrc(), bufferValues);
-      if (!value) {
-        toTensorOp.emitError("cannot lower tile.to_tensor without a preceding "
-                             "tile.copy or tile.store_tensor");
-        return;
-      }
-
-      builder.setInsertionPoint(op);
-      Value replacement = value;
-      if (isTTPointerLike(value)) {
-        auto load = builder.create<triton::LoadOp>(
-            op->getLoc(), value, triton::CacheModifier::NONE,
-            triton::EvictionPolicy::NORMAL, false);
-        replacement = load.getResult();
-      }
-      toTensorOp.getResult().replaceAllUsesWith(replacement);
-      eraseOps.push_back(op);
-    }
-
-    if (isa<tile::SetFlagOp, tile::WaitFlagOp, tile::PipeBarrierOp>(op)) {
-      builder.setInsertionPoint(op);
-      builder.create<ttg::LocalBarrierOp>(op->getLoc());
-      eraseOps.push_back(op);
-      return;
-    }
-  });
-
-  for (Operation *op : llvm::reverse(eraseOps))
-    eraseIfUnused(op);
-
-  SmallVector<Operation *> cleanupOps;
-  module.walk([&](Operation *op) {
-    if (isa<tile::AllocOp, tile::SubViewOp, tile::CopyOp,
-            tile::StoreTensorOp, tile::ToTensorOp, tile::GmOffsetOp,
-            tile::SetFlagOp, tile::WaitFlagOp, tile::PipeBarrierOp>(op))
-      cleanupOps.push_back(op);
-  });
-  for (Operation *op : llvm::reverse(cleanupOps))
-    eraseIfUnused(op);
-}
 #endif
 
 void init_triton_tle_ir(py::module &&m) {
@@ -375,9 +240,10 @@ void init_triton_tle_ir(py::module &&m) {
              return tile::BufType::get(ctx, shape, elementType, memSpace);
            })
       .def("create_tile_alloc",
-           [](TritonOpBuilder &self, Type tileBufType) -> Value {
+           [](TritonOpBuilder &self, Type tileBufType,
+              Attribute targetLayout) -> Value {
              auto bufType = mlir::cast<tile::BufType>(tileBufType);
-             return self.create<tile::AllocOp>(
+             auto op = self.create<tile::AllocOp>(
                  tileBufType, bufType.getMemorySpace(),
                  /*shape=*/mlir::ArrayAttr(), /*dtype=*/mlir::TypeAttr(),
                  /*policy=*/tile::PolicyAttr(),
@@ -385,12 +251,14 @@ void init_triton_tle_ir(py::module &&m) {
                                                   tile::Layout::ND),
                  /*lifetime=*/tile::LifetimeAttr(),
                  /*comment=*/mlir::StringAttr());
+             op->setAttr("tle.gpu_layout", targetLayout);
+             return op.getResult();
            })
       .def("create_tile_copy",
            [](TritonOpBuilder &self, Value &src, Value &dst,
-              std::vector<Value> & /*shape*/, bool interNoAlias) -> void {
+              std::vector<Value> &indices, bool interNoAlias) -> void {
              auto op = self.create<tile::CopyOp>(
-                 src, dst, /*engine=*/tile::EngineAttr(),
+                 src, dst, indices, /*engine=*/tile::EngineAttr(),
                  /*src_layout=*/tile::LayoutAttr::get(
                      self.getBuilder().getContext(), tile::Layout::ND),
                  /*dst_nz_layout=*/tile::NZLayoutAttr(),
@@ -402,7 +270,8 @@ void init_triton_tle_ir(py::module &&m) {
       .def("create_tile_subview",
            [](TritonOpBuilder &self, Value source, std::vector<Value> &offsets,
               const std::vector<int64_t> &sizes,
-              const std::vector<int64_t> &strides) -> Value {
+              const std::vector<int64_t> &strides,
+              Attribute targetLayout) -> Value {
              SmallVector<Value> indexOffsets;
              auto &builder = self.getBuilder();
              auto indexType = builder.getIndexType();
@@ -418,7 +287,17 @@ void init_triton_tle_ir(py::module &&m) {
              auto op = self.create<tile::SubViewOp>(
                  resTy, source, indexOffsets, builder.getI64ArrayAttr(sizes),
                  builder.getI64ArrayAttr(strides));
+             op->setAttr("tle.gpu_layout", targetLayout);
              return op.getResult();
+           })
+      .def("create_tile_local_ptr",
+           [](TritonOpBuilder &self, Type resultTy, Value source,
+              py::args args) -> OpState {
+             llvm::SmallVector<Value> indices;
+             indices.reserve(args.size());
+             for (const auto &arg : args)
+               indices.push_back(py::cast<Value>(arg));
+             return self.create<tile::LocalPtrOp>(resultTy, source, indices);
            })
       .def("create_tile_to_tensor",
            [](TritonOpBuilder &self, Value &src, bool /*writable*/) -> Value {
@@ -733,6 +612,8 @@ void init_triton_tle_ir(py::module &&m) {
 }
 
 void init_triton_tle_passes(py::module &&m) {
+  ADD_PASS_WRAPPER_0("add_convert_gpu_tile_to_ttgir",
+                     tle::createTritonTleConvertGpuTileToTtgir);
   ADD_PASS_WRAPPER_0("add_early_assign_memory_space",
                      tle::createTritonTleEarlyAssignMemorySpace);
   ADD_PASS_WRAPPER_0("add_select_encodings",
@@ -847,8 +728,6 @@ void init_triton_tle(py::module &&m) {
     context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
   });
-  m.def("lower_gpu_tileir_to_ttir",
-        [](ModuleOp &module) { lowerGpuTileIRToTTIR(module); });
 #endif
 
   init_triton_tle_ir(m.def_submodule("ir"));
