@@ -264,9 +264,6 @@ class CUDABackend(BaseBackend):
         passes.common.add_inliner(pm)
         pm.run(mod, 'make_ttir.inliner')
 
-        if hasattr(tle, "lower_gpu_tileir_to_ttir"):
-            tle.lower_gpu_tileir_to_ttir(mod)
-
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
         passes.ttir.add_rewrite_tensor_pointer(pm)
@@ -290,6 +287,10 @@ class CUDABackend(BaseBackend):
         pm = ir.pass_manager(mod.context)
         dump_enabled = pm.enable_debug()
         emuTF32 = (capability // 10 >= 8)
+        # TLE GPU always enters through TileIR when the dialect is available.
+        # Convert the target-independent buffers to TritonGPU descriptors
+        # before the standard TTIR-to-TTGIR conversion.
+        tle.passes.add_convert_gpu_tile_to_ttgir(pm)
         passes.ttir.add_convert_to_ttgpuir(pm, f"cuda:{capability}", opt.num_warps, 32, opt.num_ctas)
         # flagtree tle raw
         tle.raw_passes.add_tle_convert_arg_to_memdesc(pm)

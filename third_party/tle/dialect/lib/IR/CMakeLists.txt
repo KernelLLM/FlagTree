@@ -13,3 +13,7 @@ add_triton_library(TleIR
   TritonIR
   TritonGPUIR
 )
+
+if(TARGET TileIRIR)
+  target_link_libraries(TleIR PUBLIC TileIRIR)
+endif()
