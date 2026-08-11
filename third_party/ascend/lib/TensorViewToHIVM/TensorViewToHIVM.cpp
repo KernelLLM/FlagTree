@@ -85,7 +85,11 @@ static ViewInfo traceView(Value viewVal) {
   auto baseTy = dyn_cast<tv::TensorViewType>(mtv.getResult().getType());
   if (!baseTy || baseTy.getStrides().size() != 1)
     return vi;
-  Value base = mtv.getSource();
+  // NOTE: read the source operand untyped. rewriteFuncPtrArgs has already
+  // changed the underlying function argument to a memref, so the typed
+  // accessor mtv.getSource() (which casts to TypedValue<tv::PtrType>) would
+  // assert. getOperand(0) is the source operand.
+  Value base = mtv->getOperand(0);
   if (!isa<MemRefType>(base.getType()))
     return vi; // base must already be a memref (function argument rewritten)
 
