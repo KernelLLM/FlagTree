@@ -157,13 +157,12 @@ static Value buildPartitionView(OpBuilder &b, Location loc,
 
 /// Erase the (now dead) addptr + splat feeding a converted access.  Both ops
 /// are always set when a match succeeded; guard only on remaining uses.
-static void eraseDeadPtrChain(const ContigAccess &a) {
-  Operation *addptr = a.addptr.getOperation();
-  Operation *splat = a.baseSplat.getOperation();
+/// Taken by value (non-const op wrappers) so getOperation()/erase() are usable.
+static void eraseDeadPtrChain(triton::AddPtrOp addptr, triton::SplatOp baseSplat) {
   if (addptr->use_empty()) {
     addptr->erase();
-    if (splat->use_empty())
-      splat->erase();
+    if (baseSplat->use_empty())
+      baseSplat->erase();
   }
 }
 
@@ -181,7 +180,7 @@ static LogicalResult rewriteLoad(triton::LoadOp load) {
                                            /*mask=*/Value());
   load.getResult().replaceAllUsesWith(viewLoad.getResult());
   load.erase();
-  eraseDeadPtrChain(a);
+  eraseDeadPtrChain(a.addptr, a.baseSplat);
   return success();
 }
 
@@ -197,7 +196,7 @@ static LogicalResult rewriteStore(triton::StoreOp store) {
   b.create<tv::ViewStoreOp>(loc, partView, store.getValue(), ValueRange{idx},
                             /*mask=*/Value());
   store.erase();
-  eraseDeadPtrChain(a);
+  eraseDeadPtrChain(a.addptr, a.baseSplat);
   return success();
 }
 
