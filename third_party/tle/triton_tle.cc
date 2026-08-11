@@ -131,6 +131,45 @@ static bool isTTPointerLike(Value value) {
   return false;
 }
 
+static constexpr llvm::StringLiteral kGpuMemDescTypeAttr =
+    "tle.gpu_memdesc_type";
+static constexpr int kGpuSharedMemoryAddressSpace = 3;
+
+static ttg::MemDescType getGpuMemDescType(Operation *op) {
+  if (auto typeAttr = op->getAttrOfType<TypeAttr>(kGpuMemDescTypeAttr))
+    return dyn_cast<ttg::MemDescType>(typeAttr.getValue());
+  return {};
+}
+
+static Value getGpuMemDesc(
+    Value value, const llvm::DenseMap<Value, Value> &bufferMemDescs) {
+  if (value && isa<ttg::MemDescType>(value.getType()))
+    return value;
+  return bufferMemDescs.lookup(value);
+}
+
+static ttg::MemDescType inferGpuMemDescType(Value value) {
+  if (!value)
+    return {};
+  if (auto type = dyn_cast<ttg::MemDescType>(value.getType()))
+    return type;
+  if (Operation *def = value.getDefiningOp())
+    return getGpuMemDescType(def);
+  return {};
+}
+
+static RankedTensorType getPointeeTensorType(Value pointer) {
+  auto tensorType = dyn_cast<RankedTensorType>(pointer.getType());
+  if (!tensorType)
+    return {};
+  auto pointerType = dyn_cast<triton::PointerType>(tensorType.getElementType());
+  if (!pointerType)
+    return {};
+  return RankedTensorType::get(tensorType.getShape(),
+                               pointerType.getPointeeType(),
+                               tensorType.getEncoding());
+}
+
 static Value materializeTileBuffer(Value value,
                                    llvm::DenseMap<Value, Value> &bufferValues) {
   while (isTileBuffer(value)) {
@@ -153,18 +192,218 @@ static void eraseIfUnused(Operation *op) {
 static void lowerGpuTileIRToTTIR(ModuleOp module) {
   OpBuilder builder(module.getContext());
   llvm::DenseMap<Value, Value> bufferValues;
+  llvm::DenseMap<Value, Value> bufferMemDescs;
   SmallVector<Operation *> eraseOps;
 
+  SmallVector<tile::AllocOp> gpuAllocs;
+  module.walk([&](tile::AllocOp allocOp) {
+    if (getGpuMemDescType(allocOp))
+      gpuAllocs.push_back(allocOp);
+  });
+  for (tile::AllocOp allocOp : gpuAllocs) {
+    builder.setInsertionPoint(allocOp);
+    auto localAlloc = builder.create<ttg::LocalAllocOp>(
+        allocOp.getLoc(), getGpuMemDescType(allocOp));
+    bufferMemDescs[allocOp.getResult()] = localAlloc.getResult();
+    allocOp.getResult().replaceAllUsesWith(localAlloc.getResult());
+    eraseOps.push_back(allocOp);
+  }
+
+  module.walk([&](ttg::WarpSpecializeOp warpSpecialize) {
+    auto captures = warpSpecialize.getExplicitCaptures();
+    for (Region *region : warpSpecialize.getPartitionRegions()) {
+      for (auto [index, capture] : llvm::enumerate(captures))
+        region->getArgument(index).setType(capture.getType());
+    }
+  });
+
+  module.walk([&](triton::CallOp call) {
+    auto callee = module.lookupSymbol<triton::FuncOp>(call.getCallee());
+    if (!callee)
+      return;
+    if (isa<UnknownLoc>(call.getLoc())) {
+      Location callLoc = callee.getLoc();
+      if (isa<UnknownLoc>(callLoc)) {
+        if (auto parent = call->getParentOfType<triton::FuncOp>())
+          callLoc = parent.getLoc();
+      }
+      if (isa<UnknownLoc>(callLoc))
+        callLoc = FileLineColLoc::get(module.getContext(), "tle-generated", 1,
+                                      1);
+      call->setLoc(callLoc);
+    }
+    for (auto [operand, argument] :
+         llvm::zip(call.getOperands(), callee.getArguments())) {
+      if (auto memDescType = inferGpuMemDescType(operand))
+        argument.setType(memDescType);
+    }
+  });
+  for (triton::FuncOp func : module.getOps<triton::FuncOp>()) {
+    SmallVector<Type> inputTypes;
+    for (BlockArgument argument : func.getArguments())
+      inputTypes.push_back(argument.getType());
+    SmallVector<Type> resultTypes(func.getResultTypes());
+    func.setFunctionType(
+        FunctionType::get(module.getContext(), inputTypes, resultTypes));
+  }
+
   module.walk([&](Operation *op) {
+    auto mapPipeFields = [&](ValueRange fields) {
+      SmallVector<Value> mapped;
+      mapped.reserve(fields.size());
+      for (Value field : fields) {
+        Value memDesc = getGpuMemDesc(field, bufferMemDescs);
+        if (!memDesc)
+          return SmallVector<Value>{};
+        mapped.push_back(memDesc);
+      }
+      return mapped;
+    };
+
+    if (auto pipeOp = dyn_cast<tile::DataflowPipeCreateOp>(op)) {
+      auto fields = mapPipeFields(pipeOp.getFields());
+      if (fields.size() != pipeOp.getFields().size()) {
+        pipeOp.emitError("cannot lower tile.pipe.create without GPU memdescs");
+        return;
+      }
+      builder.setInsertionPoint(op);
+      builder.create<tle::PipeCreateOp>(
+          op->getLoc(), fields, pipeOp.getCapacityAttr(), pipeOp.getScopeAttr(),
+          pipeOp.getPipeNameAttr(), pipeOp.getFieldNamesAttr(),
+          pipeOp.getReadersAttr(), pipeOp.getOneShotAttr());
+      eraseOps.push_back(op);
+      return;
+    }
+
+    if (auto pipeOp = dyn_cast<tile::DataflowPipeWriterAcquireOp>(op)) {
+      auto fields = mapPipeFields(pipeOp.getFields());
+      if (fields.size() != pipeOp.getFields().size()) {
+        pipeOp.emitError(
+            "cannot lower tile.pipe.writer_acquire without GPU memdescs");
+        return;
+      }
+      builder.setInsertionPoint(op);
+      builder.create<tle::PipeWriterAcquireOp>(
+          op->getLoc(), fields, pipeOp.getStage(), pipeOp.getPhase(),
+          pipeOp.getCapacityAttr(), pipeOp.getScopeAttr(),
+          pipeOp.getPipeNameAttr(), pipeOp.getFieldNamesAttr());
+      eraseOps.push_back(op);
+      return;
+    }
+
+    if (auto pipeOp = dyn_cast<tile::DataflowPipeWriterCommitOp>(op)) {
+      auto fields = mapPipeFields(pipeOp.getFields());
+      if (fields.size() != pipeOp.getFields().size()) {
+        pipeOp.emitError(
+            "cannot lower tile.pipe.writer_commit without GPU memdescs");
+        return;
+      }
+      builder.setInsertionPoint(op);
+      builder.create<tle::PipeWriterCommitOp>(
+          op->getLoc(), fields, pipeOp.getStage(), pipeOp.getCapacityAttr(),
+          pipeOp.getScopeAttr(), pipeOp.getPipeNameAttr(),
+          pipeOp.getFieldNamesAttr());
+      eraseOps.push_back(op);
+      return;
+    }
+
+    if (auto pipeOp = dyn_cast<tile::DataflowPipeWriterCloseOp>(op)) {
+      auto fields = mapPipeFields(pipeOp.getFields());
+      if (fields.size() != pipeOp.getFields().size()) {
+        pipeOp.emitError(
+            "cannot lower tile.pipe.writer_close without GPU memdescs");
+        return;
+      }
+      builder.setInsertionPoint(op);
+      builder.create<tle::PipeWriterCloseOp>(
+          op->getLoc(), fields, pipeOp.getStage(), pipeOp.getPhase(),
+          pipeOp.getCapacityAttr(), pipeOp.getScopeAttr(),
+          pipeOp.getPipeNameAttr(), pipeOp.getFieldNamesAttr());
+      eraseOps.push_back(op);
+      return;
+    }
+
+    if (auto pipeOp = dyn_cast<tile::DataflowPipeReaderWaitOp>(op)) {
+      auto fields = mapPipeFields(pipeOp.getFields());
+      if (fields.size() != pipeOp.getFields().size()) {
+        pipeOp.emitError(
+            "cannot lower tile.pipe.reader_wait without GPU memdescs");
+        return;
+      }
+      builder.setInsertionPoint(op);
+      auto lowered = builder.create<tle::PipeReaderWaitOp>(
+          op->getLoc(), builder.getI1Type(), fields, pipeOp.getStage(),
+          pipeOp.getPhase(), pipeOp.getCapacityAttr(), pipeOp.getScopeAttr(),
+          pipeOp.getPipeNameAttr(), pipeOp.getFieldNamesAttr(),
+          pipeOp.getReaderNameAttr());
+      pipeOp.getIsClosed().replaceAllUsesWith(lowered.getIsClosed());
+      eraseOps.push_back(op);
+      return;
+    }
+
+    if (auto pipeOp = dyn_cast<tile::DataflowPipeReaderReleaseOp>(op)) {
+      auto fields = mapPipeFields(pipeOp.getFields());
+      if (fields.size() != pipeOp.getFields().size()) {
+        pipeOp.emitError(
+            "cannot lower tile.pipe.reader_release without GPU memdescs");
+        return;
+      }
+      builder.setInsertionPoint(op);
+      builder.create<tle::PipeReaderReleaseOp>(
+          op->getLoc(), fields, pipeOp.getStage(), pipeOp.getCapacityAttr(),
+          pipeOp.getScopeAttr(), pipeOp.getPipeNameAttr(),
+          pipeOp.getFieldNamesAttr(), pipeOp.getReaderNameAttr());
+      eraseOps.push_back(op);
+      return;
+    }
+
     if (auto copyOp = dyn_cast<tile::CopyOp>(op)) {
-      Value src = materializeTileBuffer(copyOp.getSrc(), bufferValues);
+      Value copySrc = op->getOperand(0);
+      Value copyDst = op->getOperand(1);
+      Value srcMemDesc = getGpuMemDesc(copySrc, bufferMemDescs);
+      Value dstMemDesc = getGpuMemDesc(copyDst, bufferMemDescs);
+      bool srcIsTensorDesc = isa<triton::TensorDescType>(copySrc.getType());
+      bool dstIsTensorDesc = isa<triton::TensorDescType>(copyDst.getType());
+      if ((srcIsTensorDesc && dstMemDesc) ||
+          (srcMemDesc && dstIsTensorDesc)) {
+        builder.setInsertionPoint(op);
+        Value tmaSrc = srcMemDesc ? srcMemDesc : copySrc;
+        Value tmaDst = dstMemDesc ? dstMemDesc : copyDst;
+        builder.create<ttg::TMACopyOp>(op->getLoc(), tmaSrc, tmaDst,
+                                       copyOp.getIndices());
+        eraseOps.push_back(op);
+        return;
+      }
+      Value src = materializeTileBuffer(copySrc, bufferValues);
       if (!src)
-        src = copyOp.getSrc();
-      Value dst = copyOp.getDst();
+        src = copySrc;
+      Value dst = copyDst;
+      if (dstMemDesc) {
+        builder.setInsertionPoint(op);
+        Value storeValue = src;
+        if (isTTPointerLike(storeValue)) {
+          auto load = builder.create<triton::LoadOp>(
+              op->getLoc(), storeValue, triton::CacheModifier::NONE,
+              triton::EvictionPolicy::NORMAL, false);
+          storeValue = load.getResult();
+        }
+        if (isa<RankedTensorType>(storeValue.getType()))
+          builder.create<ttg::LocalStoreOp>(op->getLoc(), storeValue,
+                                            dstMemDesc);
+        eraseOps.push_back(op);
+        return;
+      }
       if (isTileBuffer(dst)) {
         bufferValues[dst] = src;
         eraseOps.push_back(op);
         return;
+      }
+      if (srcMemDesc && isTTPointerLike(dst)) {
+        if (auto resultType = getPointeeTensorType(dst)) {
+          builder.setInsertionPoint(op);
+          src = builder.create<ttg::LocalLoadOp>(op->getLoc(), resultType,
+                                                 srcMemDesc);
+        }
       }
       if (isTTPointerLike(dst) && isTTTensorOrPointer(src)) {
         builder.setInsertionPoint(op);
@@ -184,14 +423,58 @@ static void lowerGpuTileIRToTTIR(ModuleOp module) {
     }
 
     if (auto storeTensorOp = dyn_cast<tile::StoreTensorOp>(op)) {
-      bufferValues[storeTensorOp.getDst()] = storeTensorOp.getSrc();
+      Value storeSrc = op->getOperand(0);
+      Value storeDst = op->getOperand(1);
+      bufferValues[storeDst] = storeSrc;
+      if (Value dstMemDesc = getGpuMemDesc(storeDst, bufferMemDescs)) {
+        builder.setInsertionPoint(op);
+        builder.create<ttg::LocalStoreOp>(op->getLoc(), storeSrc, dstMemDesc);
+      }
       eraseOps.push_back(op);
       return;
     }
 
     if (auto subviewOp = dyn_cast<tile::SubViewOp>(op)) {
-      if (Value src = materializeTileBuffer(subviewOp.getSource(), bufferValues))
+      Value subviewSource = op->getOperand(0);
+      if (Value src = materializeTileBuffer(subviewSource, bufferValues))
         bufferValues[subviewOp.getResult()] = src;
+
+      if (Value srcMemDesc = getGpuMemDesc(subviewSource, bufferMemDescs)) {
+        auto resultType = getGpuMemDescType(op);
+        if (!resultType) {
+          subviewOp.emitError("missing GPU memdesc type for tile.subview");
+          return;
+        }
+        if (subviewOp.getOffsets().empty()) {
+          subviewOp.emitError("GPU tile.subview requires a leading slot index");
+          return;
+        }
+        builder.setInsertionPoint(op);
+        Value index = subviewOp.getOffsets().front();
+        if (!index.getType().isInteger(32))
+          index = builder.create<arith::IndexCastOp>(op->getLoc(),
+                                                     builder.getI32Type(), index);
+        auto memDescIndex = builder.create<ttg::MemDescIndexOp>(
+            op->getLoc(), resultType, srcMemDesc, index);
+        bufferMemDescs[subviewOp.getResult()] = memDescIndex.getResult();
+        subviewOp.getResult().replaceAllUsesWith(memDescIndex.getResult());
+      }
+      eraseOps.push_back(op);
+      return;
+    }
+
+    if (auto localPtrOp = dyn_cast<tile::LocalPtrOp>(op)) {
+      Value memDesc = getGpuMemDesc(op->getOperand(0), bufferMemDescs);
+      if (!memDesc) {
+        localPtrOp.emitError(
+            "cannot lower tile.local_ptr without a GPU shared-memory memdesc");
+        return;
+      }
+      builder.setInsertionPoint(op);
+      auto localPointers = builder.create<tle::LocalPointersOp>(
+          op->getLoc(), localPtrOp.getResult().getType(), memDesc,
+          localPtrOp.getIndices());
+      localPtrOp.getResult().replaceAllUsesWith(localPointers.getResult());
       eraseOps.push_back(op);
       return;
     }
@@ -203,10 +486,35 @@ static void lowerGpuTileIRToTTIR(ModuleOp module) {
     }
 
     if (auto toTensorOp = dyn_cast<tile::ToTensorOp>(op)) {
-      Value value = materializeTileBuffer(toTensorOp.getSrc(), bufferValues);
+      Value tensorSource = op->getOperand(0);
+      Value value;
+      if (Value memDesc = getGpuMemDesc(tensorSource, bufferMemDescs)) {
+        auto resultType = dyn_cast<RankedTensorType>(
+            toTensorOp.getResult().getType());
+        if (!resultType) {
+          toTensorOp.emitError(
+              "GPU tile.to_tensor expects a ranked tensor result");
+          return;
+        }
+        auto pointerType = triton::PointerType::get(
+            resultType.getElementType(), kGpuSharedMemoryAddressSpace);
+        auto pointerTensorType = RankedTensorType::get(
+            resultType.getShape(), pointerType, resultType.getEncoding());
+        builder.setInsertionPoint(op);
+        auto localPointers = builder.create<tle::LocalPointersOp>(
+            op->getLoc(), pointerTensorType, memDesc, ValueRange{});
+        value = builder
+                    .create<triton::LoadOp>(
+                        op->getLoc(), localPointers.getResult(),
+                        triton::CacheModifier::NONE,
+                        triton::EvictionPolicy::NORMAL, false)
+                    .getResult();
+      } else {
+        value = materializeTileBuffer(tensorSource, bufferValues);
+      }
       if (!value) {
-        toTensorOp.emitError("cannot lower tile.to_tensor without a preceding "
-                             "tile.copy or tile.store_tensor");
+        toTensorOp.emitError("cannot lower tile.to_tensor without a "
+                             "preceding write or GPU memdesc");
         return;
       }
 
@@ -236,12 +544,19 @@ static void lowerGpuTileIRToTTIR(ModuleOp module) {
   SmallVector<Operation *> cleanupOps;
   module.walk([&](Operation *op) {
     if (isa<tile::AllocOp, tile::SubViewOp, tile::CopyOp,
-            tile::StoreTensorOp, tile::ToTensorOp, tile::GmOffsetOp,
+            tile::LocalPtrOp, tile::StoreTensorOp, tile::ToTensorOp,
+            tile::GmOffsetOp, tile::DataflowPipeCreateOp,
+            tile::DataflowPipeWriterAcquireOp,
+            tile::DataflowPipeWriterCommitOp,
+            tile::DataflowPipeWriterCloseOp,
+            tile::DataflowPipeReaderWaitOp,
+            tile::DataflowPipeReaderReleaseOp,
             tile::SetFlagOp, tile::WaitFlagOp, tile::PipeBarrierOp>(op))
       cleanupOps.push_back(op);
   });
   for (Operation *op : llvm::reverse(cleanupOps))
     eraseIfUnused(op);
+
 }
 #endif
 
@@ -375,9 +690,10 @@ void init_triton_tle_ir(py::module &&m) {
              return tile::BufType::get(ctx, shape, elementType, memSpace);
            })
       .def("create_tile_alloc",
-           [](TritonOpBuilder &self, Type tileBufType) -> Value {
+           [](TritonOpBuilder &self, Type tileBufType,
+              Type gpuMemDescType) -> Value {
              auto bufType = mlir::cast<tile::BufType>(tileBufType);
-             return self.create<tile::AllocOp>(
+             auto op = self.create<tile::AllocOp>(
                  tileBufType, bufType.getMemorySpace(),
                  /*shape=*/mlir::ArrayAttr(), /*dtype=*/mlir::TypeAttr(),
                  /*policy=*/tile::PolicyAttr(),
@@ -385,12 +701,15 @@ void init_triton_tle_ir(py::module &&m) {
                                                   tile::Layout::ND),
                  /*lifetime=*/tile::LifetimeAttr(),
                  /*comment=*/mlir::StringAttr());
+             op->setAttr(kGpuMemDescTypeAttr,
+                         mlir::TypeAttr::get(gpuMemDescType));
+             return op.getResult();
            })
       .def("create_tile_copy",
            [](TritonOpBuilder &self, Value &src, Value &dst,
-              std::vector<Value> & /*shape*/, bool interNoAlias) -> void {
+              std::vector<Value> &indices, bool interNoAlias) -> void {
              auto op = self.create<tile::CopyOp>(
-                 src, dst, /*engine=*/tile::EngineAttr(),
+                 src, dst, indices, /*engine=*/tile::EngineAttr(),
                  /*src_layout=*/tile::LayoutAttr::get(
                      self.getBuilder().getContext(), tile::Layout::ND),
                  /*dst_nz_layout=*/tile::NZLayoutAttr(),
@@ -402,7 +721,8 @@ void init_triton_tle_ir(py::module &&m) {
       .def("create_tile_subview",
            [](TritonOpBuilder &self, Value source, std::vector<Value> &offsets,
               const std::vector<int64_t> &sizes,
-              const std::vector<int64_t> &strides) -> Value {
+              const std::vector<int64_t> &strides,
+              Type gpuMemDescType) -> Value {
              SmallVector<Value> indexOffsets;
              auto &builder = self.getBuilder();
              auto indexType = builder.getIndexType();
@@ -418,7 +738,18 @@ void init_triton_tle_ir(py::module &&m) {
              auto op = self.create<tile::SubViewOp>(
                  resTy, source, indexOffsets, builder.getI64ArrayAttr(sizes),
                  builder.getI64ArrayAttr(strides));
+             op->setAttr(kGpuMemDescTypeAttr,
+                         mlir::TypeAttr::get(gpuMemDescType));
              return op.getResult();
+           })
+      .def("create_tile_local_ptr",
+           [](TritonOpBuilder &self, Type resultTy, Value source,
+              py::args args) -> OpState {
+             llvm::SmallVector<Value> indices;
+             indices.reserve(args.size());
+             for (const auto &arg : args)
+               indices.push_back(py::cast<Value>(arg));
+             return self.create<tile::LocalPtrOp>(resultTy, source, indices);
            })
       .def("create_tile_to_tensor",
            [](TritonOpBuilder &self, Value &src, bool /*writable*/) -> Value {
@@ -431,6 +762,127 @@ void init_triton_tle_ir(py::module &&m) {
       .def("create_tile_store_tensor",
            [](TritonOpBuilder &self, Value &src, Value &dst) -> void {
              self.create<tile::StoreTensorOp>(src, dst);
+           })
+      .def("create_tile_pipe_create",
+           [](TritonOpBuilder &self, std::vector<Value> fields,
+              int32_t capacity, const std::string &scope,
+              const std::string &pipeName, std::vector<std::string> fieldNames,
+              std::vector<std::string> readerNames, bool oneShot) -> void {
+             auto &builder = self.getBuilder();
+             SmallVector<Attribute> fieldNameAttrs;
+             for (StringRef name : fieldNames)
+               fieldNameAttrs.push_back(builder.getStringAttr(name));
+             SmallVector<Attribute> readerNameAttrs;
+             for (StringRef name : readerNames)
+               readerNameAttrs.push_back(builder.getStringAttr(name));
+             StringAttr pipeNameAttr;
+             if (!pipeName.empty())
+               pipeNameAttr = builder.getStringAttr(pipeName);
+             ArrayAttr readerNamesAttr;
+             if (!readerNameAttrs.empty())
+               readerNamesAttr = builder.getArrayAttr(readerNameAttrs);
+             BoolAttr oneShotAttr;
+             if (oneShot)
+               oneShotAttr = builder.getBoolAttr(true);
+             self.create<tile::DataflowPipeCreateOp>(
+                 fields, builder.getI32IntegerAttr(capacity),
+                 builder.getStringAttr(scope), pipeNameAttr,
+                 builder.getArrayAttr(fieldNameAttrs), readerNamesAttr,
+                 oneShotAttr);
+           })
+      .def("create_tile_pipe_writer_acquire",
+           [](TritonOpBuilder &self, std::vector<Value> fields, Value stage,
+              Value phase, int32_t capacity, const std::string &scope,
+              const std::string &pipeName,
+              std::vector<std::string> fieldNames) -> void {
+             auto &builder = self.getBuilder();
+             SmallVector<Attribute> fieldNameAttrs;
+             for (StringRef name : fieldNames)
+               fieldNameAttrs.push_back(builder.getStringAttr(name));
+             StringAttr pipeNameAttr;
+             if (!pipeName.empty())
+               pipeNameAttr = builder.getStringAttr(pipeName);
+             self.create<tile::DataflowPipeWriterAcquireOp>(
+                 fields, stage, phase, builder.getI32IntegerAttr(capacity),
+                 builder.getStringAttr(scope), pipeNameAttr,
+                 builder.getArrayAttr(fieldNameAttrs));
+           })
+      .def("create_tile_pipe_writer_commit",
+           [](TritonOpBuilder &self, std::vector<Value> fields, Value stage,
+              int32_t capacity, const std::string &scope,
+              const std::string &pipeName,
+              std::vector<std::string> fieldNames) -> void {
+             auto &builder = self.getBuilder();
+             SmallVector<Attribute> fieldNameAttrs;
+             for (StringRef name : fieldNames)
+               fieldNameAttrs.push_back(builder.getStringAttr(name));
+             StringAttr pipeNameAttr;
+             if (!pipeName.empty())
+               pipeNameAttr = builder.getStringAttr(pipeName);
+             self.create<tile::DataflowPipeWriterCommitOp>(
+                 fields, stage, builder.getI32IntegerAttr(capacity),
+                 builder.getStringAttr(scope), pipeNameAttr,
+                 builder.getArrayAttr(fieldNameAttrs));
+           })
+      .def("create_tile_pipe_writer_close",
+           [](TritonOpBuilder &self, std::vector<Value> fields, Value stage,
+              Value phase, int32_t capacity, const std::string &scope,
+              const std::string &pipeName,
+              std::vector<std::string> fieldNames) -> void {
+             auto &builder = self.getBuilder();
+             SmallVector<Attribute> fieldNameAttrs;
+             for (StringRef name : fieldNames)
+               fieldNameAttrs.push_back(builder.getStringAttr(name));
+             StringAttr pipeNameAttr;
+             if (!pipeName.empty())
+               pipeNameAttr = builder.getStringAttr(pipeName);
+             self.create<tile::DataflowPipeWriterCloseOp>(
+                 fields, stage, phase, builder.getI32IntegerAttr(capacity),
+                 builder.getStringAttr(scope), pipeNameAttr,
+                 builder.getArrayAttr(fieldNameAttrs));
+           })
+      .def("create_tile_pipe_reader_wait",
+           [](TritonOpBuilder &self, std::vector<Value> fields, Value stage,
+              Value phase, int32_t capacity, const std::string &scope,
+              const std::string &pipeName, std::vector<std::string> fieldNames,
+              const std::string &readerName,
+              std::vector<std::string>) -> Value {
+             auto &builder = self.getBuilder();
+             SmallVector<Attribute> fieldNameAttrs;
+             for (StringRef name : fieldNames)
+               fieldNameAttrs.push_back(builder.getStringAttr(name));
+             StringAttr pipeNameAttr;
+             if (!pipeName.empty())
+               pipeNameAttr = builder.getStringAttr(pipeName);
+             StringAttr readerNameAttr;
+             if (!readerName.empty())
+               readerNameAttr = builder.getStringAttr(readerName);
+             return self.create<tile::DataflowPipeReaderWaitOp>(
+                 builder.getI1Type(), fields, stage, phase,
+                 builder.getI32IntegerAttr(capacity),
+                 builder.getStringAttr(scope), pipeNameAttr,
+                 builder.getArrayAttr(fieldNameAttrs), readerNameAttr);
+           })
+      .def("create_tile_pipe_reader_release",
+           [](TritonOpBuilder &self, std::vector<Value> fields, Value stage,
+              int32_t capacity, const std::string &scope,
+              const std::string &pipeName, std::vector<std::string> fieldNames,
+              const std::string &readerName,
+              std::vector<std::string>) -> void {
+             auto &builder = self.getBuilder();
+             SmallVector<Attribute> fieldNameAttrs;
+             for (StringRef name : fieldNames)
+               fieldNameAttrs.push_back(builder.getStringAttr(name));
+             StringAttr pipeNameAttr;
+             if (!pipeName.empty())
+               pipeNameAttr = builder.getStringAttr(pipeName);
+             StringAttr readerNameAttr;
+             if (!readerName.empty())
+               readerNameAttr = builder.getStringAttr(readerName);
+             self.create<tile::DataflowPipeReaderReleaseOp>(
+                 fields, stage, builder.getI32IntegerAttr(capacity),
+                 builder.getStringAttr(scope), pipeNameAttr,
+                 builder.getArrayAttr(fieldNameAttrs), readerNameAttr);
            })
       .def("create_tile_set_flag",
            [](TritonOpBuilder &self, int64_t producer, int64_t consumer,

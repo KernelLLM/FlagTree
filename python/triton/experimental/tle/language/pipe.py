@@ -109,7 +109,13 @@ def pipe(
             raise ValueError(
                 f"tle.pipe field {field_name!r} leading dimension must equal capacity {capacity}, got {field.shape[0]}")
 
-    if not _tileir_mode():
+    if _tileir_mode():
+        if not hasattr(_semantic.builder, "create_tile_pipe_create"):
+            raise RuntimeError("TLE GPU TileIR mode requires dataflow pipe support in the TLE builder")
+        _semantic.builder.create_tile_pipe_create(
+            [field.handle for field in fields.values()], capacity, scope, name or "", list(fields.keys()),
+            list(reader_names or ()), one_shot)
+    else:
         _semantic.builder.create_pipe_create([field.handle for field in fields.values()], capacity, scope, name or "",
                                              list(fields.keys()), list(reader_names or ()), one_shot)
     return gpu_types.pipe_value(capacity, scope, name, fields, reader_names, one_shot=one_shot)

@@ -24,7 +24,8 @@ def _gpu_primitives_kernel(src, out, BLOCK: tl.constexpr):
     writer.commit(0)
     wait_result = reader.wait(0)
     read_slot = wait_result.slot.payload
-    value = tle.gpu.local_ptr(write_slot)
+    local_ptr = tle.gpu.local_ptr(read_slot)
+    value = tl.load(local_ptr)
     reader.release(0)
     writer.close(0)
     tl.store(out + idx, value)
@@ -69,10 +70,13 @@ def dump_tileir(path):
             "tile.alloc",
             "tile.copy",
             "tile.subview",
-            "tile.to_tensor",
-            "tile.set_flag",
-            "tile.wait_flag",
-            "tile.pipe_barrier",
+            "tile.local_ptr",
+            "tile.pipe.create",
+            "tile.pipe.writer_acquire",
+            "tile.pipe.writer_commit",
+            "tile.pipe.writer_close",
+            "tile.pipe.reader_wait",
+            "tile.pipe.reader_release",
     ):
         if needle not in text:
             raise RuntimeError(f"expected {needle} in primitive TileIR dump")
@@ -95,8 +99,18 @@ def dump_ttir(path):
     text = str(module)
     if "tile." in text:
         raise RuntimeError("primitive TTIR dump still contains TileIR ops")
-    if "ttg.local_barrier" not in text:
-        raise RuntimeError("primitive TTIR dump expected ttg.local_barrier")
+    if "tle.local_pointers" not in text:
+        raise RuntimeError("primitive TTIR dump expected tle.local_pointers")
+    for needle in (
+            "tle.pipe.create",
+            "tle.pipe.writer_acquire",
+            "tle.pipe.writer_commit",
+            "tle.pipe.writer_close",
+            "tle.pipe.reader_wait",
+            "tle.pipe.reader_release",
+    ):
+        if needle not in text:
+            raise RuntimeError(f"primitive TTIR dump expected {needle}")
     Path(path).write_text(text, encoding="utf-8")
     print(f"[dump-ttir] wrote {path}")
 
