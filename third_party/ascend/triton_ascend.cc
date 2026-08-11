@@ -15,6 +15,7 @@
 #include "ascend/include/TritonToAnnotation/Passes.h"
 #include "ascend/include/TritonToHFusion/Passes.h"
 #include "ascend/include/TritonToHIVM/Passes.h"
+#include "ascend/include/TritonToTensorView/Passes.h"
 #include "ascend/include/TileIRToHIVM/Passes.h"
 #include "ascend/include/TritonToLLVM/Passes.h"
 #include "incubated/Conversion/DiscreteMaskAccessConversion/Passes.h"
@@ -392,6 +393,10 @@ void init_triton_ascend_passes_ttir(py::module &&m) {
 
   m.def("add_triton_to_hivm", [](mlir::PassManager &pm) {
     pm.addPass(mlir::triton::createTritonToHIVMPass());
+  });
+
+  m.def("add_triton_to_tensor_view", [](mlir::PassManager &pm) {
+    pm.addPass(mlir::triton::createTritonToTensorViewPass());
   });
 
   m.def("add_tileir_to_hivm", [](mlir::PassManager &pm) {

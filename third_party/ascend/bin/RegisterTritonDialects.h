@@ -4,6 +4,7 @@
 #include "ascend/include/TritonToAnnotation/Passes.h"
 #include "ascend/include/TritonToHFusion/Passes.h"
 #include "ascend/include/TritonToHIVM/Passes.h"
+#include "ascend/include/TritonToTensorView/Passes.h"
 #include "ascend/include/TritonToLLVM/Passes.h"
 #include "incubated/Conversion/DiscreteMaskAccessConversion/Passes.h"
 #include "incubated/Conversion/TritonToLinalgIncubated/Passes.h"
@@ -106,6 +107,7 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
   mlir::triton::registerTritonToAnnotationPasses();
   mlir::triton::registerTritonToUnstructureIncubatedPasses();
   mlir::triton::registerTritonToHIVMPasses();
+  mlir::triton::registerTritonToTensorViewPasses();
   mlir::triton::registerTritonToHFusionPasses();
   mlir::triton::registerTritonToLLVMPasses();
   mlir::triton::registerAutoBlockifyPasses();
