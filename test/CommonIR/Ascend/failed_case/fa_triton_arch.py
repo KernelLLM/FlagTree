@@ -132,27 +132,23 @@ def _mm1_qkt(
     # branches of the if below have the same type (fp16[BLOCK_M, DIM]),
     # satisfying the SSA phi-node type constraint.
     q_l1 = tl.zeros((BLOCK_M, DIM), Q.dtype.element_ty)
-
     # reload Q at the first task of each output tile
     if idx_in_conbine == 0:
         q_row_offs = global_head_idx * BLOCK_M + tl.arange(0, BLOCK_M)
         q_col_offs = tl.arange(0, DIM)
-        q_ptr = (Q + batch_idx * sQb + head_idx * sQh
-                 + q_row_offs[:, None] * sQs
-                 + q_col_offs[None, :] * sQd)
+        q_ptr = (Q + batch_idx * sQb + head_idx * sQh + q_row_offs[:, None] * sQs + q_col_offs[None, :] * sQd)
         q_l1 = tl.load(q_ptr)
 
     for cb_idx in range(CB):
         kv_idx = idx_in_conbine * CB + cb_idx
 
+        # Load K as a plain register tensor then transpose for Q @ K^T
         k_bp = tl.make_block_ptr(K + batch_idx * sKb + kv_head_idx * sKh, (S, DIM), (sKs, sKd), (kv_idx * BLOCK_N, 0),
                                  (BLOCK_N, DIM), (1, 0))
-        tile_copy(k_bp, k_l1, [CBN, CD])
+        k_block = tl.load(k_bp)
 
-        # Fresh zero accumulator per KV block: dot output = per-block score,
-        # stored directly to GM.  No vector arithmetic before the store.
-        attn_score_l0c = tl.dot(tile_to_tensor(q_l1, writable=False), tile_to_tensor(k_l1, writable=False),
-                                tl.zeros((BLOCK_M, BLOCK_N), tl.float32))
+        # Both operands are plain tensors: no tile_to_tensor, no 4D cbuf issue.
+        attn_score_l0c = tl.dot(q_l1, tl.trans(k_block), tl.zeros((BLOCK_M, BLOCK_N), tl.float32))
 
         score_store_bp = tl.make_block_ptr(
             workspace_s +
@@ -189,13 +185,10 @@ def _mm2_pv(
 ):
     """MM2: compute O_part = P * V for CB blocks and store into workspace_pv.
 
-    Loads P from workspace_p (written by Vec1), loads V from GM, performs
-    MMA and writes the partial output to workspace_pv for Vec2.
-
-    Each KV block uses a fresh zero accumulator so the tl.dot result is the
-    per-block P*V directly.  It is stored to GM (workspace_pv) before any
-    vector-core arithmetic touches it, satisfying the cube→GM→vector ordering
-    constraint (matching the fa_4func.py pattern).
+    Both P and V are loaded via tl.load (plain register tensors), mirroring
+    fa_4func.py.  Using tile_copy+tile_to_tensor for either operand causes
+    bishengir-compile to see a 4D cbuf memref for operand 0 of the lowered
+    func.call, which the matmul intrinsic rejects (expects 2D).
     """
     # wait workspace_p[prev_ring_slot] (P from Vec1) ready
     sync_block_wait("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
@@ -217,10 +210,8 @@ def _mm2_pv(
             (1, 0))
         p_block = tl.load(prob_load_bp)
 
-        # Fresh zero accumulator per KV block: dot output = per-block P*V,
-        # stored directly to GM.  No vector arithmetic before the store.
-        pv_part_l0c = tl.dot(tile_to_tensor(p_l1, writable=False), tile_to_tensor(v_l1, writable=False),
-                             tl.zeros((BLOCK_M, DIM), tl.float32))
+        # Both operands are plain tensors: no tile_to_tensor, no 4D cbuf issue.
+        pv_part_l0c = tl.dot(p_block, v_block, tl.zeros((BLOCK_M, DIM), tl.float32))
 
         pv_store_bp = tl.make_block_ptr(
             workspace_pv + cid * RING * CB * BLOCK_M * DIM + prev_ring_slot * CB * BLOCK_M * DIM +
