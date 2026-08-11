@@ -26,10 +26,10 @@ func.func @view_load_bad_shape(%p: !tv.ptr<f32>, %n: index, %i: index) {
 
 // -----
 
-// tensor_view strides rank must match shape rank.
+// tensor_view strides rank must match shape rank (type-parse-time error, so the
+// erroring type is kept on the same line as the expected-error directive).
 func.func @tensor_view_bad_strides(%p: !tv.ptr<f32>, %n: index) {
   // expected-error @+1 {{expected strides rank (2) to match shape rank (1)}}
-  %v = tv.make_tensor_view %p, sizes = [%n], strides = [%n]
-       : !tv.ptr<f32> -> !tv.tensor_view<?xf32, strides=[1,1]>
+  %v = tv.make_tensor_view %p, sizes = [%n], strides = [%n] : !tv.ptr<f32> -> !tv.tensor_view<?xf32, strides=[1,1]>
   return
 }
