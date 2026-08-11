@@ -60,13 +60,13 @@ sh python/scripts/unpack_triton_build_deps.sh ./build-deps-triton_3.5.x-linux-aa
 ```
 
 ### 2.3 手动下载 flagtree 依赖
-``` bash 
+``` bash
 mkdir -p ~/.flagtree/ascend; cd ~/.flagtree/ascend
 wget https://baai-cp-web.ks3-cn-beijing.ksyuncs.com/trans/llvm-7d5de303-ubuntu-aarch64-python311-compat_v0.6.0.tar.gz
 tar zxvf llvm-7d5de303-ubuntu-aarch64-python311-compat_v0.6.0.tar.gz
 ```
 
-## 步骤 3： 构建 & 测试 
+## 步骤 3： 构建 & 测试
 ### 3.1 构建
 ``` bash
 bash script/flagtree_build.sh
