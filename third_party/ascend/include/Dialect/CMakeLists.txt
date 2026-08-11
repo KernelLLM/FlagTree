@@ -1,1 +1,2 @@
 add_subdirectory(TritonAscend)
+add_subdirectory(TensorView)

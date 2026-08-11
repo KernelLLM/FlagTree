@@ -21,6 +21,7 @@
 #include "amd/include/Dialect/TritonAMDGPU/IR/Dialect.h"
 #include "amd/include/TritonAMDGPUTransforms/Passes.h"
 #include "ascend/include/Dialect/TritonAscend/IR/TritonAscendDialect.h"
+#include "ascend/include/Dialect/TensorView/IR/TensorViewDialect.h"
 #include "nvidia/include/Dialect/NVGPU/IR/Dialect.h"
 #include "nvidia/include/Dialect/NVWS/IR/Dialect.h"
 #include "proton/Dialect/include/Conversion/ProtonGPUToLLVM/Passes.h"
@@ -168,7 +169,8 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
       mlir::triton::proton::ProtonDialect,
       mlir::triton::proton::gpu::ProtonGPUDialect, mlir::ROCDL::ROCDLDialect,
       mlir::triton::gluon::GluonDialect,
-      mlir::triton::ascend::TritonAscendDialect, mlir::hivm::HIVMDialect,
+      mlir::triton::ascend::TritonAscendDialect,
+      mlir::triton::tv::TensorViewDialect, mlir::hivm::HIVMDialect,
       mlir::scope::ScopeDialect, mlir::hacc::HACCDialect,
       mlir::annotation::AnnotationDialect, mlir::hfusion::HFusionDialect,
       mlir::tensor::TensorDialect, mlir::linalg::LinalgDialect,

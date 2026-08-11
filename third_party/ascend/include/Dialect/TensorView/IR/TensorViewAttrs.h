@@ -1,0 +1,43 @@
+//===- TensorViewAttrs.h - TensorView attributes ----------------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef TRITON_DIALECT_TENSORVIEW_ATTRS_H
+#define TRITON_DIALECT_TENSORVIEW_ATTRS_H
+
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
+
+// Padding-kind enum (PadKind).
+#include "ascend/include/Dialect/TensorView/IR/TensorViewEnums.h.inc"
+
+#define GET_ATTRDEF_CLASSES
+#include "ascend/include/Dialect/TensorView/IR/TensorViewAttrs.h.inc"
+
+namespace mlir {
+namespace triton {
+namespace tv {
+
+// Return true if `enc` is one of the view encodings (partition/strided/gs).
+bool isViewEncoding(Attribute enc);
+
+// Tile shape (== loaded/stored tensor shape) carried by a view encoding.
+llvm::SmallVector<int64_t> getEncodingTileShape(Attribute enc);
+
+// Number of index-space (tile-grid) dimensions of a view encoding.
+int64_t getEncodingIndexSpaceRank(Attribute enc);
+
+// Out-of-bounds padding kind carried by a view encoding.
+PadKind getEncodingPadding(Attribute enc);
+
+} // namespace tv
+} // namespace triton
+} // namespace mlir
+
+#endif // TRITON_DIALECT_TENSORVIEW_ATTRS_H

@@ -11,6 +11,7 @@
 
 #include "ascend/include/AutoBlockify/Passes.h"
 #include "ascend/include/Dialect/TritonAscend/IR/TritonAscendDialect.h"
+#include "ascend/include/Dialect/TensorView/IR/TensorViewDialect.h"
 #include "ascend/include/TritonToAnnotation/Passes.h"
 #include "ascend/include/TritonToHFusion/Passes.h"
 #include "ascend/include/TritonToHIVM/Passes.h"
@@ -440,7 +441,8 @@ void init_triton_ascend(py::module &&m) {
   // load dialects
   m.def("load_dialects", [](mlir::MLIRContext &context) {
     mlir::DialectRegistry registry;
-    registry.insert<mlir::triton::ascend::TritonAscendDialect>();
+    registry.insert<mlir::triton::ascend::TritonAscendDialect,
+                    mlir::triton::tv::TensorViewDialect>();
     context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
   });
