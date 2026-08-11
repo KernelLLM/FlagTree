@@ -150,6 +150,11 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
         passes.common.add_inliner(pm)
         passes.common.add_canonicalizer(pm)
 
+        # TensorView Pass A (tt -> tv): must run before the native access lowering
+        # (add_triton_to_structure) so it can intercept tt.load / tt.store.
+        if opt.use_tensor_view:
+            ascend.passes.ttir.add_triton_to_tensor_view(pm)
+
         ascend.passes.ttir.add_triton_to_structure(pm, enable_mask_fallback_conversion, optimize_dynamic_offset)
         ascend.passes.ttir.add_discrete_mask_access_conversion(pm, compile_on_910_95, force_simt_template,
                                                                enable_sync_block_lock)
@@ -160,6 +165,11 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
         ascend.passes.ttir.add_triton_to_llvm(pm)
         ascend.passes.ttir.add_bubble_up_operation(pm)
         ascend.passes.ttir.add_triton_to_structure(pm, enable_mask_fallback_conversion, optimize_dynamic_offset)
+
+        # TensorView Pass B (tv -> memref + hivm): late placement, just before the
+        # native buffer point (add_triton_to_linalg), which folds the boundary bridges.
+        if opt.use_tensor_view:
+            ascend.passes.ttir.add_tensor_view_to_hivm(pm)
 
         ascend.passes.ttir.add_triton_to_linalg(pm, False, named_ops, enable_nd2nz_on_vector, enable_select_analysis,
                                                 compile_on_910_95)
@@ -948,6 +958,9 @@ class NPUOptions:
     enable_vf_fusion: bool = False
     # todo: this code will be removed in version 530.
     add_auto_scheduling: bool = False
+    # TensorView (tv) access-lowering path (Pass A: tt->tv, Pass B: tv->memref+hivm).
+    # Off by default; enable to route pointer accesses through the tv dialect.
+    use_tensor_view: bool = False
     enable_dynamic_cv_pipeline: bool = False
     hfusion_enable_multiple_consumer_fusion: bool = False
 
