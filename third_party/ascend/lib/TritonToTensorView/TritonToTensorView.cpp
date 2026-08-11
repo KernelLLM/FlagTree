@@ -64,8 +64,9 @@ struct ContigAccess {
   int64_t traversalStride = 0;   // STEP between tile origins (== tile for partition)
   Value tileIndex;               // i32 tile index (e.g. program_id)
   Value fullSize;                // i32 full extent (from the mask compare; may be null)
-  triton::AddPtrOp addptr;       // op to erase afterwards
-  triton::SplatOp baseSplat;     // op to erase afterwards
+  triton::AddPtrOp addptr;       // outer (tensor) addptr, to erase afterwards
+  triton::SplatOp baseSplat;     // splat feeding it, to erase afterwards
+  triton::AddPtrOp scalarAddptr; // hoisted scalar addptr on the base (may be null)
 };
 
 static std::optional<int64_t> getConstIntValue(Value v) {
@@ -75,7 +76,12 @@ static std::optional<int64_t> getConstIntValue(Value v) {
   return std::nullopt;
 }
 
-/// Match `tt.load`/`tt.store` pointer operand of the 1-D contiguous form.
+/// Match `tt.load`/`tt.store` pointer of a 1-D tiled access.  The per-element
+/// pointer is `base + tile_origin + arange`, where the tile-origin scalar
+/// (`pid * STEP`) may appear in two frontend forms:
+///   (non-hoisted) addptr(splat(base),        addi(splat(pid*STEP), arange))
+///   (hoisted)     addptr(splat(addptr(base, pid*STEP)), arange)
+/// The hoisted form appears when the offset is not shared with a mask.
 static bool matchContiguous1D(Value ptrTensor, Value maskVal, ContigAccess &out) {
   auto addptr = ptrTensor.getDefiningOp<triton::AddPtrOp>();
   if (!addptr)
@@ -83,37 +89,50 @@ static bool matchContiguous1D(Value ptrTensor, Value maskVal, ContigAccess &out)
   auto splat = addptr.getPtr().getDefiningOp<triton::SplatOp>();
   if (!splat)
     return false;
-  // The base pointer must already have been rewritten to !tv.ptr (i.e. it is a
-  // function argument handled by rewriteFuncPtrArgs).
-  auto tvPtr = dyn_cast<tv::PtrType>(splat.getSrc().getType());
-  if (!tvPtr)
-    return false;
-  out.basePtr = splat.getSrc();
-  out.elementType = tvPtr.getPointeeType();
   out.addptr = addptr;
   out.baseSplat = splat;
 
-  // offset = addi(splat(pid*BLOCK), arange) in either operand order.
-  auto addi = addptr.getOffset().getDefiningOp<arith::AddIOp>();
-  if (!addi)
-    return false;
-  triton::MakeRangeOp range;
-  triton::SplatOp startSplat;
-  for (Value operand : {addi.getLhs(), addi.getRhs()}) {
-    if (auto m = operand.getDefiningOp<triton::MakeRangeOp>())
-      range = m;
-    else if (auto s = operand.getDefiningOp<triton::SplatOp>())
-      startSplat = s;
+  // The splatted scalar pointer is either the base or a hoisted
+  // addptr(base, pid*STEP).
+  Value scalarPtr = splat.getSrc();
+  Value originScalar; // i32 = pid*STEP from the hoisted scalar addptr (or null)
+  if (auto scalarAp = scalarPtr.getDefiningOp<triton::AddPtrOp>()) {
+    out.scalarAddptr = scalarAp;
+    originScalar = scalarAp.getOffset();
+    scalarPtr = scalarAp.getPtr();
   }
-  if (!range || !startSplat || range.getStart() != 0)
+  // The base pointer must already have been rewritten to !tv.ptr.
+  auto tvPtr = dyn_cast<tv::PtrType>(scalarPtr.getType());
+  if (!tvPtr)
+    return false;
+  out.basePtr = scalarPtr;
+  out.elementType = tvPtr.getPointeeType();
+
+  // Tensor offset: make_range, or addi(splat(pid*STEP), make_range).
+  Value tensorOff = addptr.getOffset();
+  triton::MakeRangeOp range;
+  Value originFromOffset;
+  if (auto mr = tensorOff.getDefiningOp<triton::MakeRangeOp>()) {
+    range = mr;
+  } else if (auto addi = tensorOff.getDefiningOp<arith::AddIOp>()) {
+    for (Value operand : {addi.getLhs(), addi.getRhs()}) {
+      if (auto m = operand.getDefiningOp<triton::MakeRangeOp>())
+        range = m;
+      else if (auto s = operand.getDefiningOp<triton::SplatOp>())
+        originFromOffset = s.getSrc();
+    }
+  }
+  if (!range || range.getStart() != 0)
     return false;
   out.tileSize = static_cast<int64_t>(range.getEnd()) -
                  static_cast<int64_t>(range.getStart());
 
-  // tile_origin = muli(tileIndex, STEP). STEP is the traversal stride; it equals
-  // the tile size for a contiguous partition, or differs for overlapping/gapped
-  // (strided) tiling.
-  auto muli = startSplat.getSrc().getDefiningOp<arith::MulIOp>();
+  // tile_origin = muli(tileIndex, STEP): from the hoisted scalar addptr or the
+  // splat inside the tensor offset.  STEP == tile => partition, else strided.
+  Value origin = originScalar ? originScalar : originFromOffset;
+  if (!origin)
+    return false;
+  auto muli = origin.getDefiningOp<arith::MulIOp>();
   if (!muli)
     return false;
   if (auto c = getConstIntValue(muli.getLhs())) {
@@ -179,14 +198,18 @@ static Value buildView(OpBuilder &b, Location loc, const ContigAccess &a) {
       .getResult();
 }
 
-/// Erase the (now dead) addptr + splat feeding a converted access.  Both ops
-/// are always set when a match succeeded; guard only on remaining uses.
-/// Taken by value (non-const op wrappers) so getOperation()/erase() are usable.
-static void eraseDeadPtrChain(triton::AddPtrOp addptr, triton::SplatOp baseSplat) {
+/// Erase the (now dead) tensor addptr + splat (+ hoisted scalar addptr) feeding a
+/// converted access.  Taken by value (non-const op wrappers) so
+/// getOperation()/erase() are usable.  scalarAddptr may be null (non-hoisted).
+static void eraseDeadPtrChain(triton::AddPtrOp addptr, triton::SplatOp baseSplat,
+                              triton::AddPtrOp scalarAddptr) {
   if (addptr->use_empty()) {
     addptr->erase();
-    if (baseSplat->use_empty())
+    if (baseSplat->use_empty()) {
       baseSplat->erase();
+      if (scalarAddptr && scalarAddptr->use_empty())
+        scalarAddptr->erase();
+    }
   }
 }
 
@@ -204,7 +227,7 @@ static LogicalResult rewriteLoad(triton::LoadOp load) {
                                            /*mask=*/Value());
   load.getResult().replaceAllUsesWith(viewLoad.getResult());
   load.erase();
-  eraseDeadPtrChain(a.addptr, a.baseSplat);
+  eraseDeadPtrChain(a.addptr, a.baseSplat, a.scalarAddptr);
   return success();
 }
 
@@ -220,7 +243,7 @@ static LogicalResult rewriteStore(triton::StoreOp store) {
   b.create<tv::ViewStoreOp>(loc, partView, store.getValue(), ValueRange{idx},
                             /*mask=*/Value());
   store.erase();
-  eraseDeadPtrChain(a.addptr, a.baseSplat);
+  eraseDeadPtrChain(a.addptr, a.baseSplat, a.scalarAddptr);
   return success();
 }
 

@@ -1,7 +1,9 @@
 // RUN: triton-opt %s --triton-to-tensor-view --canonicalize | FileCheck %s
 
-// Overlapping-window read (STEP=512 != WINDOW=1024) lowers to make_strided_view;
-// the contiguous store (STEP=1024 == WINDOW) stays make_partition_view.
+// Overlapping-window read (STEP=512 != WINDOW=1024) -> make_strided_view; the
+// contiguous store (STEP=1024 == WINDOW) -> make_partition_view.  Uses the
+// "hoisted" frontend form: the tile origin (pid*STEP) is a scalar tt.addptr on
+// the base, then splatted, then + arange.
 
 // CHECK-LABEL: tt.func public @sliding
 tt.func public @sliding(%in: !tt.ptr<f32>, %out: !tt.ptr<f32>) {
@@ -10,23 +12,21 @@ tt.func public @sliding(%in: !tt.ptr<f32>, %out: !tt.ptr<f32>) {
   %pid = tt.get_program_id x : i32
   %r = tt.make_range {end = 1024 : i32, start = 0 : i32} : tensor<1024xi32>
 
-  // strided read: origin steps by 512, tile size 1024 -> overlap
+  // strided read (hoisted): in + pid*512, splat, + arange
   %in_start = arith.muli %pid, %c512 : i32
-  %in_ss = tt.splat %in_start : i32 -> tensor<1024xi32>
-  %in_off = arith.addi %in_ss, %r : tensor<1024xi32>
-  %in_p = tt.splat %in : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
-  %in_ap = tt.addptr %in_p, %in_off : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
+  %in2 = tt.addptr %in, %in_start : !tt.ptr<f32>, i32
+  %in_sp = tt.splat %in2 : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
+  %in_ap = tt.addptr %in_sp, %r : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
   // CHECK: tv.make_strided_view
   // CHECK-SAME: #tv.strided_view<tile = [1024], dim_map = [0], traversal_strides = [512], padding = zero>
   // CHECK: tv.view_load
   %x = tt.load %in_ap : tensor<1024x!tt.ptr<f32>>
 
-  // contiguous store: origin steps by 1024 == tile
+  // contiguous store (hoisted): out + pid*1024, splat, + arange
   %out_start = arith.muli %pid, %c1024 : i32
-  %out_ss = tt.splat %out_start : i32 -> tensor<1024xi32>
-  %out_off = arith.addi %out_ss, %r : tensor<1024xi32>
-  %out_p = tt.splat %out : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
-  %out_ap = tt.addptr %out_p, %out_off : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
+  %out2 = tt.addptr %out, %out_start : !tt.ptr<f32>, i32
+  %out_sp = tt.splat %out2 : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
+  %out_ap = tt.addptr %out_sp, %r : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
   // CHECK: tv.make_partition_view
   // CHECK-SAME: #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>
   // CHECK: tv.view_store
