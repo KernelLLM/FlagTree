@@ -100,7 +100,7 @@ def binary_buffer(x, y, out, OP_ID: tl.constexpr):
 def extract_slice_tensor(x, out):
     offsets = tl.arange(0, 32)
     values = tl.load(x + offsets)
-    one = tle.dsa.extract_slice(values, (0,), (1,), (1,))
+    one = tle.dsa.extract_slice(values, (0, ), (1, ), (1, ))
     tl.store(out + tl.arange(0, 1), one)
 
 
@@ -109,7 +109,7 @@ def insert_slice_tensor(x, out):
     offsets = tl.arange(0, 32)
     values = tl.load(x + offsets)
     one = tl.load(x + tl.arange(0, 1))
-    merged = tle.dsa.insert_slice(values, one, (0,), (1,), (1,))
+    merged = tle.dsa.insert_slice(values, one, (0, ), (1, ), (1, ))
     tl.store(out + offsets, merged)
 
 
@@ -117,7 +117,7 @@ def insert_slice_tensor(x, out):
 def extract_element_tensor(x, out):
     offsets = tl.arange(0, 32)
     values = tl.load(x + offsets)
-    first = tle.dsa.extract_element(values, (0,))
+    first = tle.dsa.extract_element(values, (0, ))
     tl.store(out, first)
 
 
