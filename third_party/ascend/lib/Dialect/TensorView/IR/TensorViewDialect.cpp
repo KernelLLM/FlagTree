@@ -17,14 +17,11 @@ using namespace mlir;
 using namespace mlir::triton::tv;
 
 void TensorViewDialect::initialize() {
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "ascend/include/Dialect/TensorView/IR/TensorViewTypes.cpp.inc"
-      >();
-  addAttributes<
-#define GET_ATTRDEF_LIST
-#include "ascend/include/Dialect/TensorView/IR/TensorViewAttrs.cpp.inc"
-      >();
+  // Types and attributes are registered in TensorViewTypes.cpp /
+  // TensorViewAttrs.cpp, where their storage classes are complete (the
+  // StorageUniquer requires the full storage definition).
+  registerTypes();
+  registerAttributes();
   addOperations<
 #define GET_OP_LIST
 #include "ascend/include/Dialect/TensorView/IR/TensorViewOps.cpp.inc"

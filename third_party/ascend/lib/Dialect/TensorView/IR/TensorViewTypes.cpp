@@ -23,6 +23,15 @@ using namespace mlir::triton::tv;
 #define GET_TYPEDEF_CLASSES
 #include "ascend/include/Dialect/TensorView/IR/TensorViewTypes.cpp.inc"
 
+// Registered here (rather than in TensorViewDialect.cpp) so that the storage
+// classes are complete for the StorageUniquer.
+void TensorViewDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "ascend/include/Dialect/TensorView/IR/TensorViewTypes.cpp.inc"
+      >();
+}
+
 //===----------------------------------------------------------------------===//
 // TensorViewType custom assembly / verifier
 //===----------------------------------------------------------------------===//

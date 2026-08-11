@@ -23,6 +23,15 @@ using namespace mlir::triton::tv;
 #define GET_ATTRDEF_CLASSES
 #include "ascend/include/Dialect/TensorView/IR/TensorViewAttrs.cpp.inc"
 
+// Registered here (rather than in TensorViewDialect.cpp) so that the storage
+// classes are complete for the StorageUniquer.
+void TensorViewDialect::registerAttributes() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "ascend/include/Dialect/TensorView/IR/TensorViewAttrs.cpp.inc"
+      >();
+}
+
 //===----------------------------------------------------------------------===//
 // Custom assembly helpers for the encoding attributes.
 //

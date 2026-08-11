@@ -33,7 +33,10 @@ def TensorView_Dialect : Dialect {
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
 
-  let extraClassDeclaration = [{}];
+  let extraClassDeclaration = [{
+    void registerTypes();
+    void registerAttributes();
+  }];
 }
 
 #endif // TENSORVIEW_DIALECT
