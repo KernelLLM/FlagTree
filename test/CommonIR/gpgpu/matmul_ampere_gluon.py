@@ -1,5 +1,6 @@
 import torch
 import triton
+import pytest
 
 from triton.experimental import gluon
 from triton.experimental.gluon import language as gl
@@ -14,70 +15,90 @@ def is_ampere_or_newer():
     return target.backend == "cuda" and torch.cuda.get_device_capability()[0] >= 8
 
 
-_WARP = 32  # NVIDIA warp size (Ampere / H20)
+_WARP = 32  # NVIDIA warp size
 
 # ---------------------------------------------------------------------------
-# Configuration selection: pick the best (BLOCK_M, BLOCK_N, BLOCK_K, num_warps)
-# for a given problem shape.
-#
-# All configs satisfy:
-#   BLOCK_M, BLOCK_N, BLOCK_K multiples of 16 (MMA m16n8k16 alignment)
-#   BLOCK_M * BLOCK_N divisible by 32 * num_warps
-#   cp.async 16-byte vector alignment (BLOCK_K divisible by 8 for fp16/bf16)
+# Configuration table: (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, NUM_BUFFERS)
+# Removed 32x32 configs (Gluon correctness issue with very small tiles).
+# Tuned for H800 (132 SMs, 50MB L2, HBM3).
 # ---------------------------------------------------------------------------
 
 _CONFIGS = [
-    # (BLOCK_M, BLOCK_N, BLOCK_K, num_warps)
-    # BLOCK_K=64 variants
-    (128, 128, 64, 4),
-    (128, 64, 64, 4),
-    (64, 128, 64, 4),
-    (64, 64, 64, 4),
-    (64, 32, 64, 4),
-    (32, 64, 64, 4),
-    (32, 32, 64, 4),
-    # BLOCK_K=32 variants
-    (128, 128, 32, 4),
-    (128, 64, 32, 4),
-    (64, 128, 32, 4),
-    (64, 64, 32, 4),
-    (64, 32, 32, 4),
-    (32, 64, 32, 4),
-    (32, 32, 32, 4),
+    # (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, NUM_BUFFERS)
+    # BLOCK_K=64 only (BLOCK_K=32 has correctness issues in Gluon on this build)
+    # Large tiles for big matrices
+    (128, 256, 64, 8, 3),
+    (256, 128, 64, 8, 3),
+    (128, 128, 64, 4, 3),
+    (128, 128, 64, 4, 2),
+    # Medium tiles
+    (128, 64, 64, 4, 3),
+    (64, 128, 64, 4, 3),
+    (128, 64, 64, 4, 2),
+    (64, 128, 64, 4, 2),
+    (64, 64, 64, 4, 3),
+    (64, 64, 64, 4, 2),
+    # Small-matrix friendly
+    (64, 32, 64, 4, 2),
+    (32, 64, 64, 4, 2),
 ]
 
 
 def _select_config(M, N, K):
-    """Select the best tiling configuration for the given problem shape.
+    """Select the best tiling config for the given problem shape on H800.
 
-    Returns (BLOCK_M, BLOCK_N, BLOCK_K, num_warps).  Uses a scoring function
-    that minimises total compute waste (K-padding + M/N boundary overshoot)
-    while preferring larger tiles (fewer CTAs, better arithmetic intensity).
-
-    The boundary masks in the kernel correctly handle tiles that extend past
-    M or N, so configs where BLOCK_M > M or BLOCK_N > N are valid candidates
-    as long as the total compute waste is acceptable.
+    Returns (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, NUM_BUFFERS).
+    Considers compute waste, SM utilization, and pipeline depth.
     """
     import math
     best = None
     best_score = float('inf')
-    for bm, bn, bk, nw in _CONFIGS:
-        # Number of CTAs (tiles that cover the output)
+    num_sms = 132  # H800
+
+    for bm, bn, bk, nw, nb in _CONFIGS:
+        # Skip excessively large tiles for tiny problems
+        if bm > 4 * M and M < 64:
+            continue
+        if bn > 4 * N and N < 64:
+            continue
+
+        # Validate layout constraints
+        tile_area = bm * bn
+        total_threads = _WARP * nw
+        if tile_area % total_threads != 0:
+            continue
+        # cp.async vector alignment: K dim must be multiple of 8 for fp16
+        if bk % 8 != 0:
+            continue
+
+        # Number of CTAs
         n_cta_m = math.ceil(M / bm)
         n_cta_n = math.ceil(N / bn)
         n_ctas = n_cta_m * n_cta_n
-        # K padding
-        k_padded = math.ceil(K / bk) * bk
-        # Total compute = n_ctas × tile_area × k_padded
-        total_compute = n_ctas * bm * bn * k_padded
-        # Useful compute
+
+        # K iterations
+        k_iters = math.ceil(K / bk)
+
+        # Total vs useful compute
+        total_compute = n_ctas * bm * bn * k_iters * bk
         useful_compute = M * N * K
-        # Score: waste ratio (lower is better); ties favour the first config
-        # in the list (largest tile, fewest CTAs).
-        score = total_compute / max(useful_compute, 1)
+        waste = total_compute / max(useful_compute, 1)
+
+        # SM utilization: penalize under-filled GPU
+        sm_util = min(n_ctas / num_sms, 1.0)
+        parallelism_penalty = 1.0 + (1.0 - sm_util) * 0.3
+
+        # Pipeline benefit for large K
+        pipeline_bonus = 1.0
+        if k_iters >= 4 and nb >= 3:
+            pipeline_bonus = 0.92
+
+        score = waste * parallelism_penalty * pipeline_bonus
+
         if score < best_score:
             best_score = score
-            best = (bm, bn, bk, nw)
+            best = (bm, bn, bk, nw, nb)
+
     return best
 
 
@@ -291,11 +312,10 @@ _DTYPE_STR = {
 }
 
 
-def matmul(a, b, BLOCK_M=None, BLOCK_N=None, BLOCK_K=None, GROUP_M=8, NUM_BUFFERS=2):
+def matmul(a, b, BLOCK_M=None, BLOCK_N=None, BLOCK_K=None, GROUP_M=8, NUM_BUFFERS=None):
     assert a.dtype in _DTYPE_STR, f"unsupported dtype {a.dtype}; expected one of {list(_DTYPE_STR)}"
 
-    # mma_v2 tf32 path (EBW=32) produces incorrect results on this Triton build.
-    # For fp32 inputs: downcast to bf16, run the bf16 kernel, upcast output back to fp32.
+    # tf32 path disabled; downcast fp32 to bf16
     if a.dtype == torch.float32:
         c_bf16 = matmul(a.to(torch.bfloat16), b.to(torch.bfloat16), BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, NUM_BUFFERS)
         return c_bf16.to(torch.float32)
@@ -305,50 +325,169 @@ def matmul(a, b, BLOCK_M=None, BLOCK_N=None, BLOCK_K=None, GROUP_M=8, NUM_BUFFER
     assert K == Kb
     dtype_str = _DTYPE_STR[a.dtype]
 
-    # Auto-select config when block sizes are not specified
+    # Auto-select config
     if BLOCK_M is None or BLOCK_N is None or BLOCK_K is None:
-        BLOCK_M, BLOCK_N, BLOCK_K, num_warps = _select_config(M, N, K)
+        BLOCK_M, BLOCK_N, BLOCK_K, num_warps, auto_buffers = _select_config(M, N, K)
+        if NUM_BUFFERS is None:
+            NUM_BUFFERS = auto_buffers
     else:
         num_warps = 4
+        if NUM_BUFFERS is None:
+            NUM_BUFFERS = 2
 
-    # Pad M, N, K so the kernel never reads out-of-bounds or uses
-    # uninitialized shared memory.  Padding with zeros is safe:
-    # 0*x = 0 in the accumulator, and c_mask at the end ensures only
-    # the valid M×N output is written.
-    M_padded = ((M + BLOCK_M - 1) // BLOCK_M) * BLOCK_M
-    N_padded = ((N + BLOCK_N - 1) // BLOCK_N) * BLOCK_N
+    # Only pad K dimension. M/N boundaries handled by the output mask (c_mask).
+    # This avoids allocating large padded tensors for non-aligned M/N.
     K_padded = ((K + BLOCK_K - 1) // BLOCK_K) * BLOCK_K
-    need_pad = (M_padded != M) or (N_padded != N) or (K_padded != K)
 
-    if need_pad:
-        # Build padded A: [M_padded, K_padded], original data at [0:M, 0:K]
-        a_padded = torch.zeros((M_padded, K_padded), device=a.device, dtype=a.dtype)
-        a_padded[:M, :K] = a
-        a = a_padded
+    # Prepare A: pad K if needed
+    if K_padded != K:
+        a_work = torch.nn.functional.pad(a, (0, K_padded - K))
     else:
-        # Only K might need padding
-        if K_padded != K:
-            a = torch.nn.functional.pad(a, (0, K_padded - K))
+        a_work = a
 
-    # TN layout: the kernel reads B as a logical [K, N] tile with K on the
-    # contiguous (stride-1) dim (b_ptr_layout contig_dim=0 + ldmatrix.trans smem),
-    # so cp.async can issue 16-byte vectors along K. randn(K, N) is N-contiguous,
-    # so a bare .t() is only a view (K stays non-contiguous) and cp.async reads
-    # scrambled data -> A @ B^T. Materialize B^T as a [N, K] row-major buffer so K
-    # is truly contiguous; then stride over k == 1 and stride over n == K.
-    b = b.t().contiguous()  # [N, K] row-major (= B^T), K contiguous
-
-    if need_pad:
-        # Build padded B^T: [N_padded, K_padded], original data at [0:N, 0:K]
-        b_padded = torch.zeros((N_padded, K_padded), device=b.device, dtype=b.dtype)
-        b_padded[:N, :K] = b
-        b = b_padded
+    # Prepare B in TN layout: [N, K] with K contiguous for cp.async vectors
+    b_t = b.t().contiguous()  # [N, K], K is stride-1
+    if K_padded != K:
+        b_work = torch.nn.functional.pad(b_t, (0, K_padded - K))
     else:
-        if K_padded != K:
-            b = torch.nn.functional.pad(b, (0, K_padded - K))
+        b_work = b_t
 
     c = torch.empty((M, N), device=a.device, dtype=a.dtype)
-    grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N), )
-    matmul_kernel[grid](a, b, c, M, N, K_padded, a.stride(0), a.stride(1), b.stride(1), b.stride(0), c.stride(0),
-                        c.stride(1), BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, NUM_BUFFERS, dtype_str, num_warps=num_warps)
+    grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N),)
+    matmul_kernel[grid](
+        a_work, b_work, c, M, N, K_padded,
+        a_work.stride(0), a_work.stride(1),
+        b_work.stride(1), b_work.stride(0),
+        c.stride(0), c.stride(1),
+        BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, NUM_BUFFERS, dtype_str,
+        num_warps=num_warps,
+    )
     return c
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+def run_check(M, N, K, dtype=torch.float16, atol=2e-2, rtol=2e-2):
+    """Run a single matmul check: compare Gluon kernel output against torch.matmul."""
+    torch.manual_seed(0)
+    a = torch.randn((M, K), device="cuda", dtype=dtype)
+    b = torch.randn((K, N), device="cuda", dtype=dtype)
+    c = matmul(a, b)
+    ref = torch.matmul(a.float(), b.float()).to(dtype)
+    torch.testing.assert_close(c, ref, atol=atol, rtol=rtol)
+    print(f"[check] matmul_ampere_gluon ({M}, {N}, {K}) dtype={dtype} PASS")
+
+
+@pytest.mark.skipif(not is_ampere_or_newer(), reason="requires Ampere or newer GPU")
+@pytest.mark.parametrize("M, N, K", [
+    (100, 100, 100),
+    (80, 96, 80),
+    (2048, 2048, 2048),
+])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_matmul_ampere_gluon(M, N, K, dtype):
+    run_check(M, N, K, dtype=dtype)
+
+
+# ---------------------------------------------------------------------------
+# Performance Benchmark (modeled after FlagGems test_mm)
+# ---------------------------------------------------------------------------
+
+_PERF_SHAPES = [
+    (100, 100, 100),
+    (80, 96, 80),
+    (2048, 2048, 2048),
+]
+
+
+def _mm_input_fn(M, N, K, dtype, device):
+    """Generate input tensors for matmul benchmark."""
+    a = torch.randn([M, K], dtype=dtype, device=device)
+    b = torch.randn([K, N], dtype=dtype, device=device)
+    return a, b
+
+
+def _calc_tflops(M, N, K, latency_ms):
+    """Calculate TFLOPS: 2*M*N*K FLOPs for matmul."""
+    flops = 2.0 * M * N * K
+    return flops / (latency_ms * 1e-3) / 1e12
+
+
+def run_perf(M, N, K, dtype=torch.float16, warmup=100, rep=100):
+    """Run a single performance comparison: Gluon kernel vs torch.Tensor.mm.
+
+    Returns dict with latency (ms), speedup, and TFLOPS for both implementations.
+    """
+    device = "cuda"
+    a, b = _mm_input_fn(M, N, K, dtype, device)
+
+    # Benchmark torch.Tensor.mm (cuBLAS baseline)
+    latency_base = triton.testing.do_bench(lambda: a.mm(b), warmup=warmup, rep=rep)
+
+    # Benchmark Gluon matmul kernel
+    latency_gluon = triton.testing.do_bench(lambda: matmul(a, b), warmup=warmup, rep=rep)
+
+    speedup = latency_base / latency_gluon if latency_gluon > 0 else float('inf')
+    tflops_base = _calc_tflops(M, N, K, latency_base)
+    tflops_gluon = _calc_tflops(M, N, K, latency_gluon)
+
+    return {
+        "M": M, "N": N, "K": K, "dtype": str(dtype),
+        "latency_base_ms": latency_base,
+        "latency_gluon_ms": latency_gluon,
+        "speedup": speedup,
+        "tflops_base": tflops_base,
+        "tflops_gluon": tflops_gluon,
+    }
+
+
+@pytest.mark.skipif(not is_ampere_or_newer(), reason="requires Ampere or newer GPU")
+@pytest.mark.parametrize("M, N, K", _PERF_SHAPES)
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_perf_matmul_ampere_gluon(M, N, K, dtype):
+    """Performance test: compare Gluon matmul kernel against torch.Tensor.mm."""
+    result = run_perf(M, N, K, dtype=dtype)
+    print(
+        f"[perf] ({M:>5}, {N:>5}, {K:>5}) dtype={str(dtype):<14} | "
+        f"torch.mm: {result['latency_base_ms']:.4f} ms ({result['tflops_base']:.3f} TFLOPS) | "
+        f"gluon:    {result['latency_gluon_ms']:.4f} ms ({result['tflops_gluon']:.3f} TFLOPS) | "
+        f"speedup: {result['speedup']:.3f}x"
+    )
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="matmul_ampere_gluon test & benchmark")
+    parser.add_argument("--no-check", action="store_true", help="skip correctness check")
+    parser.add_argument("--perf", action="store_true", help="run performance benchmark")
+    args = parser.parse_args()
+
+    assert is_ampere_or_newer(), "requires Ampere or newer GPU"
+
+    if not args.no_check:
+        for M, N, K in _PERF_SHAPES:
+            run_check(M, N, K, dtype=torch.float16)
+            run_check(M, N, K, dtype=torch.bfloat16)
+
+    if args.perf or not args.no_check:
+        print("\n" + "=" * 90)
+        print(f"{'Performance Benchmark: Gluon matmul_ampere vs torch.Tensor.mm':^90}")
+        print("=" * 90)
+        print(
+            f"{'(M, N, K)':<22} {'dtype':<12} "
+            f"{'torch.mm (ms)':>14} {'gluon (ms)':>12} "
+            f"{'speedup':>9} {'torch TFLOPS':>13} {'gluon TFLOPS':>13}"
+        )
+        print("-" * 90)
+        for dtype in [torch.float16, torch.bfloat16]:
+            for M, N, K in _PERF_SHAPES:
+                r = run_perf(M, N, K, dtype=dtype)
+                print(
+                    f"({M:>5},{N:>5},{K:>5})  {str(dtype):<12} "
+                    f"{r['latency_base_ms']:>14.4f} {r['latency_gluon_ms']:>12.4f} "
+                    f"{r['speedup']:>8.3f}x {r['tflops_base']:>12.3f} {r['tflops_gluon']:>12.3f}"
+                )
+        print("=" * 90)
