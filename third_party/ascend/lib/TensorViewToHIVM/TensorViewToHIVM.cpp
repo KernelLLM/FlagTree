@@ -33,6 +33,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -56,12 +57,13 @@ namespace {
 // Helpers
 //===----------------------------------------------------------------------===//
 
-/// Info recovered from a partition view chain: base memref + tile + stride.
+/// Info recovered from a partition view chain: base memref + tile + stride + extent.
 struct ViewInfo {
   Value base;        // memref<?xT, #gm> (the rewritten function argument)
   Type elementType;  // T
   int64_t tile = 0;  // TILE (1-D)
   int64_t stride = 0;
+  Value n;           // full extent (index), from make_tensor_view sizes[0]
   tv::MakePartitionViewOp partitionOp;
   tv::MakeTensorViewOp baseOp;
   bool ok = false;
@@ -92,23 +94,27 @@ static ViewInfo traceView(Value viewVal) {
   Value base = mtv->getOperand(0);
   if (!isa<MemRefType>(base.getType()))
     return vi; // base must already be a memref (function argument rewritten)
+  if (mtv.getSizes().size() != 1)
+    return vi;
 
   vi.base = base;
   vi.elementType = baseTy.getElementType();
   vi.tile = enc.getTile()[0];
   vi.stride = baseTy.getStrides()[0];
+  vi.n = mtv.getSizes()[0];
   vi.partitionOp = pv;
   vi.baseOp = mtv;
   vi.ok = true;
   return vi;
 }
 
-/// Emit the GM tile view: reinterpret_cast %base to offset:[%i*TILE] sizes:[TILE] strides:[S].
+/// Emit the full GM tile view at element offset `off`:
+///   reinterpret_cast %base to offset:[off] sizes:[TILE] strides:[S].
+/// This only builds a view descriptor; no memory is accessed until a subview is
+/// DMAed, so a tile that spills past the extent is fine here.
 static Value emitGmTile(OpBuilder &b, Location loc, const ViewInfo &vi,
-                        Value index, hivm::AddressSpaceAttr gmSpace) {
+                        Value off, hivm::AddressSpaceAttr gmSpace) {
   MLIRContext *ctx = b.getContext();
-  Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile);
-  Value off = b.create<arith::MulIOp>(loc, index, cTile);
   auto layout = StridedLayoutAttr::get(ctx, /*offset=*/ShapedType::kDynamic,
                                        /*strides=*/{vi.stride});
   auto gmTileTy = MemRefType::get({vi.tile}, vi.elementType, layout, gmSpace);
@@ -118,8 +124,25 @@ static Value emitGmTile(OpBuilder &b, Location loc, const ViewInfo &vi,
       /*strides=*/ArrayRef<OpFoldResult>{b.getIndexAttr(vi.stride)});
 }
 
+/// `[0 : len]` subview of a 1-D memref (the in-bounds prefix).
+static Value emitPrefixSubview(OpBuilder &b, Location loc, Value src,
+                               Value len) {
+  return b.create<memref::SubViewOp>(
+      loc, src, ArrayRef<OpFoldResult>{b.getIndexAttr(0)},
+      ArrayRef<OpFoldResult>{OpFoldResult(len)},
+      ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
+}
+
+/// len = min(n - off, TILE): the in-bounds prefix length of this tile.
+static Value emitValidLen(OpBuilder &b, Location loc, const ViewInfo &vi,
+                          Value off, Value cTile) {
+  Value nMinusOff = b.create<arith::SubIOp>(loc, vi.n, off);
+  return b.create<arith::MinSIOp>(loc, nMinusOff, cTile);
+}
+
 //===----------------------------------------------------------------------===//
-// Lowering
+// Lowering (with contiguous tail handling: pad the tile to zero, DMA the valid
+// prefix only, so out-of-bounds elements are never accessed).
 //===----------------------------------------------------------------------===//
 
 static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
@@ -131,11 +154,20 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
 
   OpBuilder b(load);
   Location loc = load.getLoc();
-  Value gm = emitGmTile(b, loc, vi, load.getIndices()[0], gmSpace);
+  Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile);
+  Value off = b.create<arith::MulIOp>(loc, load.getIndices()[0], cTile);
+  Value len = emitValidLen(b, loc, vi, off, cTile);
+
+  Value gm = emitGmTile(b, loc, vi, off, gmSpace);
   auto ubTy = MemRefType::get({vi.tile}, vi.elementType,
                               MemRefLayoutAttrInterface{}, ubSpace);
   Value ub = b.create<memref::AllocOp>(loc, ubTy);
-  b.create<hivm::LoadOp>(loc, TypeRange{}, gm, ub);
+  // Zero-pad the whole tile (encoding padding = zero), then DMA the valid prefix.
+  Value zero = b.create<arith::ConstantOp>(loc, b.getZeroAttr(vi.elementType));
+  b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{ub});
+  Value gmSub = emitPrefixSubview(b, loc, gm, len);
+  Value ubSub = emitPrefixSubview(b, loc, ub, len);
+  b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, ubSub);
 
   auto tensorTy = cast<RankedTensorType>(load.getResult().getType());
   Value t = b.create<bufferization::ToTensorOp>(loc, tensorTy, ub,
@@ -155,6 +187,10 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
 
   OpBuilder b(store);
   Location loc = store.getLoc();
+  Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile);
+  Value off = b.create<arith::MulIOp>(loc, store.getIndices()[0], cTile);
+  Value len = emitValidLen(b, loc, vi, off, cTile);
+
   auto ubTy = MemRefType::get({vi.tile}, vi.elementType,
                               MemRefLayoutAttrInterface{}, ubSpace);
 #ifndef __LLVM_MAJOR_VERSION_22_COMPATIBLE__
@@ -162,8 +198,11 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
 #else
   Value vm = b.create<bufferization::ToBufferOp>(loc, ubTy, store.getValue());
 #endif
-  Value gm = emitGmTile(b, loc, vi, store.getIndices()[0], gmSpace);
-  b.create<hivm::StoreOp>(loc, TypeRange{}, vm, gm);
+  Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+  // Only DMA the valid prefix back to GM; the out-of-bounds tail is not written.
+  Value gmSub = emitPrefixSubview(b, loc, gm, len);
+  Value vmSub = emitPrefixSubview(b, loc, vm, len);
+  b.create<hivm::StoreOp>(loc, TypeRange{}, vmSub, gmSub);
   store.erase();
   return success();
 }

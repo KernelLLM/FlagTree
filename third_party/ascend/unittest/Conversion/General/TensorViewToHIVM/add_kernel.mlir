@@ -17,10 +17,14 @@ tt.func public @add_kernel(%a: !tv.ptr<f32>, %b: !tv.ptr<f32>, %c: !tv.ptr<f32>,
   %pa = tv.make_partition_view %va
         : !tv.tensor_view<?xf32, strides=[1]>
        -> !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>
+  // len = min(n - off, tile); pad the tile; DMA the valid prefix only.
+  // CHECK: arith.minsi
   // CHECK: memref.reinterpret_cast
   // CHECK-SAME: #hivm.address_space<gm>
   // CHECK: memref.alloc() : memref<1024xf32, #hivm.address_space<ub>>
-  // CHECK: hivm.hir.load ins(%{{.*}} : {{.*}}<gm>>) outs(%{{.*}} : {{.*}}<ub>>)
+  // CHECK: linalg.fill
+  // CHECK: memref.subview
+  // CHECK: hivm.hir.load
   // CHECK: bufferization.to_tensor
   %ta = tv.view_load %pa[%i]
         : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>
@@ -44,7 +48,8 @@ tt.func public @add_kernel(%a: !tv.ptr<f32>, %b: !tv.ptr<f32>, %c: !tv.ptr<f32>,
         : !tv.tensor_view<?xf32, strides=[1]>
        -> !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>
   // CHECK: bufferization.to_{{(memref|buffer)}}
-  // CHECK: hivm.hir.store ins(%{{.*}} : {{.*}}<ub>>) outs(%{{.*}} : {{.*}}<gm>>)
+  // CHECK: memref.subview
+  // CHECK: hivm.hir.store
   tv.view_store %pc[%i], %sum
         : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>, tensor<1024xf32>
   tt.return
