@@ -36,6 +36,9 @@
 #include "triton/Dialect/Triton/IR/Types.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include <limits>
+#include <optional>
+
 namespace mlir {
 namespace triton {
 #define GEN_PASS_DEF_TRITONTOTENSORVIEW
@@ -52,13 +55,15 @@ namespace {
 // Analysis
 //===----------------------------------------------------------------------===//
 
-/// A recognized 1-D contiguous partition access.
+/// A recognized 1-D tiled access: contiguous partition (traversalStride == tile)
+/// or overlapping/gapped strided view (traversalStride != tile).
 struct ContigAccess {
   Value basePtr;                 // scalar !tv.ptr<T>
   Type elementType;              // T
-  int64_t tileSize = 0;          // BLOCK
+  int64_t tileSize = 0;          // WINDOW (tile size)
+  int64_t traversalStride = 0;   // STEP between tile origins (== tile for partition)
   Value tileIndex;               // i32 tile index (e.g. program_id)
-  Value fullSize;                // i32 full extent (from the mask compare)
+  Value fullSize;                // i32 full extent (from the mask compare; may be null)
   triton::AddPtrOp addptr;       // op to erase afterwards
   triton::SplatOp baseSplat;     // op to erase afterwards
 };
@@ -105,18 +110,24 @@ static bool matchContiguous1D(Value ptrTensor, Value maskVal, ContigAccess &out)
   out.tileSize = static_cast<int64_t>(range.getEnd()) -
                  static_cast<int64_t>(range.getStart());
 
-  // block_start = muli(tileIndex, BLOCK)
+  // tile_origin = muli(tileIndex, STEP). STEP is the traversal stride; it equals
+  // the tile size for a contiguous partition, or differs for overlapping/gapped
+  // (strided) tiling.
   auto muli = startSplat.getSrc().getDefiningOp<arith::MulIOp>();
   if (!muli)
     return false;
-  if (auto c = getConstIntValue(muli.getLhs()); c && *c == out.tileSize)
+  if (auto c = getConstIntValue(muli.getLhs())) {
+    out.traversalStride = *c;
     out.tileIndex = muli.getRhs();
-  else if (auto c = getConstIntValue(muli.getRhs()); c && *c == out.tileSize)
+  } else if (auto c = getConstIntValue(muli.getRhs())) {
+    out.traversalStride = *c;
     out.tileIndex = muli.getLhs();
-  else
+  } else {
     return false;
+  }
 
-  // full extent from the mask compare: cmpi(offset, splat(N)).
+  // full extent from the mask compare: cmpi(offset, splat(N)).  Optional: an
+  // unmasked access has no explicit bound (handled with a sentinel in buildView).
   if (maskVal) {
     if (auto cmp = maskVal.getDefiningOp<arith::CmpIOp>()) {
       for (Value operand : {cmp.getLhs(), cmp.getRhs()})
@@ -124,21 +135,27 @@ static bool matchContiguous1D(Value ptrTensor, Value maskVal, ContigAccess &out)
           out.fullSize = s.getSrc();
     }
   }
-  // A full extent is required to build the base view size operand.
-  return static_cast<bool>(out.fullSize);
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
 // Emission
 //===----------------------------------------------------------------------===//
 
-/// Build make_tensor_view + make_partition_view; returns the partition view.
-static Value buildPartitionView(OpBuilder &b, Location loc,
-                                const ContigAccess &a) {
+/// Build make_tensor_view + make_partition_view / make_strided_view; returns the
+/// encoded view.  Partition when traversalStride == tile, strided otherwise.
+static Value buildView(OpBuilder &b, Location loc, const ContigAccess &a) {
   MLIRContext *ctx = b.getContext();
   Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
-  Value nIdx =
-      b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.fullSize);
+  Value nIdx;
+  if (a.fullSize) {
+    nIdx = b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.fullSize);
+  } else {
+    // Unmasked access: no explicit bound.  Use a large sentinel so Pass B's tail
+    // clamp folds to a full tile (the kernel guarantees in-bounds access).
+    nIdx = b.create<arith::ConstantIndexOp>(
+        loc, std::numeric_limits<int64_t>::max());
+  }
 
   SmallVector<int64_t> dynShape{ShapedType::kDynamic};
   SmallVector<int64_t> unitStride{1};
@@ -147,12 +164,19 @@ static Value buildPartitionView(OpBuilder &b, Location loc,
   auto baseView = b.create<tv::MakeTensorViewOp>(
       loc, baseTy, a.basePtr, ValueRange{nIdx}, ValueRange{c1});
 
-  auto enc = tv::PartitionViewAttr::get(ctx, ArrayRef<int64_t>{a.tileSize});
-  auto partTy =
-      tv::TensorViewType::get(dynShape, a.elementType, unitStride, enc);
-  auto partView =
-      b.create<tv::MakePartitionViewOp>(loc, partTy, baseView.getResult());
-  return partView.getResult();
+  bool isPartition = (a.traversalStride == a.tileSize);
+  Attribute enc;
+  if (isPartition)
+    enc = tv::PartitionViewAttr::get(ctx, ArrayRef<int64_t>{a.tileSize});
+  else
+    enc = tv::StridedViewAttr::get(ctx, ArrayRef<int64_t>{a.tileSize},
+                                   ArrayRef<int64_t>{a.traversalStride});
+  auto viewTy = tv::TensorViewType::get(dynShape, a.elementType, unitStride, enc);
+  if (isPartition)
+    return b.create<tv::MakePartitionViewOp>(loc, viewTy, baseView.getResult())
+        .getResult();
+  return b.create<tv::MakeStridedViewOp>(loc, viewTy, baseView.getResult())
+      .getResult();
 }
 
 /// Erase the (now dead) addptr + splat feeding a converted access.  Both ops
@@ -173,7 +197,7 @@ static LogicalResult rewriteLoad(triton::LoadOp load) {
 
   OpBuilder b(load);
   Location loc = load.getLoc();
-  Value partView = buildPartitionView(b, loc, a);
+  Value partView = buildView(b, loc, a);
   Value idx = b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.tileIndex);
   auto viewLoad = b.create<tv::ViewLoadOp>(loc, load.getResult().getType(),
                                            partView, ValueRange{idx},
@@ -191,7 +215,7 @@ static LogicalResult rewriteStore(triton::StoreOp store) {
 
   OpBuilder b(store);
   Location loc = store.getLoc();
-  Value partView = buildPartitionView(b, loc, a);
+  Value partView = buildView(b, loc, a);
   Value idx = b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.tileIndex);
   b.create<tv::ViewStoreOp>(loc, partView, store.getValue(), ValueRange{idx},
                             /*mask=*/Value());

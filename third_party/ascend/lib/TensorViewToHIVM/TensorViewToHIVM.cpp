@@ -57,31 +57,52 @@ namespace {
 // Helpers
 //===----------------------------------------------------------------------===//
 
-/// Info recovered from a partition view chain: base memref + tile + stride + extent.
+/// Info recovered from a partition/strided view chain.
 struct ViewInfo {
-  Value base;        // memref<?xT, #gm> (the rewritten function argument)
-  Type elementType;  // T
-  int64_t tile = 0;  // TILE (1-D)
-  int64_t stride = 0;
-  Value n;           // full extent (index), from make_tensor_view sizes[0]
-  tv::MakePartitionViewOp partitionOp;
-  tv::MakeTensorViewOp baseOp;
+  Value base;           // memref<?xT, #gm> (the rewritten function argument)
+  Type elementType;     // T
+  int64_t tile = 0;     // WINDOW / tile size (1-D)
+  int64_t traversal = 0;// STEP between tile origins (== tile for partition)
+  int64_t stride = 0;   // element stride (tensor_view.strides)
+  Value n;              // full extent (index), from make_tensor_view sizes[0]
   bool ok = false;
 };
 
-/// Trace `viewVal` (a partition view SSA) back to its base memref + params.
+/// Trace `viewVal` (a partition/strided view SSA) back to its base memref + params.
 static ViewInfo traceView(Value viewVal) {
   ViewInfo vi;
-  auto pv = viewVal.getDefiningOp<tv::MakePartitionViewOp>();
-  if (!pv)
+  auto encTy = dyn_cast<tv::TensorViewType>(viewVal.getType());
+  if (!encTy)
     return vi;
-  auto partTy = dyn_cast<tv::TensorViewType>(pv.getResult().getType());
-  if (!partTy)
+  // Tile + traversal from the view encoding (partition: traversal == tile).
+  int64_t tile, traversal;
+  Attribute encoding = encTy.getEncoding();
+  if (auto p = dyn_cast_or_null<tv::PartitionViewAttr>(encoding)) {
+    if (p.getTile().size() != 1)
+      return vi;
+    tile = p.getTile()[0];
+    traversal = tile;
+  } else if (auto s = dyn_cast_or_null<tv::StridedViewAttr>(encoding)) {
+    if (s.getTile().size() != 1 || s.getTraversalStrides().size() != 1)
+      return vi;
+    tile = s.getTile()[0];
+    traversal = s.getTraversalStrides()[0];
+  } else {
+    return vi; // gather_scatter is not handled by this (contiguous-tile) path
+  }
+
+  // The op producing the encoded view (make_partition_view / make_strided_view);
+  // its source is the base tensor_view (make_tensor_view result).
+  Operation *viewOp = viewVal.getDefiningOp();
+  Value baseView;
+  if (auto p = dyn_cast_or_null<tv::MakePartitionViewOp>(viewOp))
+    baseView = p.getSource();
+  else if (auto s = dyn_cast_or_null<tv::MakeStridedViewOp>(viewOp))
+    baseView = s.getSource();
+  else
     return vi;
-  auto enc = dyn_cast_or_null<tv::PartitionViewAttr>(partTy.getEncoding());
-  if (!enc || enc.getTile().size() != 1)
-    return vi;
-  auto mtv = pv.getSource().getDefiningOp<tv::MakeTensorViewOp>();
+
+  auto mtv = baseView.getDefiningOp<tv::MakeTensorViewOp>();
   if (!mtv)
     return vi;
   auto baseTy = dyn_cast<tv::TensorViewType>(mtv.getResult().getType());
@@ -99,11 +120,10 @@ static ViewInfo traceView(Value viewVal) {
 
   vi.base = base;
   vi.elementType = baseTy.getElementType();
-  vi.tile = enc.getTile()[0];
+  vi.tile = tile;
+  vi.traversal = traversal;
   vi.stride = baseTy.getStrides()[0];
   vi.n = mtv.getSizes()[0];
-  vi.partitionOp = pv;
-  vi.baseOp = mtv;
   vi.ok = true;
   return vi;
 }
@@ -155,7 +175,9 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
   OpBuilder b(load);
   Location loc = load.getLoc();
   Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile);
-  Value off = b.create<arith::MulIOp>(loc, load.getIndices()[0], cTile);
+  Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal);
+  // Tile origin steps by the traversal stride (== tile for a partition).
+  Value off = b.create<arith::MulIOp>(loc, load.getIndices()[0], cTrav);
   Value len = emitValidLen(b, loc, vi, off, cTile);
 
   Value gm = emitGmTile(b, loc, vi, off, gmSpace);
@@ -188,7 +210,8 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
   OpBuilder b(store);
   Location loc = store.getLoc();
   Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile);
-  Value off = b.create<arith::MulIOp>(loc, store.getIndices()[0], cTile);
+  Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal);
+  Value off = b.create<arith::MulIOp>(loc, store.getIndices()[0], cTrav);
   Value len = emitValidLen(b, loc, vi, off, cTile);
 
   auto ubTy = MemRefType::get({vi.tile}, vi.elementType,
