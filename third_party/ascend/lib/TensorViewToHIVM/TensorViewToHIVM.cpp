@@ -176,9 +176,16 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
   Location loc = load.getLoc();
   Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile);
   Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal);
-  // Tile origin steps by the traversal stride (== tile for a partition).
-  Value off = b.create<arith::MulIOp>(loc, load.getIndices()[0], cTrav);
-  Value len = emitValidLen(b, loc, vi, off, cTile);
+  // Logical tile origin (element index) steps by the traversal stride; the tail
+  // clamp is in logical units.  The physical byte/element offset scales it by
+  // the element stride.
+  Value offLogical = b.create<arith::MulIOp>(loc, load.getIndices()[0], cTrav);
+  Value len = emitValidLen(b, loc, vi, offLogical, cTile);
+  Value off = offLogical;
+  if (vi.stride != 1) {
+    Value cStride = b.create<arith::ConstantIndexOp>(loc, vi.stride);
+    off = b.create<arith::MulIOp>(loc, offLogical, cStride);
+  }
 
   Value gm = emitGmTile(b, loc, vi, off, gmSpace);
   auto ubTy = MemRefType::get({vi.tile}, vi.elementType,
@@ -211,8 +218,13 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
   Location loc = store.getLoc();
   Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile);
   Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal);
-  Value off = b.create<arith::MulIOp>(loc, store.getIndices()[0], cTrav);
-  Value len = emitValidLen(b, loc, vi, off, cTile);
+  Value offLogical = b.create<arith::MulIOp>(loc, store.getIndices()[0], cTrav);
+  Value len = emitValidLen(b, loc, vi, offLogical, cTile);
+  Value off = offLogical;
+  if (vi.stride != 1) {
+    Value cStride = b.create<arith::ConstantIndexOp>(loc, vi.stride);
+    off = b.create<arith::MulIOp>(loc, offLogical, cStride);
+  }
 
   auto ubTy = MemRefType::get({vi.tile}, vi.elementType,
                               MemRefLayoutAttrInterface{}, ubSpace);

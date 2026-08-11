@@ -30,6 +30,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
@@ -62,6 +63,7 @@ struct ContigAccess {
   Type elementType;              // T
   int64_t tileSize = 0;          // WINDOW (tile size)
   int64_t traversalStride = 0;   // STEP between tile origins (== tile for partition)
+  int64_t elementStride = 1;     // physical stride between logical elements (memory layout)
   Value tileIndex;               // i32 tile index (e.g. program_id)
   Value fullSize;                // i32 full extent (from the mask compare; may be null)
   triton::AddPtrOp addptr;       // outer (tensor) addptr, to erase afterwards
@@ -73,6 +75,18 @@ static std::optional<int64_t> getConstIntValue(Value v) {
   if (auto c = v.getDefiningOp<arith::ConstantOp>())
     if (auto ia = dyn_cast<IntegerAttr>(c.getValue()))
       return ia.getInt();
+  return std::nullopt;
+}
+
+/// A uniform integer tensor constant: `tt.splat` of a scalar constant, or an
+/// `arith.constant dense<C>` splat.
+static std::optional<int64_t> getSplatConstIntValue(Value v) {
+  if (auto s = v.getDefiningOp<triton::SplatOp>())
+    return getConstIntValue(s.getSrc());
+  if (auto c = v.getDefiningOp<arith::ConstantOp>())
+    if (auto dense = dyn_cast<DenseIntElementsAttr>(c.getValue()))
+      if (dense.isSplat())
+        return dense.getSplatValue<APInt>().getSExtValue();
   return std::nullopt;
 }
 
@@ -108,8 +122,20 @@ static bool matchContiguous1D(Value ptrTensor, Value maskVal, ContigAccess &out)
   out.basePtr = scalarPtr;
   out.elementType = tvPtr.getPointeeType();
 
-  // Tensor offset: make_range, or addi(splat(pid*STEP), make_range).
+  // Optional element stride: the whole per-element offset scaled by a constant,
+  //   muli(offsetTensor, splat(const))  (e.g. in[i*S]).
   Value tensorOff = addptr.getOffset();
+  if (auto emul = tensorOff.getDefiningOp<arith::MulIOp>()) {
+    if (auto c = getSplatConstIntValue(emul.getLhs())) {
+      out.elementStride = *c;
+      tensorOff = emul.getRhs();
+    } else if (auto c = getSplatConstIntValue(emul.getRhs())) {
+      out.elementStride = *c;
+      tensorOff = emul.getLhs();
+    }
+  }
+
+  // Tensor offset: make_range, or addi(splat(pid*STEP), make_range).
   triton::MakeRangeOp range;
   Value originFromOffset;
   if (auto mr = tensorOff.getDefiningOp<triton::MakeRangeOp>()) {
@@ -165,7 +191,7 @@ static bool matchContiguous1D(Value ptrTensor, Value maskVal, ContigAccess &out)
 /// encoded view.  Partition when traversalStride == tile, strided otherwise.
 static Value buildView(OpBuilder &b, Location loc, const ContigAccess &a) {
   MLIRContext *ctx = b.getContext();
-  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
+  Value cStride = b.create<arith::ConstantIndexOp>(loc, a.elementStride);
   Value nIdx;
   if (a.fullSize) {
     nIdx = b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.fullSize);
@@ -177,11 +203,11 @@ static Value buildView(OpBuilder &b, Location loc, const ContigAccess &a) {
   }
 
   SmallVector<int64_t> dynShape{ShapedType::kDynamic};
-  SmallVector<int64_t> unitStride{1};
-  auto baseTy = tv::TensorViewType::get(dynShape, a.elementType, unitStride,
+  SmallVector<int64_t> strideVec{a.elementStride};
+  auto baseTy = tv::TensorViewType::get(dynShape, a.elementType, strideVec,
                                         /*encoding=*/Attribute());
   auto baseView = b.create<tv::MakeTensorViewOp>(
-      loc, baseTy, a.basePtr, ValueRange{nIdx}, ValueRange{c1});
+      loc, baseTy, a.basePtr, ValueRange{nIdx}, ValueRange{cStride});
 
   bool isPartition = (a.traversalStride == a.tileSize);
   Attribute enc;
@@ -190,7 +216,7 @@ static Value buildView(OpBuilder &b, Location loc, const ContigAccess &a) {
   else
     enc = tv::StridedViewAttr::get(ctx, ArrayRef<int64_t>{a.tileSize},
                                    ArrayRef<int64_t>{a.traversalStride});
-  auto viewTy = tv::TensorViewType::get(dynShape, a.elementType, unitStride, enc);
+  auto viewTy = tv::TensorViewType::get(dynShape, a.elementType, strideVec, enc);
   if (isPartition)
     return b.create<tv::MakePartitionViewOp>(loc, viewTy, baseView.getResult())
         .getResult();
