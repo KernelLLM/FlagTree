@@ -57,42 +57,40 @@ namespace {
 // Helpers
 //===----------------------------------------------------------------------===//
 
-/// Info recovered from a partition/strided view chain.
+/// Info recovered from a partition/strided view chain (rank-generic).
 struct ViewInfo {
-  Value base;           // memref<?xT, #gm> (the rewritten function argument)
-  Type elementType;     // T
-  int64_t tile = 0;     // WINDOW / tile size (1-D)
-  int64_t traversal = 0;// STEP between tile origins (== tile for partition)
-  int64_t stride = 0;   // element stride (tensor_view.strides)
-  Value n;              // full extent (index), from make_tensor_view sizes[0]
+  Value base;                        // flat memref<?xT, #gm>
+  Type elementType;
+  unsigned rank = 0;
+  SmallVector<int64_t> tile;         // per-dim tile size
+  SmallVector<int64_t> traversal;    // per-dim traversal stride (== tile for partition)
+  SmallVector<int64_t> strideStatic; // per-dim element stride, or kDynamic
+  SmallVector<Value> strideVal;      // per-dim element stride SSA (index)
+  SmallVector<Value> n;              // per-dim extent (index) from make_tensor_view
   bool ok = false;
 };
 
-/// Trace `viewVal` (a partition/strided view SSA) back to its base memref + params.
 static ViewInfo traceView(Value viewVal) {
   ViewInfo vi;
   auto encTy = dyn_cast<tv::TensorViewType>(viewVal.getType());
   if (!encTy)
     return vi;
   // Tile + traversal from the view encoding (partition: traversal == tile).
-  int64_t tile, traversal;
+  ArrayRef<int64_t> tile, traversal;
   Attribute encoding = encTy.getEncoding();
   if (auto p = dyn_cast_or_null<tv::PartitionViewAttr>(encoding)) {
-    if (p.getTile().size() != 1)
-      return vi;
-    tile = p.getTile()[0];
-    traversal = tile;
+    tile = p.getTile();
+    traversal = p.getTile();
   } else if (auto s = dyn_cast_or_null<tv::StridedViewAttr>(encoding)) {
-    if (s.getTile().size() != 1 || s.getTraversalStrides().size() != 1)
+    if (s.getTile().size() != s.getTraversalStrides().size())
       return vi;
-    tile = s.getTile()[0];
-    traversal = s.getTraversalStrides()[0];
+    tile = s.getTile();
+    traversal = s.getTraversalStrides();
   } else {
     return vi; // gather_scatter is not handled by this (contiguous-tile) path
   }
 
-  // The op producing the encoded view (make_partition_view / make_strided_view);
-  // its source is the base tensor_view (make_tensor_view result).
+  // make_partition_view / make_strided_view -> its source is the base view.
   Operation *viewOp = viewVal.getDefiningOp();
   Value baseView;
   if (auto p = dyn_cast_or_null<tv::MakePartitionViewOp>(viewOp))
@@ -106,42 +104,62 @@ static ViewInfo traceView(Value viewVal) {
   if (!mtv)
     return vi;
   auto baseTy = dyn_cast<tv::TensorViewType>(mtv.getResult().getType());
-  if (!baseTy || baseTy.getStrides().size() != 1)
+  if (!baseTy)
     return vi;
-  // NOTE: read the source operand untyped. rewriteFuncPtrArgs has already
-  // changed the underlying function argument to a memref, so the typed
-  // accessor mtv.getSource() (which casts to TypedValue<tv::PtrType>) would
-  // assert. getOperand(0) is the source operand.
+  // NOTE: read the source operand untyped -- rewriteFuncPtrArgs has changed the
+  // underlying function argument to a memref, so mtv.getSource() would assert.
   Value base = mtv->getOperand(0);
   if (!isa<MemRefType>(base.getType()))
-    return vi; // base must already be a memref (function argument rewritten)
-  if (mtv.getSizes().size() != 1)
+    return vi;
+
+  unsigned rank = tile.size();
+  if (baseTy.getStrides().size() != rank || mtv.getSizes().size() != rank ||
+      mtv.getStrides().size() != rank)
     return vi;
 
   vi.base = base;
   vi.elementType = baseTy.getElementType();
-  vi.tile = tile;
-  vi.traversal = traversal;
-  vi.stride = baseTy.getStrides()[0];
-  vi.n = mtv.getSizes()[0];
+  vi.rank = rank;
+  vi.tile.assign(tile.begin(), tile.end());
+  vi.traversal.assign(traversal.begin(), traversal.end());
+  vi.strideStatic.assign(baseTy.getStrides().begin(), baseTy.getStrides().end());
+  vi.strideVal.assign(mtv.getStrides().begin(), mtv.getStrides().end());
+  vi.n.assign(mtv.getSizes().begin(), mtv.getSizes().end());
   vi.ok = true;
   return vi;
 }
 
-/// Emit the full GM tile view at element offset `off`:
-///   reinterpret_cast %base to offset:[off] sizes:[TILE] strides:[S].
-/// This only builds a view descriptor; no memory is accessed until a subview is
-/// DMAed, so a tile that spills past the extent is fine here.
+/// reinterpret_cast %base to offset:[off] sizes:[tile...] strides:[stride...],
+/// yielding the (possibly strided, N-D) GM tile view.  No memory is accessed.
 static Value emitGmTile(OpBuilder &b, Location loc, const ViewInfo &vi,
                         Value off, hivm::AddressSpaceAttr gmSpace) {
   MLIRContext *ctx = b.getContext();
   auto layout = StridedLayoutAttr::get(ctx, /*offset=*/ShapedType::kDynamic,
-                                       /*strides=*/{vi.stride});
-  auto gmTileTy = MemRefType::get({vi.tile}, vi.elementType, layout, gmSpace);
-  return b.create<memref::ReinterpretCastOp>(
-      loc, gmTileTy, vi.base, /*offset=*/OpFoldResult(off),
-      /*sizes=*/ArrayRef<OpFoldResult>{b.getIndexAttr(vi.tile)},
-      /*strides=*/ArrayRef<OpFoldResult>{b.getIndexAttr(vi.stride)});
+                                       vi.strideStatic);
+  auto gmTileTy = MemRefType::get(vi.tile, vi.elementType, layout, gmSpace);
+  SmallVector<OpFoldResult> sizes, strides;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    sizes.push_back(b.getIndexAttr(vi.tile[d]));
+    if (vi.strideStatic[d] == ShapedType::kDynamic)
+      strides.push_back(vi.strideVal[d]);
+    else
+      strides.push_back(b.getIndexAttr(vi.strideStatic[d]));
+  }
+  return b.create<memref::ReinterpretCastOp>(loc, gmTileTy, vi.base,
+                                             OpFoldResult(off), sizes, strides);
+}
+
+/// Physical tile-origin offset = sum_d idx_d * traversal_d * element_stride_d.
+static Value computeOffset(OpBuilder &b, Location loc, const ViewInfo &vi,
+                           ValueRange indices) {
+  Value off;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal[d]);
+    Value logical = b.create<arith::MulIOp>(loc, indices[d], cTrav);
+    Value phys = b.create<arith::MulIOp>(loc, logical, vi.strideVal[d]);
+    off = d == 0 ? phys : b.create<arith::AddIOp>(loc, off, phys);
+  }
+  return off;
 }
 
 /// `[0 : len]` subview of a 1-D memref (the in-bounds prefix).
@@ -153,52 +171,47 @@ static Value emitPrefixSubview(OpBuilder &b, Location loc, Value src,
       ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
 }
 
-/// len = min(n - off, TILE): the in-bounds prefix length of this tile.
-static Value emitValidLen(OpBuilder &b, Location loc, const ViewInfo &vi,
-                          Value off, Value cTile) {
-  Value nMinusOff = b.create<arith::SubIOp>(loc, vi.n, off);
-  return b.create<arith::MinSIOp>(loc, nMinusOff, cTile);
-}
-
 //===----------------------------------------------------------------------===//
-// Lowering (with contiguous tail handling: pad the tile to zero, DMA the valid
-// prefix only, so out-of-bounds elements are never accessed).
+// Lowering.  1-D uses contiguous tail handling (pad + partial DMA); rank > 1 is
+// currently block-aligned (full tile).
 //===----------------------------------------------------------------------===//
 
 static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
                                    hivm::AddressSpaceAttr gmSpace,
                                    hivm::AddressSpaceAttr ubSpace) {
   ViewInfo vi = traceView(load.getView());
-  if (!vi.ok || load.getIndices().size() != 1)
+  if (!vi.ok || load.getIndices().size() != vi.rank)
     return failure();
 
   OpBuilder b(load);
   Location loc = load.getLoc();
-  Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile);
-  Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal);
-  // Logical tile origin (element index) steps by the traversal stride; the tail
-  // clamp is in logical units.  The physical byte/element offset scales it by
-  // the element stride.
-  Value offLogical = b.create<arith::MulIOp>(loc, load.getIndices()[0], cTrav);
-  Value len = emitValidLen(b, loc, vi, offLogical, cTile);
-  Value off = offLogical;
-  if (vi.stride != 1) {
-    Value cStride = b.create<arith::ConstantIndexOp>(loc, vi.stride);
-    off = b.create<arith::MulIOp>(loc, offLogical, cStride);
-  }
-
-  Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-  auto ubTy = MemRefType::get({vi.tile}, vi.elementType,
+  auto ubTy = MemRefType::get(vi.tile, vi.elementType,
                               MemRefLayoutAttrInterface{}, ubSpace);
   Value ub = b.create<memref::AllocOp>(loc, ubTy);
-  // Zero-pad the whole tile (encoding padding = zero), then DMA the valid prefix.
-  Value zero = b.create<arith::ConstantOp>(loc, b.getZeroAttr(vi.elementType));
-  b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{ub});
-  Value gmSub = emitPrefixSubview(b, loc, gm, len);
-  Value ubSub = emitPrefixSubview(b, loc, ub, len);
-  b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, ubSub);
-
   auto tensorTy = cast<RankedTensorType>(load.getResult().getType());
+
+  if (vi.rank == 1) {
+    Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[0]);
+    Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal[0]);
+    Value offLogical =
+        b.create<arith::MulIOp>(loc, load.getIndices()[0], cTrav);
+    Value nMinusOff = b.create<arith::SubIOp>(loc, vi.n[0], offLogical);
+    Value len = b.create<arith::MinSIOp>(loc, nMinusOff, cTile);
+    Value off = b.create<arith::MulIOp>(loc, offLogical, vi.strideVal[0]);
+    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    // Zero-pad the whole tile (padding = zero), then DMA the valid prefix.
+    Value zero =
+        b.create<arith::ConstantOp>(loc, b.getZeroAttr(vi.elementType));
+    b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{ub});
+    Value gmSub = emitPrefixSubview(b, loc, gm, len);
+    Value ubSub = emitPrefixSubview(b, loc, ub, len);
+    b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, ubSub);
+  } else {
+    Value off = computeOffset(b, loc, vi, load.getIndices());
+    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    b.create<hivm::LoadOp>(loc, TypeRange{}, gm, ub);
+  }
+
   Value t = b.create<bufferization::ToTensorOp>(loc, tensorTy, ub,
                                                 /*restrict=*/true,
                                                 /*writable=*/false);
@@ -211,33 +224,37 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
                                     hivm::AddressSpaceAttr gmSpace,
                                     hivm::AddressSpaceAttr ubSpace) {
   ViewInfo vi = traceView(store.getView());
-  if (!vi.ok || store.getIndices().size() != 1)
+  if (!vi.ok || store.getIndices().size() != vi.rank)
     return failure();
 
   OpBuilder b(store);
   Location loc = store.getLoc();
-  Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile);
-  Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal);
-  Value offLogical = b.create<arith::MulIOp>(loc, store.getIndices()[0], cTrav);
-  Value len = emitValidLen(b, loc, vi, offLogical, cTile);
-  Value off = offLogical;
-  if (vi.stride != 1) {
-    Value cStride = b.create<arith::ConstantIndexOp>(loc, vi.stride);
-    off = b.create<arith::MulIOp>(loc, offLogical, cStride);
-  }
-
-  auto ubTy = MemRefType::get({vi.tile}, vi.elementType,
+  auto ubTy = MemRefType::get(vi.tile, vi.elementType,
                               MemRefLayoutAttrInterface{}, ubSpace);
 #ifndef __LLVM_MAJOR_VERSION_22_COMPATIBLE__
   Value vm = b.create<bufferization::ToMemrefOp>(loc, ubTy, store.getValue());
 #else
   Value vm = b.create<bufferization::ToBufferOp>(loc, ubTy, store.getValue());
 #endif
-  Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-  // Only DMA the valid prefix back to GM; the out-of-bounds tail is not written.
-  Value gmSub = emitPrefixSubview(b, loc, gm, len);
-  Value vmSub = emitPrefixSubview(b, loc, vm, len);
-  b.create<hivm::StoreOp>(loc, TypeRange{}, vmSub, gmSub);
+
+  if (vi.rank == 1) {
+    Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[0]);
+    Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal[0]);
+    Value offLogical =
+        b.create<arith::MulIOp>(loc, store.getIndices()[0], cTrav);
+    Value nMinusOff = b.create<arith::SubIOp>(loc, vi.n[0], offLogical);
+    Value len = b.create<arith::MinSIOp>(loc, nMinusOff, cTile);
+    Value off = b.create<arith::MulIOp>(loc, offLogical, vi.strideVal[0]);
+    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    Value gmSub = emitPrefixSubview(b, loc, gm, len);
+    Value vmSub = emitPrefixSubview(b, loc, vm, len);
+    b.create<hivm::StoreOp>(loc, TypeRange{}, vmSub, gmSub);
+  } else {
+    Value off = computeOffset(b, loc, vi, store.getIndices());
+    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    b.create<hivm::StoreOp>(loc, TypeRange{}, vm, gm);
+  }
+
   store.erase();
   return success();
 }
