@@ -52,14 +52,14 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #endif
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -175,9 +175,9 @@ static void lowerGpuTileIRToTTIR(ModuleOp module) {
               triton::EvictionPolicy::NORMAL, false);
           storeValue = load.getResult();
         }
-        builder.create<triton::StoreOp>(
-            op->getLoc(), dst, storeValue, triton::CacheModifier::NONE,
-            triton::EvictionPolicy::NORMAL);
+        builder.create<triton::StoreOp>(op->getLoc(), dst, storeValue,
+                                        triton::CacheModifier::NONE,
+                                        triton::EvictionPolicy::NORMAL);
         eraseOps.push_back(op);
       }
       return;
@@ -190,7 +190,8 @@ static void lowerGpuTileIRToTTIR(ModuleOp module) {
     }
 
     if (auto subviewOp = dyn_cast<tile::SubViewOp>(op)) {
-      if (Value src = materializeTileBuffer(subviewOp.getSource(), bufferValues))
+      if (Value src =
+              materializeTileBuffer(subviewOp.getSource(), bufferValues))
         bufferValues[subviewOp.getResult()] = src;
       eraseOps.push_back(op);
       return;
@@ -235,9 +236,9 @@ static void lowerGpuTileIRToTTIR(ModuleOp module) {
 
   SmallVector<Operation *> cleanupOps;
   module.walk([&](Operation *op) {
-    if (isa<tile::AllocOp, tile::SubViewOp, tile::CopyOp,
-            tile::StoreTensorOp, tile::ToTensorOp, tile::GmOffsetOp,
-            tile::SetFlagOp, tile::WaitFlagOp, tile::PipeBarrierOp>(op))
+    if (isa<tile::AllocOp, tile::SubViewOp, tile::CopyOp, tile::StoreTensorOp,
+            tile::ToTensorOp, tile::GmOffsetOp, tile::SetFlagOp,
+            tile::WaitFlagOp, tile::PipeBarrierOp>(op))
       cleanupOps.push_back(op);
   });
   for (Operation *op : llvm::reverse(cleanupOps))
@@ -381,8 +382,9 @@ void init_triton_tle_ir(py::module &&m) {
                  tileBufType, bufType.getMemorySpace(),
                  /*shape=*/mlir::ArrayAttr(), /*dtype=*/mlir::TypeAttr(),
                  /*policy=*/tile::PolicyAttr(),
-                 /*layout=*/tile::LayoutAttr::get(self.getBuilder().getContext(),
-                                                  tile::Layout::ND),
+                 /*layout=*/
+                 tile::LayoutAttr::get(self.getBuilder().getContext(),
+                                       tile::Layout::ND),
                  /*lifetime=*/tile::LifetimeAttr(),
                  /*comment=*/mlir::StringAttr());
            })
@@ -391,13 +393,15 @@ void init_triton_tle_ir(py::module &&m) {
               std::vector<Value> & /*shape*/, bool interNoAlias) -> void {
              auto op = self.create<tile::CopyOp>(
                  src, dst, /*engine=*/tile::EngineAttr(),
-                 /*src_layout=*/tile::LayoutAttr::get(
-                     self.getBuilder().getContext(), tile::Layout::ND),
+                 /*src_layout=*/
+                 tile::LayoutAttr::get(self.getBuilder().getContext(),
+                                       tile::Layout::ND),
                  /*dst_nz_layout=*/tile::NZLayoutAttr(),
                  /*transpose=*/mlir::UnitAttr(),
                  /*comment=*/mlir::StringAttr());
              if (interNoAlias)
-               op->setAttr("inter_no_alias", self.getBuilder().getBoolAttr(true));
+               op->setAttr("inter_no_alias",
+                           self.getBuilder().getBoolAttr(true));
            })
       .def("create_tile_subview",
            [](TritonOpBuilder &self, Value source, std::vector<Value> &offsets,
@@ -413,8 +417,8 @@ void init_triton_tle_ir(py::module &&m) {
              }
              auto *ctx = builder.getContext();
              auto srcBuf = mlir::cast<tile::BufType>(source.getType());
-             auto resTy = tile::BufType::get(ctx, sizes, srcBuf.getElementType(),
-                                             srcBuf.getMemorySpace());
+             auto resTy = tile::BufType::get(
+                 ctx, sizes, srcBuf.getElementType(), srcBuf.getMemorySpace());
              auto op = self.create<tile::SubViewOp>(
                  resTy, source, indexOffsets, builder.getI64ArrayAttr(sizes),
                  builder.getI64ArrayAttr(strides));
@@ -423,8 +427,8 @@ void init_triton_tle_ir(py::module &&m) {
       .def("create_tile_to_tensor",
            [](TritonOpBuilder &self, Value &src, bool /*writable*/) -> Value {
              auto srcBuf = mlir::cast<tile::BufType>(src.getType());
-             auto resTy =
-                 RankedTensorType::get(srcBuf.getShape(), srcBuf.getElementType());
+             auto resTy = RankedTensorType::get(srcBuf.getShape(),
+                                                srcBuf.getElementType());
              auto op = self.create<tile::ToTensorOp>(resTy, src);
              return op.getResult();
            })

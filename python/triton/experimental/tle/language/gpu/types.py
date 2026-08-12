@@ -342,8 +342,7 @@ class buffered_tensor(tl.base_value):
             offsets = [stage_tensor.handle]
             for _ in range(len(self.shape) - 1):
                 offsets.append(_semantic.to_tensor(0).handle)
-            slot_handle = _semantic.builder.create_tile_subview(self.handle, offsets, slot_shape,
-                                                                [1] * len(slot_shape))
+            slot_handle = _semantic.builder.create_tile_subview(self.handle, offsets, slot_shape, [1] * len(slot_shape))
             return buffered_tensor(slot_handle, self.dtype, slot_shape, self.type.storage, slot_layout, _semantic,
                                    alloc_shape=slot_ty.alloc_shape)
         slot_handle = _semantic.builder.create_memdesc_index(slot_ty.to_ir(_semantic.builder), self.handle,

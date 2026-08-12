@@ -6,15 +6,13 @@ import triton
 import triton.language as tl
 import triton.experimental.tle.language as tle
 
-
 os.environ.setdefault("TLE_GPU_TILEIR_MODE", "1")
 
 
 @triton.jit
 def _gpu_primitives_kernel(src, out, BLOCK: tl.constexpr):
     idx = tl.arange(0, BLOCK)
-    storage = tle.gpu.alloc([2, BLOCK], dtype=tl.float32, layout=None, scope=tle.gpu.smem,
-                            nv_mma_shared_layout=False)
+    storage = tle.gpu.alloc([2, BLOCK], dtype=tl.float32, layout=None, scope=tle.gpu.smem, nv_mma_shared_layout=False)
     pipe = tle.pipe(capacity=2, scope="cta", name="p", payload=storage)
     writer = pipe.writer()
     reader = pipe.reader()
@@ -22,8 +20,8 @@ def _gpu_primitives_kernel(src, out, BLOCK: tl.constexpr):
     write_slot = writer.acquire(0).payload
     tle.gpu.copy(src + idx, write_slot, [BLOCK])
     writer.commit(0)
-    wait_result = reader.wait(0)
-    read_slot = wait_result.slot.payload
+    # wait_result = reader.wait(0)
+    # read_slot = wait_result.slot.payload
     value = tle.gpu.local_ptr(write_slot)
     reader.release(0)
     writer.close(0)
