@@ -30,6 +30,8 @@ def TensorViewToHIVM : Pass<"tensor-view-to-hivm", "mlir::ModuleOp"> {
     "mlir::bufferization::BufferizationDialect",
     "mlir::arith::ArithDialect",
     "mlir::linalg::LinalgDialect",
+    "mlir::scf::SCFDialect",
+    "mlir::tensor::TensorDialect",
     "mlir::triton::TritonDialect"];
 }
 

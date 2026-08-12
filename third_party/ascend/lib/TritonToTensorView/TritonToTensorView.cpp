@@ -452,34 +452,88 @@ static SmallVector<Value> castIndices(OpBuilder &b, Location loc,
   return indices;
 }
 
-static LogicalResult rewriteLoad(triton::LoadOp load) {
-  Access a;
-  if (!matchAccess(load.getPtr(), load.getMask(), a))
-    return failure();
+/// Discrete pointer access fallback (used when the structured matchers fail):
+///   addptr(splat(base), idxTensor)   with base a `!tv.ptr` and idxTensor a
+/// general 1-D i32 index tensor (e.g. a data-dependent gather index).
+static bool matchPtrAccess(Value ptrTensor, Value &basePtr, Value &idxTensor) {
+  auto addptr = ptrTensor.getDefiningOp<triton::AddPtrOp>();
+  if (!addptr)
+    return false;
+  auto splat = addptr.getPtr().getDefiningOp<triton::SplatOp>();
+  if (!splat || !isa<tv::PtrType>(splat.getSrc().getType()))
+    return false;
+  basePtr = splat.getSrc();
+  idxTensor = addptr.getOffset();
+  return true;
+}
 
+/// Cast an integer index tensor to `tensor<...xindex>` (tv index tensor type).
+static Value toIndexTensor(OpBuilder &b, Location loc, Value idxTensor) {
+  auto ty = cast<RankedTensorType>(idxTensor.getType());
+  if (ty.getElementType().isIndex())
+    return idxTensor;
+  return b.create<arith::IndexCastOp>(
+      loc, RankedTensorType::get(ty.getShape(), b.getIndexType()), idxTensor);
+}
+
+static LogicalResult rewriteLoad(triton::LoadOp load) {
   OpBuilder b(load);
   Location loc = load.getLoc();
-  Value view = buildView(b, loc, a);
-  auto viewLoad = b.create<tv::ViewLoadOp>(loc, load.getResult().getType(), view,
-                                           castIndices(b, loc, a),
-                                           /*mask=*/Value());
-  load.getResult().replaceAllUsesWith(viewLoad.getResult());
-  load.erase();
-  return success();
+
+  Access a;
+  if (matchAccess(load.getPtr(), load.getMask(), a)) {
+    Value view = buildView(b, loc, a);
+    auto viewLoad = b.create<tv::ViewLoadOp>(
+        loc, load.getResult().getType(), view, castIndices(b, loc, a),
+        /*mask=*/Value());
+    load.getResult().replaceAllUsesWith(viewLoad.getResult());
+    load.erase();
+    return success();
+  }
+
+  // Discrete gather fallback -> ptr_load (rank-1 only).
+  Value base, idxTensor;
+  auto resTy = dyn_cast<RankedTensorType>(load.getResult().getType());
+  if (resTy && resTy.getRank() == 1 &&
+      matchPtrAccess(load.getPtr(), base, idxTensor)) {
+    Value idx = toIndexTensor(b, loc, idxTensor);
+    auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
+    auto ptrLoad = b.create<tv::PtrLoadOp>(loc, resTy, load.getPtr(),
+                                           ValueRange{idx},
+                                           /*mask=*/load.getMask(), pad);
+    load.getResult().replaceAllUsesWith(ptrLoad.getResult());
+    load.erase();
+    return success();
+  }
+  return failure();
 }
 
 static LogicalResult rewriteStore(triton::StoreOp store) {
-  Access a;
-  if (!matchAccess(store.getPtr(), store.getMask(), a))
-    return failure();
-
   OpBuilder b(store);
   Location loc = store.getLoc();
-  Value view = buildView(b, loc, a);
-  b.create<tv::ViewStoreOp>(loc, view, store.getValue(), castIndices(b, loc, a),
-                            /*mask=*/Value());
-  store.erase();
-  return success();
+
+  Access a;
+  if (matchAccess(store.getPtr(), store.getMask(), a)) {
+    Value view = buildView(b, loc, a);
+    b.create<tv::ViewStoreOp>(loc, view, store.getValue(),
+                              castIndices(b, loc, a), /*mask=*/Value());
+    store.erase();
+    return success();
+  }
+
+  // Discrete scatter fallback -> ptr_store (rank-1 only).
+  Value base, idxTensor;
+  auto valTy = dyn_cast<RankedTensorType>(store.getValue().getType());
+  if (valTy && valTy.getRank() == 1 &&
+      matchPtrAccess(store.getPtr(), base, idxTensor)) {
+    Value idx = toIndexTensor(b, loc, idxTensor);
+    auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
+    b.create<tv::PtrStoreOp>(loc, store.getPtr(), store.getValue(),
+                             ValueRange{idx}, /*mask=*/store.getMask(), pad);
+    store.erase();
+    return success();
+  }
+  return failure();
 }
 
 /// Fixed-point erase of the now-dead pointer-chain ops.  Handles both the 1-D

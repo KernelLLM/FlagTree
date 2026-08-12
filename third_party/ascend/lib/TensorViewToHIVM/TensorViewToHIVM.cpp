@@ -42,6 +42,8 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
@@ -306,6 +308,120 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
 }
 
 //===----------------------------------------------------------------------===//
+// Discrete gather/scatter: ptr_load / ptr_store -> scalar scf.for loop
+// (reinterpret_cast base offset:[idx[k]] sizes:[1] + memref.load/store), the
+// same form the native discrete-access lowering produces.  The ptrs operand is
+// `addptr(splat(base), _)`; we recover the base memref from the splat source
+// (the func arg, already rewritten to memref) and take the gather index from the
+// op's index operand.
+//===----------------------------------------------------------------------===//
+
+static Value tracePtrBase(Value ptrs) {
+  auto addptr = ptrs.getDefiningOp<triton::AddPtrOp>();
+  if (!addptr)
+    return Value();
+  auto splat = addptr.getPtr().getDefiningOp<triton::SplatOp>();
+  if (!splat || !isa<MemRefType>(splat.getSrc().getType()))
+    return Value();
+  return splat.getSrc();
+}
+
+/// reinterpret_cast %base to offset:[%ik] sizes:[1] strides:[1] : ... #gm .
+static Value emitScalarGmElem(OpBuilder &b, Location loc, Value base, Value ik,
+                              Type elemTy, hivm::AddressSpaceAttr gmSpace) {
+  auto layout = StridedLayoutAttr::get(b.getContext(),
+                                       /*offset=*/ShapedType::kDynamic, {1});
+  auto ty = MemRefType::get({1}, elemTy, layout, gmSpace);
+  return b.create<memref::ReinterpretCastOp>(
+      loc, ty, base, OpFoldResult(ik),
+      ArrayRef<OpFoldResult>{b.getIndexAttr(1)},
+      ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
+}
+
+static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
+                                  hivm::AddressSpaceAttr gmSpace) {
+  Value base = tracePtrBase(op.getPtrs());
+  if (!base || op.getIndices().empty())
+    return failure();
+  Value idx = op.getIndices()[0]; // tensor<Nxindex>
+  auto resTy = cast<RankedTensorType>(op.getResult().getType());
+  int64_t n = resTy.getShape()[0];
+  if (ShapedType::isDynamic(n))
+    return failure();
+  Type elemTy = resTy.getElementType();
+
+  OpBuilder b(op);
+  Location loc = op.getLoc();
+  auto bufTy = MemRefType::get({n}, elemTy);
+  Value buf = b.create<memref::AllocOp>(loc, bufTy);
+  Value zero = b.create<arith::ConstantOp>(loc, b.getZeroAttr(elemTy));
+  b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{buf});
+
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
+  Value cN = b.create<arith::ConstantIndexOp>(loc, n);
+  auto loop = b.create<scf::ForOp>(loc, c0, cN, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(loop.getBody());
+    Value k = loop.getInductionVar();
+    auto ext = b.create<tensor::ExtractOp>(loc, idx, ValueRange{k});
+    ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
+    Value rc = emitScalarGmElem(b, loc, base, ext.getResult(), elemTy, gmSpace);
+    Value v = b.create<memref::LoadOp>(loc, rc, ValueRange{c0});
+    b.create<memref::StoreOp>(loc, v, buf, ValueRange{k});
+  }
+
+  Value t = b.create<bufferization::ToTensorOp>(loc, resTy, buf,
+                                                /*restrict=*/true,
+                                                /*writable=*/false);
+  op.getResult().replaceAllUsesWith(t);
+  op.erase();
+  return success();
+}
+
+static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
+                                   hivm::AddressSpaceAttr gmSpace) {
+  Value base = tracePtrBase(op.getPtrs());
+  if (!base || op.getIndices().empty())
+    return failure();
+  Value idx = op.getIndices()[0];
+  Value value = op.getValue();
+  auto valTy = cast<RankedTensorType>(value.getType());
+  int64_t n = valTy.getShape()[0];
+  if (ShapedType::isDynamic(n))
+    return failure();
+  Type elemTy = valTy.getElementType();
+
+  OpBuilder b(op);
+  Location loc = op.getLoc();
+  auto bufTy = MemRefType::get({n}, elemTy);
+#ifndef __LLVM_MAJOR_VERSION_22_COMPATIBLE__
+  Value vm = b.create<bufferization::ToMemrefOp>(loc, bufTy, value);
+#else
+  Value vm = b.create<bufferization::ToBufferOp>(loc, bufTy, value);
+#endif
+
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
+  Value cN = b.create<arith::ConstantIndexOp>(loc, n);
+  auto loop = b.create<scf::ForOp>(loc, c0, cN, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(loop.getBody());
+    Value k = loop.getInductionVar();
+    Value v = b.create<memref::LoadOp>(loc, vm, ValueRange{k});
+    auto ext = b.create<tensor::ExtractOp>(loc, idx, ValueRange{k});
+    ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
+    Value rc = emitScalarGmElem(b, loc, base, ext.getResult(), elemTy, gmSpace);
+    b.create<memref::StoreOp>(loc, v, rc, ValueRange{c0});
+  }
+
+  op.erase();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Function-argument rewrite: !tv.ptr<T> -> memref<?xT, #gm>
 //===----------------------------------------------------------------------===//
 
@@ -354,11 +470,17 @@ struct TensorViewToHIVMPass
     // 2. Lower access ops (collect first to avoid mutation during walk).
     SmallVector<tv::ViewLoadOp> loads;
     SmallVector<tv::ViewStoreOp> stores;
+    SmallVector<tv::PtrLoadOp> ptrLoads;
+    SmallVector<tv::PtrStoreOp> ptrStores;
     module.walk([&](Operation *op) {
       if (auto l = dyn_cast<tv::ViewLoadOp>(op))
         loads.push_back(l);
       else if (auto s = dyn_cast<tv::ViewStoreOp>(op))
         stores.push_back(s);
+      else if (auto pl = dyn_cast<tv::PtrLoadOp>(op))
+        ptrLoads.push_back(pl);
+      else if (auto ps = dyn_cast<tv::PtrStoreOp>(op))
+        ptrStores.push_back(ps);
     });
     for (tv::ViewLoadOp l : loads)
       if (failed(lowerViewLoad(l, gmSpace)))
@@ -366,8 +488,16 @@ struct TensorViewToHIVMPass
     for (tv::ViewStoreOp s : stores)
       if (failed(lowerViewStore(s, gmSpace)))
         s.emitError("TensorViewToHIVM: unsupported view_store");
+    for (tv::PtrLoadOp pl : ptrLoads)
+      if (failed(lowerPtrLoad(pl, gmSpace)))
+        pl.emitError("TensorViewToHIVM: unsupported ptr_load");
+    for (tv::PtrStoreOp ps : ptrStores)
+      if (failed(lowerPtrStore(ps, gmSpace)))
+        ps.emitError("TensorViewToHIVM: unsupported ptr_store");
 
-    // 3. Erase the now-dead make_partition_view / make_tensor_view ops.
+    // 3. Erase the now-dead view ops and pointer-chain ops (the ptr_load/store
+    //    ptrs operand `addptr(splat(arg), _)` is left dead after lowering, and
+    //    its splat(arg) is ill-typed once the arg became a memref).
     bool changed = true;
     while (changed) {
       changed = false;
@@ -376,7 +506,9 @@ struct TensorViewToHIVMPass
         if ((isa<tv::MakePartitionViewOp>(op) ||
              isa<tv::MakeStridedViewOp>(op) ||
              isa<tv::MakeGatherScatterViewOp>(op) ||
-             isa<tv::MakeTensorViewOp>(op)) &&
+             isa<tv::MakeTensorViewOp>(op) ||
+             isa<triton::AddPtrOp>(op) ||
+             isa<triton::SplatOp>(op)) &&
             op->use_empty())
           dead.push_back(op);
       });
