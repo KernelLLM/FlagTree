@@ -93,9 +93,19 @@ static std::optional<int64_t> getSplatConstIntValue(Value v) {
 
 /// Recognize a per-dim logical index tensor:
 ///   addi(splat(muli(pid, STEP)), makeRange(0, TILE))
-/// yielding TILE, the traversal stride STEP, and the tile index (pid).
+/// yielding TILE, the traversal stride STEP, and the tile index (pid).  A bare
+/// makeRange (no pid origin, e.g. a matmul reduction dim tiled by a single tile)
+/// yields a null index, meaning a constant-0 tile position.
 static bool matchLogicalIndex(Value idxTensor, int64_t &tile, int64_t &traversal,
                               Value &index) {
+  if (auto mr = idxTensor.getDefiningOp<triton::MakeRangeOp>()) {
+    if (mr.getStart() != 0)
+      return false;
+    tile = static_cast<int64_t>(mr.getEnd());
+    traversal = tile;
+    index = Value(); // origin 0
+    return true;
+  }
   auto addi = idxTensor.getDefiningOp<arith::AddIOp>();
   if (!addi)
     return false;
@@ -361,8 +371,13 @@ static Value buildView(OpBuilder &b, Location loc, const Access &a) {
 static SmallVector<Value> castIndices(OpBuilder &b, Location loc,
                                       const Access &a) {
   SmallVector<Value> indices;
-  for (Value idx : a.index)
-    indices.push_back(b.create<arith::IndexCastOp>(loc, b.getIndexType(), idx));
+  for (Value idx : a.index) {
+    if (idx)
+      indices.push_back(
+          b.create<arith::IndexCastOp>(loc, b.getIndexType(), idx));
+    else
+      indices.push_back(b.create<arith::ConstantIndexOp>(loc, 0)); // origin 0
+  }
   return indices;
 }
 
