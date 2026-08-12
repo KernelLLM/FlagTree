@@ -21,7 +21,7 @@ tt.func public @add_kernel(%a: !tv.ptr<f32>, %b: !tv.ptr<f32>, %c: !tv.ptr<f32>,
   // CHECK: arith.minsi
   // CHECK: memref.reinterpret_cast
   // CHECK-SAME: #hivm.address_space<gm>
-  // CHECK: memref.alloc() : memref<1024xf32, #hivm.address_space<ub>>
+  // CHECK: memref.alloc() : memref<1024xf32>
   // CHECK: linalg.fill
   // CHECK: memref.subview
   // CHECK: hivm.hir.load

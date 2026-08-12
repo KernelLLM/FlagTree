@@ -14,17 +14,21 @@
 //   !tv.ptr<T> func input        -> memref<?xT, #hivm.address_space<gm>>
 //   tv.view_load %pv[%i]         -> %off = %i * TILE
 //                                   %gm  = reinterpret_cast %base off:[%off] sizes:[TILE] strides:[S]
-//                                   %ub  = alloc() : memref<TILExT, #ub>
-//                                   hivm.hir.load ins(%gm) outs(%ub)
-//                                   %t   = bufferization.to_tensor %ub    (bridge)
-//   tv.view_store %pv[%i], %v    -> %vm  = bufferization.to_buffer %v : memref<TILExT,#ub>  (bridge)
+//                                   %buf = alloc() : memref<TILExT>       (untagged)
+//                                   hivm.hir.load ins(%gm) outs(%buf)
+//                                   %t   = bufferization.to_tensor %buf   (bridge)
+//   tv.view_store %pv[%i], %v    -> %vm  = bufferization.to_buffer %v : memref<TILExT>  (untagged)
 //                                   %gm  = reinterpret_cast %base_out ...
 //                                   hivm.hir.store ins(%vm) outs(%gm)
 //
-// Vector/DMA tiles lower to hivm.hir.load/store (explicit gm<->ub DMA).  Tiles
-// feeding a cube op (tt.dot), marked "cube_operand" by Pass A, instead lower to
-// a plain buffer + memref.copy so the native cube path (ConvertHFusionToHIVM)
-// can place them into L0A/L0B -- hir.load is UB-only and cannot reach the cube.
+// Address-space policy: only the GM source/dest (function pointer args) is
+// tagged #gm -- the anchor hivm.hir.load/store need (src==gm for load, dst==gm
+// for store).  The on-chip staging buffer is left UNTAGGED: the HIVM DMA memory-
+// space verifier is skipped when either side is unspaced, so a single
+// hir.load ins(#gm) outs(<untagged>) is valid, and bishengir's mem-planning
+// assigns the buffer's real space by consumer (ub for vector, L0A/L0B for the
+// cube).  Pass B therefore no longer pre-commits ub vs L0 -- placement stays
+// with the backend, matching the native lowering path.
 //
 //===----------------------------------------------------------------------===//
 
@@ -180,8 +184,7 @@ static Value emitPrefixSubview(OpBuilder &b, Location loc, Value src,
 //===----------------------------------------------------------------------===//
 
 static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
-                                   hivm::AddressSpaceAttr gmSpace,
-                                   hivm::AddressSpaceAttr ubSpace) {
+                                   hivm::AddressSpaceAttr gmSpace) {
   ViewInfo vi = traceView(load.getView());
   if (!vi.ok || load.getIndices().size() != vi.rank)
     return failure();
@@ -190,28 +193,11 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
   Location loc = load.getLoc();
   auto tensorTy = cast<RankedTensorType>(load.getResult().getType());
 
-  // Cube operands (feed tt.dot): materialize the GM tile into a PLAIN buffer
-  // (no address space) + memref.copy, exactly mirroring the native tt.load ->
-  // linalg.matmul entry.  ConvertHFusionToHIVM then generates the GM->L1->
-  // L0A/L0B loads.  hivm.hir.load is UB-only and would force an illegal ub->ca
-  // load in the cube path, so it must NOT be used here.
-  if (load->hasAttr("cube_operand")) {
-    Value off = computeOffset(b, loc, vi, load.getIndices());
-    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-    auto plainTy = MemRefType::get(vi.tile, vi.elementType);
-    Value buf = b.create<memref::AllocOp>(loc, plainTy);
-    b.create<memref::CopyOp>(loc, gm, buf);
-    Value t = b.create<bufferization::ToTensorOp>(loc, tensorTy, buf,
-                                                  /*restrict=*/true,
-                                                  /*writable=*/false);
-    load.getResult().replaceAllUsesWith(t);
-    load.erase();
-    return success();
-  }
-
-  auto ubTy = MemRefType::get(vi.tile, vi.elementType,
-                              MemRefLayoutAttrInterface{}, ubSpace);
-  Value ub = b.create<memref::AllocOp>(loc, ubTy);
+  // On-chip staging buffer left UNTAGGED (see file header): a single
+  // hir.load ins(#gm) outs(<untagged>) is valid and bishengir assigns the
+  // buffer's real space (ub / L0A / L0B) by consumer.
+  auto localTy = MemRefType::get(vi.tile, vi.elementType);
+  Value buf = b.create<memref::AllocOp>(loc, localTy);
 
   if (vi.rank == 1) {
     Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[0]);
@@ -225,17 +211,17 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
     // Zero-pad the whole tile (padding = zero), then DMA the valid prefix.
     Value zero =
         b.create<arith::ConstantOp>(loc, b.getZeroAttr(vi.elementType));
-    b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{ub});
+    b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{buf});
     Value gmSub = emitPrefixSubview(b, loc, gm, len);
-    Value ubSub = emitPrefixSubview(b, loc, ub, len);
-    b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, ubSub);
+    Value bufSub = emitPrefixSubview(b, loc, buf, len);
+    b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, bufSub);
   } else {
     Value off = computeOffset(b, loc, vi, load.getIndices());
     Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-    b.create<hivm::LoadOp>(loc, TypeRange{}, gm, ub);
+    b.create<hivm::LoadOp>(loc, TypeRange{}, gm, buf);
   }
 
-  Value t = b.create<bufferization::ToTensorOp>(loc, tensorTy, ub,
+  Value t = b.create<bufferization::ToTensorOp>(loc, tensorTy, buf,
                                                 /*restrict=*/true,
                                                 /*writable=*/false);
   load.getResult().replaceAllUsesWith(t);
@@ -244,20 +230,20 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
 }
 
 static LogicalResult lowerViewStore(tv::ViewStoreOp store,
-                                    hivm::AddressSpaceAttr gmSpace,
-                                    hivm::AddressSpaceAttr ubSpace) {
+                                    hivm::AddressSpaceAttr gmSpace) {
   ViewInfo vi = traceView(store.getView());
   if (!vi.ok || store.getIndices().size() != vi.rank)
     return failure();
 
   OpBuilder b(store);
   Location loc = store.getLoc();
-  auto ubTy = MemRefType::get(vi.tile, vi.elementType,
-                              MemRefLayoutAttrInterface{}, ubSpace);
+  // Untagged on-chip source buffer (see file header): hir.store dst==gm is the
+  // only anchor; bishengir assigns the source buffer's space by producer.
+  auto localTy = MemRefType::get(vi.tile, vi.elementType);
 #ifndef __LLVM_MAJOR_VERSION_22_COMPATIBLE__
-  Value vm = b.create<bufferization::ToMemrefOp>(loc, ubTy, store.getValue());
+  Value vm = b.create<bufferization::ToMemrefOp>(loc, localTy, store.getValue());
 #else
-  Value vm = b.create<bufferization::ToBufferOp>(loc, ubTy, store.getValue());
+  Value vm = b.create<bufferization::ToBufferOp>(loc, localTy, store.getValue());
 #endif
 
   if (vi.rank == 1) {
@@ -324,7 +310,6 @@ struct TensorViewToHIVMPass
     ModuleOp module = getOperation();
     MLIRContext *ctx = &getContext();
     auto gmSpace = hivm::AddressSpaceAttr::get(ctx, hivm::AddressSpace::GM);
-    auto ubSpace = hivm::AddressSpaceAttr::get(ctx, hivm::AddressSpace::UB);
 
     // 1. Rewrite !tv.ptr function inputs to GM memrefs.
     module.walk([&](triton::FuncOp func) { rewriteFuncPtrArgs(func, gmSpace); });
@@ -339,10 +324,10 @@ struct TensorViewToHIVMPass
         stores.push_back(s);
     });
     for (tv::ViewLoadOp l : loads)
-      if (failed(lowerViewLoad(l, gmSpace, ubSpace)))
+      if (failed(lowerViewLoad(l, gmSpace)))
         l.emitError("TensorViewToHIVM: unsupported view_load");
     for (tv::ViewStoreOp s : stores)
-      if (failed(lowerViewStore(s, gmSpace, ubSpace)))
+      if (failed(lowerViewStore(s, gmSpace)))
         s.emitError("TensorViewToHIVM: unsupported view_store");
 
     // 3. Erase the now-dead make_partition_view / make_tensor_view ops.
