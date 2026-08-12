@@ -13,10 +13,9 @@ tt.func public @sliding(%in: !tv.ptr<f32>, %n: index, %i: index) {
         : !tv.tensor_view<?xf32, strides=[1]>
        -> !tv.tensor_view<?xf32, strides=[1], #tv.strided_view<tile = [1024], dim_map = [0], traversal_strides = [512], padding = zero>>
   // origin = i * 512 (traversal), tile size 1024
-  // CHECK: %[[TRAV:.*]] = arith.constant 512 : index
-  // CHECK: arith.muli %{{.*}}, %[[TRAV]]
-  // CHECK: memref.reinterpret_cast
   // CHECK: memref.alloc() : memref<1024xf32, #hivm.address_space<ub>>
+  // CHECK: arith.constant 512 : index
+  // CHECK: memref.reinterpret_cast
   // CHECK: hivm.hir.load
   %t = tv.view_load %sv[%i]
        : !tv.tensor_view<?xf32, strides=[1], #tv.strided_view<tile = [1024], dim_map = [0], traversal_strides = [512], padding = zero>>

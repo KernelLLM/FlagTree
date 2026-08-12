@@ -12,8 +12,9 @@ tt.func public @block2d(%in: !tv.ptr<f32>, %N: index, %im: index, %jn: index) {
   %pv = tv.make_partition_view %v
         : !tv.tensor_view<?x?xf32, strides=[?, 1]>
        -> !tv.tensor_view<?x?xf32, strides=[?, 1], #tv.partition_view<tile = [64, 64], dim_map = [0, 1], padding = zero>>
-  // CHECK: memref.reinterpret_cast
   // CHECK: memref.alloc() : memref<64x64xf32, #hivm.address_space<ub>>
+  // CHECK: memref.reinterpret_cast
+  // CHECK-SAME: strided<[?, 1]
   // CHECK: hivm.hir.load
   // CHECK: bufferization.to_tensor
   %t = tv.view_load %pv[%im, %jn]
