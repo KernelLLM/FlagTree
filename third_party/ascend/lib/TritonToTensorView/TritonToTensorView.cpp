@@ -392,6 +392,17 @@ static LogicalResult rewriteLoad(triton::LoadOp load) {
   auto viewLoad = b.create<tv::ViewLoadOp>(loc, load.getResult().getType(), view,
                                            castIndices(b, loc, a),
                                            /*mask=*/Value());
+  // Mark tiles that feed a cube op (tt.dot).  Their operands must reach the
+  // cube (L0A/L0B), so Pass B materializes them into a plain buffer for the
+  // native cube lowering (ConvertHFusionToHIVM) instead of staging into UB via
+  // hivm.hir.load -- which is UB-only and cannot feed the cube.  Detected here
+  // at the tt level because add_triton_to_hfusion lowers tt.dot before Pass B.
+  for (Operation *user : load.getResult().getUsers()) {
+    if (isa<triton::DotOp>(user)) {
+      viewLoad->setAttr("cube_operand", b.getUnitAttr());
+      break;
+    }
+  }
   load.getResult().replaceAllUsesWith(viewLoad.getResult());
   load.erase();
   return success();

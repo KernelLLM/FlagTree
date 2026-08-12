@@ -21,7 +21,10 @@
 //                                   %gm  = reinterpret_cast %base_out ...
 //                                   hivm.hir.store ins(%vm) outs(%gm)
 //
-// Scope (Stage 3): 1-D partition accesses (matching Pass A's output).
+// Vector/DMA tiles lower to hivm.hir.load/store (explicit gm<->ub DMA).  Tiles
+// feeding a cube op (tt.dot), marked "cube_operand" by Pass A, instead lower to
+// a plain buffer + memref.copy so the native cube path (ConvertHFusionToHIVM)
+// can place them into L0A/L0B -- hir.load is UB-only and cannot reach the cube.
 //
 //===----------------------------------------------------------------------===//
 
@@ -185,10 +188,30 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
 
   OpBuilder b(load);
   Location loc = load.getLoc();
+  auto tensorTy = cast<RankedTensorType>(load.getResult().getType());
+
+  // Cube operands (feed tt.dot): materialize the GM tile into a PLAIN buffer
+  // (no address space) + memref.copy, exactly mirroring the native tt.load ->
+  // linalg.matmul entry.  ConvertHFusionToHIVM then generates the GM->L1->
+  // L0A/L0B loads.  hivm.hir.load is UB-only and would force an illegal ub->ca
+  // load in the cube path, so it must NOT be used here.
+  if (load->hasAttr("cube_operand")) {
+    Value off = computeOffset(b, loc, vi, load.getIndices());
+    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    auto plainTy = MemRefType::get(vi.tile, vi.elementType);
+    Value buf = b.create<memref::AllocOp>(loc, plainTy);
+    b.create<memref::CopyOp>(loc, gm, buf);
+    Value t = b.create<bufferization::ToTensorOp>(loc, tensorTy, buf,
+                                                  /*restrict=*/true,
+                                                  /*writable=*/false);
+    load.getResult().replaceAllUsesWith(t);
+    load.erase();
+    return success();
+  }
+
   auto ubTy = MemRefType::get(vi.tile, vi.elementType,
                               MemRefLayoutAttrInterface{}, ubSpace);
   Value ub = b.create<memref::AllocOp>(loc, ubTy);
-  auto tensorTy = cast<RankedTensorType>(load.getResult().getType());
 
   if (vi.rank == 1) {
     Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[0]);
