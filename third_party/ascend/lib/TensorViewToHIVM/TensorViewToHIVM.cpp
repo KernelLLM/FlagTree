@@ -44,9 +44,12 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/Pass/Pass.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "llvm/ADT/SmallVector.h"
+
+#include <limits>
 
 namespace mlir {
 namespace triton {
@@ -169,18 +172,48 @@ static Value computeOffset(OpBuilder &b, Location loc, const ViewInfo &vi,
   return off;
 }
 
-/// `[0 : len]` subview of a 1-D memref (the in-bounds prefix).
+/// `[0 : len_d]` rank-N subview of a memref (the in-bounds tile prefix).
 static Value emitPrefixSubview(OpBuilder &b, Location loc, Value src,
-                               Value len) {
-  return b.create<memref::SubViewOp>(
-      loc, src, ArrayRef<OpFoldResult>{b.getIndexAttr(0)},
-      ArrayRef<OpFoldResult>{OpFoldResult(len)},
-      ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
+                               ValueRange lens) {
+  SmallVector<OpFoldResult> offsets, sizes, strides;
+  for (Value len : lens) {
+    offsets.push_back(b.getIndexAttr(0));
+    sizes.push_back(OpFoldResult(len));
+    strides.push_back(b.getIndexAttr(1));
+  }
+  return b.create<memref::SubViewOp>(loc, src, offsets, sizes, strides);
+}
+
+/// True if `v` is the "unmasked" extent sentinel (INT64_MAX constant) emitted by
+/// Pass A for dims without a mask bound.
+static bool isSentinelExtent(Value v) {
+  APInt val;
+  if (matchPattern(v, m_ConstantInt(&val)))
+    return val.getSExtValue() == std::numeric_limits<int64_t>::max();
+  return false;
+}
+
+/// Per-dim in-bounds length `len_d = min(n_d - idx_d*trav_d, tile_d)` and the
+/// physical tile-origin offset `Σ (idx_d*trav_d) * stride_d`.
+static Value emitTailGeometry(OpBuilder &b, Location loc, const ViewInfo &vi,
+                              ValueRange indices, SmallVectorImpl<Value> &lens) {
+  Value off;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal[d]);
+    Value offLog = b.create<arith::MulIOp>(loc, indices[d], cTrav);
+    Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
+    Value nMinus = b.create<arith::SubIOp>(loc, vi.n[d], offLog);
+    lens.push_back(b.create<arith::MinSIOp>(loc, nMinus, cTile));
+    Value phys = b.create<arith::MulIOp>(loc, offLog, vi.strideVal[d]);
+    off = d == 0 ? phys : b.create<arith::AddIOp>(loc, off, phys);
+  }
+  return off;
 }
 
 //===----------------------------------------------------------------------===//
-// Lowering.  1-D uses contiguous tail handling (pad + partial DMA); rank > 1 is
-// currently block-aligned (full tile).
+// Lowering.  Unmasked tiles DMA the full block (this clean form is what the
+// native cube path recognizes for tt.dot operands).  Masked tiles (any dim with
+// a real extent) zero-pad the buffer and DMA only the in-bounds rank-N prefix.
 //===----------------------------------------------------------------------===//
 
 static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
@@ -199,26 +232,28 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
   auto localTy = MemRefType::get(vi.tile, vi.elementType);
   Value buf = b.create<memref::AllocOp>(loc, localTy);
 
-  if (vi.rank == 1) {
-    Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[0]);
-    Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal[0]);
-    Value offLogical =
-        b.create<arith::MulIOp>(loc, load.getIndices()[0], cTrav);
-    Value nMinusOff = b.create<arith::SubIOp>(loc, vi.n[0], offLogical);
-    Value len = b.create<arith::MinSIOp>(loc, nMinusOff, cTile);
-    Value off = b.create<arith::MulIOp>(loc, offLogical, vi.strideVal[0]);
-    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-    // Zero-pad the whole tile (padding = zero), then DMA the valid prefix.
-    Value zero =
-        b.create<arith::ConstantOp>(loc, b.getZeroAttr(vi.elementType));
-    b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{buf});
-    Value gmSub = emitPrefixSubview(b, loc, gm, len);
-    Value bufSub = emitPrefixSubview(b, loc, buf, len);
-    b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, bufSub);
-  } else {
+  bool masked = false;
+  for (Value n : vi.n)
+    if (!isSentinelExtent(n)) {
+      masked = true;
+      break;
+    }
+
+  if (!masked) {
     Value off = computeOffset(b, loc, vi, load.getIndices());
     Value gm = emitGmTile(b, loc, vi, off, gmSpace);
     b.create<hivm::LoadOp>(loc, TypeRange{}, gm, buf);
+  } else {
+    SmallVector<Value> lens;
+    Value off = emitTailGeometry(b, loc, vi, load.getIndices(), lens);
+    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    // Zero-pad the whole tile (padding = zero), then DMA the in-bounds prefix.
+    Value zero =
+        b.create<arith::ConstantOp>(loc, b.getZeroAttr(vi.elementType));
+    b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{buf});
+    Value gmSub = emitPrefixSubview(b, loc, gm, lens);
+    Value bufSub = emitPrefixSubview(b, loc, buf, lens);
+    b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, bufSub);
   }
 
   Value t = b.create<bufferization::ToTensorOp>(loc, tensorTy, buf,
@@ -246,22 +281,24 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
   Value vm = b.create<bufferization::ToBufferOp>(loc, localTy, store.getValue());
 #endif
 
-  if (vi.rank == 1) {
-    Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[0]);
-    Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal[0]);
-    Value offLogical =
-        b.create<arith::MulIOp>(loc, store.getIndices()[0], cTrav);
-    Value nMinusOff = b.create<arith::SubIOp>(loc, vi.n[0], offLogical);
-    Value len = b.create<arith::MinSIOp>(loc, nMinusOff, cTile);
-    Value off = b.create<arith::MulIOp>(loc, offLogical, vi.strideVal[0]);
-    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-    Value gmSub = emitPrefixSubview(b, loc, gm, len);
-    Value vmSub = emitPrefixSubview(b, loc, vm, len);
-    b.create<hivm::StoreOp>(loc, TypeRange{}, vmSub, gmSub);
-  } else {
+  bool masked = false;
+  for (Value n : vi.n)
+    if (!isSentinelExtent(n)) {
+      masked = true;
+      break;
+    }
+
+  if (!masked) {
     Value off = computeOffset(b, loc, vi, store.getIndices());
     Value gm = emitGmTile(b, loc, vi, off, gmSpace);
     b.create<hivm::StoreOp>(loc, TypeRange{}, vm, gm);
+  } else {
+    SmallVector<Value> lens;
+    Value off = emitTailGeometry(b, loc, vi, store.getIndices(), lens);
+    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    Value gmSub = emitPrefixSubview(b, loc, gm, lens);
+    Value vmSub = emitPrefixSubview(b, loc, vm, lens);
+    b.create<hivm::StoreOp>(loc, TypeRange{}, vmSub, gmSub);
   }
 
   store.erase();
