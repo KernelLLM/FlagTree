@@ -310,21 +310,10 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
 //===----------------------------------------------------------------------===//
 // Discrete gather/scatter: ptr_load / ptr_store -> scalar scf.for loop
 // (reinterpret_cast base offset:[idx[k]] sizes:[1] + memref.load/store), the
-// same form the native discrete-access lowering produces.  The ptrs operand is
-// `addptr(splat(base), _)`; we recover the base memref from the splat source
-// (the func arg, already rewritten to memref) and take the gather index from the
-// op's index operand.
+// same form the native discrete-access lowering produces.  The base is a scalar
+// !tv.ptr (func arg, already rewritten to memref); the gather index comes from
+// the op's index operand.
 //===----------------------------------------------------------------------===//
-
-static Value tracePtrBase(Value ptrs) {
-  auto addptr = ptrs.getDefiningOp<triton::AddPtrOp>();
-  if (!addptr)
-    return Value();
-  auto splat = addptr.getPtr().getDefiningOp<triton::SplatOp>();
-  if (!splat || !isa<MemRefType>(splat.getSrc().getType()))
-    return Value();
-  return splat.getSrc();
-}
 
 /// reinterpret_cast %base to offset:[%ik] sizes:[1] strides:[1] : ... #gm .
 static Value emitScalarGmElem(OpBuilder &b, Location loc, Value base, Value ik,
@@ -340,8 +329,8 @@ static Value emitScalarGmElem(OpBuilder &b, Location loc, Value base, Value ik,
 
 static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
                                   hivm::AddressSpaceAttr gmSpace) {
-  Value base = tracePtrBase(op.getPtrs());
-  if (!base || op.getIndices().empty())
+  Value base = op.getBase();
+  if (!isa<MemRefType>(base.getType()) || op.getIndices().empty())
     return failure();
   Value idx = op.getIndices()[0]; // tensor<Nxindex>
   auto resTy = cast<RankedTensorType>(op.getResult().getType());
@@ -382,8 +371,8 @@ static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
 
 static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
                                    hivm::AddressSpaceAttr gmSpace) {
-  Value base = tracePtrBase(op.getPtrs());
-  if (!base || op.getIndices().empty())
+  Value base = op.getBase();
+  if (!isa<MemRefType>(base.getType()) || op.getIndices().empty())
     return failure();
   Value idx = op.getIndices()[0];
   Value value = op.getValue();
@@ -495,9 +484,7 @@ struct TensorViewToHIVMPass
       if (failed(lowerPtrStore(ps, gmSpace)))
         ps.emitError("TensorViewToHIVM: unsupported ptr_store");
 
-    // 3. Erase the now-dead view ops and pointer-chain ops (the ptr_load/store
-    //    ptrs operand `addptr(splat(arg), _)` is left dead after lowering, and
-    //    its splat(arg) is ill-typed once the arg became a memref).
+    // 3. Erase the now-dead make_partition_view / make_tensor_view ops.
     bool changed = true;
     while (changed) {
       changed = false;
@@ -506,9 +493,7 @@ struct TensorViewToHIVMPass
         if ((isa<tv::MakePartitionViewOp>(op) ||
              isa<tv::MakeStridedViewOp>(op) ||
              isa<tv::MakeGatherScatterViewOp>(op) ||
-             isa<tv::MakeTensorViewOp>(op) ||
-             isa<triton::AddPtrOp>(op) ||
-             isa<triton::SplatOp>(op)) &&
+             isa<tv::MakeTensorViewOp>(op)) &&
             op->use_empty())
           dead.push_back(op);
       });

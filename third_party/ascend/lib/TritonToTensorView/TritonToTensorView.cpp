@@ -498,8 +498,7 @@ static LogicalResult rewriteLoad(triton::LoadOp load) {
       matchPtrAccess(load.getPtr(), base, idxTensor)) {
     Value idx = toIndexTensor(b, loc, idxTensor);
     auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
-    auto ptrLoad = b.create<tv::PtrLoadOp>(loc, resTy, load.getPtr(),
-                                           ValueRange{idx},
+    auto ptrLoad = b.create<tv::PtrLoadOp>(loc, resTy, base, ValueRange{idx},
                                            /*mask=*/load.getMask(), pad);
     load.getResult().replaceAllUsesWith(ptrLoad.getResult());
     load.erase();
@@ -528,8 +527,8 @@ static LogicalResult rewriteStore(triton::StoreOp store) {
       matchPtrAccess(store.getPtr(), base, idxTensor)) {
     Value idx = toIndexTensor(b, loc, idxTensor);
     auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
-    b.create<tv::PtrStoreOp>(loc, store.getPtr(), store.getValue(),
-                             ValueRange{idx}, /*mask=*/store.getMask(), pad);
+    b.create<tv::PtrStoreOp>(loc, base, store.getValue(), ValueRange{idx},
+                             /*mask=*/store.getMask(), pad);
     store.erase();
     return success();
   }
