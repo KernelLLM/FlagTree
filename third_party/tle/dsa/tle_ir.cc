@@ -404,143 +404,165 @@ void init_tle_dsa_ir(py::module &&m) {
                                                         memSpace);
            })
 
-      // tile.alloc — result type carries the memory space; pass it as the
-      // $space attr
-      .def("create_tile_alloc",
-           [](TritonOpBuilder &self, Type tileBufType) -> Value {
-             auto bufType =
-                 mlir::cast<mlir::triton::tile::BufType>(tileBufType);
-             return self.create<mlir::triton::tile::AllocOp>(
-                 tileBufType, bufType.getMemorySpace(),
-                 /*shape=*/mlir::ArrayAttr(), /*dtype=*/mlir::TypeAttr(),
-                 /*policy=*/mlir::triton::tile::PolicyAttr(),
-                 /*layout=*/mlir::triton::tile::LayoutAttr(),
-                 /*lifetime=*/mlir::triton::tile::LifetimeAttr(),
-                 /*comment=*/mlir::StringAttr());
-           })
-      // tile.copy — shape extents are informational at this layer; the op
-      // itself takes only src/dst (+ optional engine/layout attrs).
-      .def("create_tile_copy",
-           [](TritonOpBuilder &self, Value &src, Value &dst,
-              std::vector<Value> & /*shape*/, bool inter_no_alias) -> void {
-             auto op = self.create<mlir::triton::tile::CopyOp>(
-                 src, dst, /*engine=*/mlir::triton::tile::EngineAttr(),
-                 /*src_layout=*/mlir::triton::tile::LayoutAttr(),
-                 /*dst_nz_layout=*/mlir::triton::tile::NZLayoutAttr(),
-                 /*transpose=*/mlir::UnitAttr(),
-                 /*comment=*/mlir::StringAttr());
-             if (inter_no_alias) {
-               op->setAttr("inter_no_alias",
-                           self.getBuilder().getBoolAttr(true));
-             }
-           })
-      // tile.subview — result buffer type = sizes + source elt/space
-      .def("create_tile_subview",
-           [](TritonOpBuilder &self, Value source, std::vector<Value> &offsets,
-              const std::vector<int64_t> &sizes,
-              const std::vector<int64_t> &strides) -> Value {
-             SmallVector<Value> indexOffsets;
-             auto &builder = self.getBuilder();
-             auto indexType = builder.getIndexType();
-             for (Value offset : offsets) {
-               if (offset.getType() != indexType) {
-                 offset = self.create<arith::IndexCastOp>(indexType, offset);
-               }
-               indexOffsets.push_back(offset);
-             }
-             auto *ctx = self.getBuilder().getContext();
-             auto srcBuf =
-                 mlir::cast<mlir::triton::tile::BufType>(source.getType());
-             auto resTy = mlir::triton::tile::BufType::get(
-                 ctx, sizes, srcBuf.getElementType(), srcBuf.getMemorySpace());
-             auto op = self.create<mlir::triton::tile::SubViewOp>(
-                 resTy, source, indexOffsets,
-                 self.getBuilder().getI64ArrayAttr(sizes),
-                 self.getBuilder().getI64ArrayAttr(strides));
-             return op.getResult();
-           })
-      // tile.to_tensor — result is a standard ranked tensor (so tt.dot etc.
-      // accept it), mirroring the source buffer's shape and element type.
-      .def("create_tile_to_tensor",
-           [](TritonOpBuilder &self, Value &src, bool /*writable*/) -> Value {
-             auto srcBuf =
-                 mlir::cast<mlir::triton::tile::BufType>(src.getType());
-             auto resTy = mlir::RankedTensorType::get(srcBuf.getShape(),
-                                                      srcBuf.getElementType());
-             auto op = self.create<mlir::triton::tile::ToTensorOp>(resTy, src);
-             return op.getResult();
-           })
-      // tile.store_tensor
-      .def("create_tile_store_tensor",
-           [](TritonOpBuilder &self, Value &src, Value &dst) -> void {
-             self.create<mlir::triton::tile::StoreTensorOp>(src, dst);
-           })
-      // tile.set_flag
-      .def("create_tile_set_flag",
-           [](TritonOpBuilder &self, int64_t producer, int64_t consumer,
-              int64_t event) -> void {
-             self.create<mlir::triton::tile::SetFlagOp>(
-                 static_cast<mlir::triton::tile::Pipe>(producer),
-                 static_cast<mlir::triton::tile::Pipe>(consumer),
-                 static_cast<mlir::triton::tile::EventID>(event));
-           })
-      // tile.wait_flag
-      .def("create_tile_wait_flag",
-           [](TritonOpBuilder &self, int64_t producer, int64_t consumer,
-              int64_t event) -> void {
-             self.create<mlir::triton::tile::WaitFlagOp>(
-                 static_cast<mlir::triton::tile::Pipe>(producer),
-                 static_cast<mlir::triton::tile::Pipe>(consumer),
-                 static_cast<mlir::triton::tile::EventID>(event));
-           })
-      // tile.pipe_barrier
-      .def("create_tile_pipe_barrier",
-           [](TritonOpBuilder &self, int64_t pipe) -> void {
-             self.create<mlir::triton::tile::PipeBarrierOp>(
-                 static_cast<mlir::triton::tile::Pipe>(pipe));
-           })
-      // tile.gm_offset — result pointer type matches the base
-      .def("create_tile_gm_offset",
-           [](TritonOpBuilder &self, Value &base, std::vector<Value> &indices,
-              std::vector<Value> &strides) -> Value {
-             SmallVector<Value> indexValues;
-             SmallVector<Value> strideValues;
-             auto &builder = self.getBuilder();
-             auto indexType = builder.getIndexType();
-             for (Value index : indices) {
-               if (index.getType() != indexType) {
-                 index = self.create<arith::IndexCastOp>(indexType, index);
-               }
-               indexValues.push_back(index);
-             }
-             for (Value stride : strides) {
-               if (stride.getType() != indexType) {
-                 stride = self.create<arith::IndexCastOp>(indexType, stride);
-               }
-               strideValues.push_back(stride);
-             }
-             auto op = self.create<mlir::triton::tile::GmOffsetOp>(
-                 base.getType(), base, indexValues, strideValues);
-             return op.getResult();
-           })
-      // tile.cube_launch — async Cube matmul hook. The current TileIR op has no
-      // token result, so the matching wait is emitted as a standalone op.
-      .def("create_tile_cube_launch",
-           [](TritonOpBuilder &self, Value &a, Value &b, Value &acc,
-              Value &stageA, Value &stageB, Value &dst, bool transposeA,
-              bool transposeB, bool init, std::string mma) -> void {
-             auto &builder = self.getBuilder();
-             auto unitAttr = builder.getUnitAttr();
-             self.create<mlir::triton::tile::CubeLaunchOp>(
-                 a, b, acc, stageA, stageB, dst,
-                 transposeA ? unitAttr : mlir::UnitAttr(),
-                 transposeB ? unitAttr : mlir::UnitAttr(),
-                 init ? unitAttr : mlir::UnitAttr(),
-                 mma.empty() ? mlir::StringAttr() : builder.getStringAttr(mma),
-                 /*comment=*/mlir::StringAttr());
-           })
-      // tile.cube_wait
-      .def("create_tile_cube_wait", [](TritonOpBuilder &self) -> void {
-        self.create<mlir::triton::tile::CubeWaitOp>();
-      });
+  // tile.alloc — result type carries the memory space; pass it as the $space attr
+  .def("create_tile_alloc",
+       [](TritonOpBuilder &self, Type tileBufType) -> Value {
+         auto bufType = mlir::cast<mlir::triton::tile::BufType>(tileBufType);
+         return self.create<mlir::triton::tile::AllocOp>(
+             tileBufType, bufType.getMemorySpace(),
+             /*shape=*/mlir::ArrayAttr(), /*dtype=*/mlir::TypeAttr(),
+             /*policy=*/mlir::triton::tile::PolicyAttr(),
+             /*layout=*/mlir::triton::tile::LayoutAttr(),
+             /*lifetime=*/mlir::triton::tile::LifetimeAttr(),
+             /*comment=*/mlir::StringAttr());
+       })
+  // tile.copy — shape extents are informational at this layer; the op itself
+  // takes only src/dst (+ optional engine/layout attrs).
+  .def("create_tile_copy",
+       [](TritonOpBuilder &self, Value &src, Value &dst,
+          std::vector<Value> & /*shape*/, bool inter_no_alias) -> void {
+         auto op = self.create<mlir::triton::tile::CopyOp>(
+             src, dst, /*engine=*/mlir::triton::tile::EngineAttr(),
+             /*src_layout=*/mlir::triton::tile::LayoutAttr(),
+             /*dst_nz_layout=*/mlir::triton::tile::NZLayoutAttr(),
+             /*transpose=*/mlir::UnitAttr(), /*comment=*/mlir::StringAttr());
+         if (inter_no_alias) {
+           op->setAttr("inter_no_alias", self.getBuilder().getBoolAttr(true));
+         }
+       })
+  // tile.subview — result buffer type = sizes + source elt/space
+  .def("create_tile_subview",
+       [](TritonOpBuilder &self, Value source, std::vector<Value> &offsets,
+          const std::vector<int64_t> &sizes,
+          const std::vector<int64_t> &strides) -> Value {
+         SmallVector<Value> indexOffsets;
+         auto &builder = self.getBuilder();
+         auto indexType = builder.getIndexType();
+         for (Value offset : offsets) {
+           if (offset.getType() != indexType) {
+             offset = self.create<arith::IndexCastOp>(indexType, offset);
+           }
+           indexOffsets.push_back(offset);
+         }
+         auto *ctx = self.getBuilder().getContext();
+         auto srcBuf = mlir::cast<mlir::triton::tile::BufType>(source.getType());
+         auto resTy = mlir::triton::tile::BufType::get(
+             ctx, sizes, srcBuf.getElementType(), srcBuf.getMemorySpace());
+         auto op = self.create<mlir::triton::tile::SubViewOp>(
+             resTy, source, indexOffsets,
+             self.getBuilder().getI64ArrayAttr(sizes),
+             self.getBuilder().getI64ArrayAttr(strides));
+         return op.getResult();
+       })
+  // tile.to_tensor — result is a standard ranked tensor (so tt.dot etc. accept
+  // it), mirroring the source buffer's shape and element type.
+  .def("create_tile_to_tensor",
+       [](TritonOpBuilder &self, Value &src, bool /*writable*/) -> Value {
+         auto srcBuf = mlir::cast<mlir::triton::tile::BufType>(src.getType());
+         auto resTy = mlir::RankedTensorType::get(srcBuf.getShape(),
+                                                  srcBuf.getElementType());
+         auto op = self.create<mlir::triton::tile::ToTensorOp>(resTy, src);
+         return op.getResult();
+       })
+  // tile.store_tensor
+  .def("create_tile_store_tensor",
+       [](TritonOpBuilder &self, Value &src, Value &dst) -> void {
+         self.create<mlir::triton::tile::StoreTensorOp>(src, dst);
+       })
+  // tile.set_flag
+  .def("create_tile_set_flag",
+       [](TritonOpBuilder &self, int64_t producer, int64_t consumer,
+          int64_t event) -> void {
+         self.create<mlir::triton::tile::SetFlagOp>(
+             static_cast<mlir::triton::tile::Pipe>(producer),
+             static_cast<mlir::triton::tile::Pipe>(consumer),
+             static_cast<mlir::triton::tile::EventID>(event));
+       })
+  // tile.wait_flag
+  .def("create_tile_wait_flag",
+       [](TritonOpBuilder &self, int64_t producer, int64_t consumer,
+          int64_t event) -> void {
+         self.create<mlir::triton::tile::WaitFlagOp>(
+             static_cast<mlir::triton::tile::Pipe>(producer),
+             static_cast<mlir::triton::tile::Pipe>(consumer),
+             static_cast<mlir::triton::tile::EventID>(event));
+       })
+  // tile.pipe_barrier
+  .def("create_tile_pipe_barrier",
+       [](TritonOpBuilder &self, int64_t pipe) -> void {
+         self.create<mlir::triton::tile::PipeBarrierOp>(
+             static_cast<mlir::triton::tile::Pipe>(pipe));
+       })
+  // tile.gm_offset — result pointer type matches the base
+  .def("create_tile_gm_offset",
+       [](TritonOpBuilder &self, Value &base, std::vector<Value> &indices,
+          std::vector<Value> &strides) -> Value {
+         SmallVector<Value> indexValues;
+         SmallVector<Value> strideValues;
+         auto &builder = self.getBuilder();
+         auto indexType = builder.getIndexType();
+         for (Value index : indices) {
+           if (index.getType() != indexType) {
+             index = self.create<arith::IndexCastOp>(indexType, index);
+           }
+           indexValues.push_back(index);
+         }
+         for (Value stride : strides) {
+           if (stride.getType() != indexType) {
+             stride = self.create<arith::IndexCastOp>(indexType, stride);
+           }
+           strideValues.push_back(stride);
+         }
+         auto op = self.create<mlir::triton::tile::GmOffsetOp>(
+             base.getType(), base, indexValues, strideValues);
+         return op.getResult();
+       })
+  // tile.cube_launch — async Cube matmul hook. The current TileIR op has no
+  // token result, so the matching wait is emitted as a standalone op.
+  .def("create_tile_cube_launch",
+       [](TritonOpBuilder &self, Value &a, Value &b, Value &acc, Value &stageA,
+          Value &stageB, Value &dst, bool transposeA, bool transposeB,
+          bool init, std::string mma) -> void {
+         auto &builder = self.getBuilder();
+         auto unitAttr = builder.getUnitAttr();
+         self.create<mlir::triton::tile::CubeLaunchOp>(
+             a, b, acc, stageA, stageB, dst,
+             transposeA ? unitAttr : mlir::UnitAttr(),
+             transposeB ? unitAttr : mlir::UnitAttr(),
+             init ? unitAttr : mlir::UnitAttr(),
+             mma.empty() ? mlir::StringAttr() : builder.getStringAttr(mma),
+             /*comment=*/mlir::StringAttr());
+       })
+  // tile.cube_wait
+  .def("create_tile_cube_wait",
+       [](TritonOpBuilder &self) -> void {
+         self.create<mlir::triton::tile::CubeWaitOp>();
+       })
+  // tile.concat
+  .def("create_tile_concat",
+       [](TritonOpBuilder &self, Value &lhs, Value &rhs, int64_t dim) -> Value {
+         auto &builder = self.getBuilder();
+         auto lhsType = mlir::dyn_cast<RankedTensorType>(lhs.getType());
+         auto rhsType = mlir::dyn_cast<RankedTensorType>(rhs.getType());
+
+         if (!lhsType || !rhsType) {
+           llvm::errs() << "tile.concat requires ranked tensor types\n";
+           throw std::runtime_error("tile.concat requires ranked tensor types");
+         }
+
+         // Compute result shape
+         auto lhsShape = lhsType.getShape();
+         auto rhsShape = rhsType.getShape();
+         SmallVector<int64_t> resultShape(lhsShape.begin(), lhsShape.end());
+         resultShape[dim] = lhsShape[dim] + rhsShape[dim];
+
+         // Create result type
+         auto resultType = RankedTensorType::get(resultShape, lhsType.getElementType());
+
+         // Create tile.concat operation
+         auto dimAttr = builder.getI64IntegerAttr(dim);
+         auto concatOp = builder.create<mlir::triton::tile::ConcatOp>(
+             self.getLastLoc(), resultType, lhs, rhs, dimAttr);
+         return concatOp.getResult();
+       });
 }
