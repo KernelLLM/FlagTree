@@ -391,13 +391,6 @@ static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
 
   OpBuilder b(op);
   Location loc = op.getLoc();
-  auto bufTy = MemRefType::get({n}, elemTy);
-#ifndef __LLVM_MAJOR_VERSION_22_COMPATIBLE__
-  Value vm = b.create<bufferization::ToMemrefOp>(loc, bufTy, value);
-#else
-  Value vm = b.create<bufferization::ToBufferOp>(loc, bufTy, value);
-#endif
-
   Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
   Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
   // Loop only over the in-bounds lanes (crucial: the padded tail must NOT
@@ -408,12 +401,22 @@ static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(loop.getBody());
     Value k = loop.getInductionVar();
-    Value v = b.create<memref::LoadOp>(loc, vm, ValueRange{k});
-    auto ext = b.create<tensor::ExtractOp>(loc, idx, ValueRange{k});
-    ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
-    Value rc = emitScalarGmElem(b, loc, base, ext.getResult(), elemTy, gmSpace);
-    b.create<memref::StoreOp>(loc, v, rc, ValueRange{c0});
+    // Discrete GM write must use the native tensor-materialize form (a raw
+    // memref.store to a #gm reinterpret is NOT lowered by the backend): extract
+    // idx[k]/value[k] from the tensors (DiscreteMemAccess), wrap the scalar in a
+    // tensor<1>, and materialize_in_destination into the 1-element GM slot.
+    auto extIdx = b.create<tensor::ExtractOp>(loc, idx, ValueRange{k});
+    extIdx->setAttr("DiscreteMemAccess", b.getUnitAttr());
+    auto extVal = b.create<tensor::ExtractOp>(loc, value, ValueRange{k});
+    extVal->setAttr("DiscreteMemAccess", b.getUnitAttr());
+    Value rc = emitScalarGmElem(b, loc, base, extIdx.getResult(), elemTy, gmSpace);
+    Value empty = b.create<tensor::EmptyOp>(loc, ArrayRef<int64_t>{1}, elemTy);
+    Value ins =
+        b.create<tensor::InsertOp>(loc, extVal.getResult(), empty, ValueRange{c0});
+    auto mat = b.create<bufferization::MaterializeInDestinationOp>(loc, ins, rc);
+    mat->setAttr("writable", b.getUnitAttr());
   }
+  loop->setAttr("ExtractedLoadOrStore", b.getUnitAttr());
 
   op.erase();
   return success();
