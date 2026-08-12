@@ -105,12 +105,12 @@ def TV_PtrLoadOp : TensorView_Op<"ptr_load",
   let arguments = (ins
     TV_PtrType:$base,
     Variadic<TV_IndexTensor>:$indices,
-    Optional<TV_BoolTensor>:$mask,
+    Optional<Index>:$count,
     TV_PadKindAttr:$padding);
   let results = (outs AnyRankedTensor:$result);
   let hasVerifier = 1;
   let assemblyFormat = [{
-    $base `,` `indices` `=` `[` $indices `]` (`,` `mask` $mask^ `:` type($mask))?
+    $base `,` `indices` `=` `[` $indices `]` (`,` `count` $count^ `:` type($count))?
     attr-dict `:` type($base) `,` type($indices) `->` type($result)
   }];
 }
@@ -122,13 +122,13 @@ def TV_PtrStoreOp : TensorView_Op<"ptr_store",
     TV_PtrType:$base,
     AnyRankedTensor:$value,
     Variadic<TV_IndexTensor>:$indices,
-    Optional<TV_BoolTensor>:$mask,
+    Optional<Index>:$count,
     TV_PadKindAttr:$padding);
   let results = (outs);
   let hasVerifier = 1;
   let assemblyFormat = [{
     $base `,` $value `,` `indices` `=` `[` $indices `]`
-    (`,` `mask` $mask^ `:` type($mask))?
+    (`,` `count` $count^ `:` type($count))?
     attr-dict `:` type($base) `,` type($value) `,` type($indices)
   }];
 }

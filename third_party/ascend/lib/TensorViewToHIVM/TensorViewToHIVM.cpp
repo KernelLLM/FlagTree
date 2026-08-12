@@ -335,7 +335,7 @@ static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
   if (!isa<MemRefType>(base.getType()) || op.getIndices().empty())
     return failure();
   Value idx = op.getIndices()[0]; // tensor<Nxindex>
-  Value mask = op.getMask();      // optional tensor<Nxi1> (null if absent)
+  Value count = op.getCount();    // optional valid-lane count (null if absent)
   auto resTy = cast<RankedTensorType>(op.getResult().getType());
   int64_t n = resTy.getShape()[0];
   if (ShapedType::isDynamic(n))
@@ -351,18 +351,14 @@ static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
 
   Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
   Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
-  Value cN = b.create<arith::ConstantIndexOp>(loc, n);
-  auto loop = b.create<scf::ForOp>(loc, c0, cN, c1);
+  // Loop only over the in-bounds lanes (native form); the pad (0) covers the
+  // rest.  A per-lane scf.if is NOT used -- the backend mis-lowers it.
+  Value ub = count ? count : b.create<arith::ConstantIndexOp>(loc, n);
+  auto loop = b.create<scf::ForOp>(loc, c0, ub, c1);
   {
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(loop.getBody());
     Value k = loop.getInductionVar();
-    // Under a mask, only the in-bounds lanes load; the rest keep the pad (0).
-    if (mask) {
-      Value mk = b.create<tensor::ExtractOp>(loc, mask, ValueRange{k});
-      auto ifOp = b.create<scf::IfOp>(loc, mk, /*withElseRegion=*/false);
-      b.setInsertionPointToStart(ifOp.thenBlock());
-    }
     auto ext = b.create<tensor::ExtractOp>(loc, idx, ValueRange{k});
     ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
     Value rc = emitScalarGmElem(b, loc, base, ext.getResult(), elemTy, gmSpace);
@@ -385,7 +381,7 @@ static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
   if (!isa<MemRefType>(base.getType()) || op.getIndices().empty())
     return failure();
   Value idx = op.getIndices()[0];
-  Value mask = op.getMask(); // optional tensor<Nxi1> (null if absent)
+  Value count = op.getCount(); // optional valid-lane count (null if absent)
   Value value = op.getValue();
   auto valTy = cast<RankedTensorType>(value.getType());
   int64_t n = valTy.getShape()[0];
@@ -404,20 +400,15 @@ static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
 
   Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
   Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
-  Value cN = b.create<arith::ConstantIndexOp>(loc, n);
-  auto loop = b.create<scf::ForOp>(loc, c0, cN, c1);
+  // Loop only over the in-bounds lanes (crucial: the padded tail must NOT
+  // scatter, or it would clobber base[idx_pad]).  No per-lane scf.if.
+  Value ub = count ? count : b.create<arith::ConstantIndexOp>(loc, n);
+  auto loop = b.create<scf::ForOp>(loc, c0, ub, c1);
   {
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(loop.getBody());
     Value k = loop.getInductionVar();
     Value v = b.create<memref::LoadOp>(loc, vm, ValueRange{k});
-    // Under a mask, only the in-bounds lanes store (crucial: the padded tail
-    // must NOT scatter, or it would clobber base[idx_pad]).
-    if (mask) {
-      Value mk = b.create<tensor::ExtractOp>(loc, mask, ValueRange{k});
-      auto ifOp = b.create<scf::IfOp>(loc, mk, /*withElseRegion=*/false);
-      b.setInsertionPointToStart(ifOp.thenBlock());
-    }
     auto ext = b.create<tensor::ExtractOp>(loc, idx, ValueRange{k});
     ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
     Value rc = emitScalarGmElem(b, loc, base, ext.getResult(), elemTy, gmSpace);

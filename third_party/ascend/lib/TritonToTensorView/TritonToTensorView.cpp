@@ -476,6 +476,44 @@ static Value toIndexTensor(OpBuilder &b, Location loc, Value idxTensor) {
       loc, RankedTensorType::get(ty.getShape(), b.getIndexType()), idxTensor);
 }
 
+/// Valid-lane count for a contiguous-prefix mask `cmpi slt, addi(splat(origin),
+/// make_range(0, blk)), splat(bound)` -> clamp(min(bound - origin, blk), 0, blk).
+/// Used as the discrete loop bound (avoids a per-lane scf.if, which the backend
+/// does not lower correctly).  Null if the mask is absent / not this shape.
+static Value computePtrCount(OpBuilder &b, Location loc, Value mask,
+                             int64_t blk) {
+  if (!mask)
+    return Value();
+  auto cmp = mask.getDefiningOp<arith::CmpIOp>();
+  if (!cmp)
+    return Value();
+  Value bound, offExpr;
+  for (Value op : {cmp.getLhs(), cmp.getRhs()}) {
+    if (auto s = op.getDefiningOp<triton::SplatOp>())
+      bound = s.getSrc();
+    else
+      offExpr = op;
+  }
+  if (!bound || !offExpr)
+    return Value();
+  Value origin;
+  if (auto addi = offExpr.getDefiningOp<arith::AddIOp>())
+    for (Value op : {addi.getLhs(), addi.getRhs()})
+      if (auto s = op.getDefiningOp<triton::SplatOp>())
+        origin = s.getSrc();
+
+  Value boundI = b.create<arith::IndexCastOp>(loc, b.getIndexType(), bound);
+  Value diff = boundI;
+  if (origin) {
+    Value originI = b.create<arith::IndexCastOp>(loc, b.getIndexType(), origin);
+    diff = b.create<arith::SubIOp>(loc, boundI, originI);
+  }
+  Value cBlk = b.create<arith::ConstantIndexOp>(loc, blk);
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value len = b.create<arith::MinSIOp>(loc, diff, cBlk);
+  return b.create<arith::MaxSIOp>(loc, len, c0);
+}
+
 static LogicalResult rewriteLoad(triton::LoadOp load) {
   OpBuilder b(load);
   Location loc = load.getLoc();
@@ -497,9 +535,10 @@ static LogicalResult rewriteLoad(triton::LoadOp load) {
   if (resTy && resTy.getRank() == 1 &&
       matchPtrAccess(load.getPtr(), base, idxTensor)) {
     Value idx = toIndexTensor(b, loc, idxTensor);
+    Value count = computePtrCount(b, loc, load.getMask(), resTy.getShape()[0]);
     auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
     auto ptrLoad = b.create<tv::PtrLoadOp>(loc, resTy, base, ValueRange{idx},
-                                           /*mask=*/load.getMask(), pad);
+                                           /*count=*/count, pad);
     load.getResult().replaceAllUsesWith(ptrLoad.getResult());
     load.erase();
     return success();
@@ -526,9 +565,10 @@ static LogicalResult rewriteStore(triton::StoreOp store) {
   if (valTy && valTy.getRank() == 1 &&
       matchPtrAccess(store.getPtr(), base, idxTensor)) {
     Value idx = toIndexTensor(b, loc, idxTensor);
+    Value count = computePtrCount(b, loc, store.getMask(), valTy.getShape()[0]);
     auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
     b.create<tv::PtrStoreOp>(loc, base, store.getValue(), ValueRange{idx},
-                             /*mask=*/store.getMask(), pad);
+                             /*count=*/count, pad);
     store.erase();
     return success();
   }
