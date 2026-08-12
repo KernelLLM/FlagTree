@@ -329,7 +329,9 @@ static Value emitScalarGmElem(OpBuilder &b, Location loc, Value base, Value ik,
 
 static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
                                   hivm::AddressSpaceAttr gmSpace) {
-  Value base = op.getBase();
+  // NOTE: read the base untyped -- rewriteFuncPtrArgs has changed the underlying
+  // function argument to a memref, so op.getBase() (TypedValue<PtrType>) asserts.
+  Value base = op->getOperand(0);
   if (!isa<MemRefType>(base.getType()) || op.getIndices().empty())
     return failure();
   Value idx = op.getIndices()[0]; // tensor<Nxindex>
@@ -371,7 +373,8 @@ static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
 
 static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
                                    hivm::AddressSpaceAttr gmSpace) {
-  Value base = op.getBase();
+  // Base read untyped (see lowerPtrLoad): the arg is now a memref.
+  Value base = op->getOperand(0);
   if (!isa<MemRefType>(base.getType()) || op.getIndices().empty())
     return failure();
   Value idx = op.getIndices()[0];
