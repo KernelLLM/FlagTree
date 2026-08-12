@@ -56,19 +56,20 @@ namespace {
 // Analysis
 //===----------------------------------------------------------------------===//
 
-/// A recognized 1-D tiled access: contiguous partition (traversalStride == tile)
-/// or overlapping/gapped strided view (traversalStride != tile).
-struct ContigAccess {
+/// A recognized tiled access (rank-generic).  Per dim: tile size, traversal
+/// stride (== tile for partition, else strided), element stride (static value or
+/// ShapedType::kDynamic + an SSA i32), and the tile index.  Dead pointer-chain
+/// ops are cleaned by a post-pass sweep rather than tracked here.
+struct Access {
   Value basePtr;                 // scalar !tv.ptr<T>
   Type elementType;              // T
-  int64_t tileSize = 0;          // WINDOW (tile size)
-  int64_t traversalStride = 0;   // STEP between tile origins (== tile for partition)
-  int64_t elementStride = 1;     // physical stride between logical elements (memory layout)
-  Value tileIndex;               // i32 tile index (e.g. program_id)
-  Value fullSize;                // i32 full extent (from the mask compare; may be null)
-  triton::AddPtrOp addptr;       // outer (tensor) addptr, to erase afterwards
-  triton::SplatOp baseSplat;     // splat feeding it, to erase afterwards
-  triton::AddPtrOp scalarAddptr; // hoisted scalar addptr on the base (may be null)
+  unsigned rank = 0;
+  SmallVector<int64_t> tile;
+  SmallVector<int64_t> traversal;
+  SmallVector<int64_t> stride;    // element stride, or ShapedType::kDynamic
+  SmallVector<Value> strideDyn;   // dynamic element stride (i32) if kDynamic, else null
+  SmallVector<Value> index;       // i32 tile index per dim
+  Value fullSize;                 // 1-D masked bound (i32), else null
 };
 
 static std::optional<int64_t> getConstIntValue(Value v) {
@@ -90,133 +91,266 @@ static std::optional<int64_t> getSplatConstIntValue(Value v) {
   return std::nullopt;
 }
 
-/// Match `tt.load`/`tt.store` pointer of a 1-D tiled access.  The per-element
-/// pointer is `base + tile_origin + arange`, where the tile-origin scalar
-/// (`pid * STEP`) may appear in two frontend forms:
-///   (non-hoisted) addptr(splat(base),        addi(splat(pid*STEP), arange))
-///   (hoisted)     addptr(splat(addptr(base, pid*STEP)), arange)
-/// The hoisted form appears when the offset is not shared with a mask.
-static bool matchContiguous1D(Value ptrTensor, Value maskVal, ContigAccess &out) {
+/// Recognize a per-dim logical index tensor:
+///   addi(splat(muli(pid, STEP)), makeRange(0, TILE))
+/// yielding TILE, the traversal stride STEP, and the tile index (pid).
+static bool matchLogicalIndex(Value idxTensor, int64_t &tile, int64_t &traversal,
+                              Value &index) {
+  auto addi = idxTensor.getDefiningOp<arith::AddIOp>();
+  if (!addi)
+    return false;
+  triton::MakeRangeOp range;
+  Value originSplatSrc;
+  for (Value op : {addi.getLhs(), addi.getRhs()}) {
+    if (auto m = op.getDefiningOp<triton::MakeRangeOp>())
+      range = m;
+    else if (auto s = op.getDefiningOp<triton::SplatOp>())
+      originSplatSrc = s.getSrc();
+  }
+  if (!range || range.getStart() != 0 || !originSplatSrc)
+    return false;
+  tile = static_cast<int64_t>(range.getEnd());
+  auto muli = originSplatSrc.getDefiningOp<arith::MulIOp>();
+  if (!muli)
+    return false;
+  if (auto c = getConstIntValue(muli.getLhs())) {
+    traversal = *c;
+    index = muli.getRhs();
+    return true;
+  }
+  if (auto c = getConstIntValue(muli.getRhs())) {
+    traversal = *c;
+    index = muli.getLhs();
+    return true;
+  }
+  return false;
+}
+
+/// Match a 1-D tiled access.  The tile-origin scalar (`pid * STEP`) may appear
+/// non-hoisted (inside the offset tensor) or hoisted (a scalar addptr on the
+/// base); the whole offset may be scaled by a constant element stride.
+static bool match1D(Value ptrTensor, Value maskVal, Access &out) {
   auto addptr = ptrTensor.getDefiningOp<triton::AddPtrOp>();
   if (!addptr)
     return false;
   auto splat = addptr.getPtr().getDefiningOp<triton::SplatOp>();
   if (!splat)
     return false;
-  out.addptr = addptr;
-  out.baseSplat = splat;
 
-  // The splatted scalar pointer is either the base or a hoisted
-  // addptr(base, pid*STEP).
   Value scalarPtr = splat.getSrc();
   Value originScalar; // i32 = pid*STEP from the hoisted scalar addptr (or null)
   if (auto scalarAp = scalarPtr.getDefiningOp<triton::AddPtrOp>()) {
-    out.scalarAddptr = scalarAp;
     originScalar = scalarAp.getOffset();
     scalarPtr = scalarAp.getPtr();
   }
-  // The base pointer must already have been rewritten to !tv.ptr.
   auto tvPtr = dyn_cast<tv::PtrType>(scalarPtr.getType());
   if (!tvPtr)
     return false;
-  out.basePtr = scalarPtr;
-  out.elementType = tvPtr.getPointeeType();
 
-  // Optional element stride: the whole per-element offset scaled by a constant,
-  //   muli(offsetTensor, splat(const))  (e.g. in[i*S]).
+  int64_t elementStride = 1;
   Value tensorOff = addptr.getOffset();
   if (auto emul = tensorOff.getDefiningOp<arith::MulIOp>()) {
     if (auto c = getSplatConstIntValue(emul.getLhs())) {
-      out.elementStride = *c;
+      elementStride = *c;
       tensorOff = emul.getRhs();
     } else if (auto c = getSplatConstIntValue(emul.getRhs())) {
-      out.elementStride = *c;
+      elementStride = *c;
       tensorOff = emul.getLhs();
     }
   }
 
-  // Tensor offset: make_range, or addi(splat(pid*STEP), make_range).
   triton::MakeRangeOp range;
   Value originFromOffset;
   if (auto mr = tensorOff.getDefiningOp<triton::MakeRangeOp>()) {
     range = mr;
   } else if (auto addi = tensorOff.getDefiningOp<arith::AddIOp>()) {
-    for (Value operand : {addi.getLhs(), addi.getRhs()}) {
-      if (auto m = operand.getDefiningOp<triton::MakeRangeOp>())
+    for (Value op : {addi.getLhs(), addi.getRhs()}) {
+      if (auto m = op.getDefiningOp<triton::MakeRangeOp>())
         range = m;
-      else if (auto s = operand.getDefiningOp<triton::SplatOp>())
+      else if (auto s = op.getDefiningOp<triton::SplatOp>())
         originFromOffset = s.getSrc();
     }
   }
   if (!range || range.getStart() != 0)
     return false;
-  out.tileSize = static_cast<int64_t>(range.getEnd()) -
-                 static_cast<int64_t>(range.getStart());
+  int64_t tile =
+      static_cast<int64_t>(range.getEnd()) - static_cast<int64_t>(range.getStart());
 
-  // tile_origin = muli(tileIndex, STEP): from the hoisted scalar addptr or the
-  // splat inside the tensor offset.  STEP == tile => partition, else strided.
   Value origin = originScalar ? originScalar : originFromOffset;
   if (!origin)
     return false;
   auto muli = origin.getDefiningOp<arith::MulIOp>();
   if (!muli)
     return false;
+  int64_t traversal;
+  Value index;
   if (auto c = getConstIntValue(muli.getLhs())) {
-    out.traversalStride = *c;
-    out.tileIndex = muli.getRhs();
+    traversal = *c;
+    index = muli.getRhs();
   } else if (auto c = getConstIntValue(muli.getRhs())) {
-    out.traversalStride = *c;
-    out.tileIndex = muli.getLhs();
+    traversal = *c;
+    index = muli.getLhs();
   } else {
     return false;
   }
 
-  // full extent from the mask compare: cmpi(offset, splat(N)).  Optional: an
-  // unmasked access has no explicit bound (handled with a sentinel in buildView).
+  Value fullSize;
   if (maskVal) {
     if (auto cmp = maskVal.getDefiningOp<arith::CmpIOp>()) {
-      for (Value operand : {cmp.getLhs(), cmp.getRhs()})
-        if (auto s = operand.getDefiningOp<triton::SplatOp>())
-          out.fullSize = s.getSrc();
+      for (Value op : {cmp.getLhs(), cmp.getRhs()})
+        if (auto s = op.getDefiningOp<triton::SplatOp>())
+          fullSize = s.getSrc();
     }
   }
+
+  out.basePtr = scalarPtr;
+  out.elementType = tvPtr.getPointeeType();
+  out.rank = 1;
+  out.tile = {tile};
+  out.traversal = {traversal};
+  out.stride = {elementStride};
+  out.strideDyn = {Value()};
+  out.index = {index};
+  out.fullSize = fullSize;
   return true;
+}
+
+/// Match a 2-D block access:
+///   addptr(broadcast(addptr(splat(base), muli(expand_dims(rowIdx,1), splat(rowStride)))),
+///          broadcast(expand_dims(colIdx, 0)))
+/// where rowStride is a runtime value (dynamic element stride) or a constant, and
+/// col stride is 1.  (Block-aligned; no mask handled here yet.)
+static bool match2D(Value ptrTensor, Access &out) {
+  auto outer = ptrTensor.getDefiningOp<triton::AddPtrOp>();
+  if (!outer)
+    return false;
+  auto bcPtr = outer.getPtr().getDefiningOp<triton::BroadcastOp>();
+  auto bcOff = outer.getOffset().getDefiningOp<triton::BroadcastOp>();
+  if (!bcPtr || !bcOff)
+    return false;
+
+  // last-dim (col) offset: broadcast(expand_dims(colIdx, axis=0)), stride 1.
+  auto colExp = bcOff.getSrc().getDefiningOp<triton::ExpandDimsOp>();
+  if (!colExp)
+    return false;
+  Value colIdxTensor = colExp.getSrc();
+
+  // first-dim (row) ptr: broadcast(addptr(splat(base), rowContrib)).
+  auto innerAp = bcPtr.getSrc().getDefiningOp<triton::AddPtrOp>();
+  if (!innerAp)
+    return false;
+  auto splatBase = innerAp.getPtr().getDefiningOp<triton::SplatOp>();
+  if (!splatBase)
+    return false;
+  auto tvPtr = dyn_cast<tv::PtrType>(splatBase.getSrc().getType());
+  if (!tvPtr)
+    return false;
+
+  // rowContrib = muli(expand_dims(rowIdx,1), splat(rowStride))  OR  expand_dims(rowIdx,1).
+  Value rowContrib = innerAp.getOffset();
+  int64_t rowStride = 1;
+  Value rowStrideDyn;
+  Value rowExp;
+  if (auto mul = rowContrib.getDefiningOp<arith::MulIOp>()) {
+    for (Value op : {mul.getLhs(), mul.getRhs()}) {
+      if (op.getDefiningOp<triton::ExpandDimsOp>()) {
+        rowExp = op;
+      } else if (auto c = getSplatConstIntValue(op)) {
+        rowStride = *c;
+      } else if (auto s = op.getDefiningOp<triton::SplatOp>()) {
+        rowStrideDyn = s.getSrc();
+        rowStride = ShapedType::kDynamic;
+      }
+    }
+  } else {
+    rowExp = rowContrib;
+  }
+  if (!rowExp)
+    return false;
+  auto rowExpDims = rowExp.getDefiningOp<triton::ExpandDimsOp>();
+  if (!rowExpDims)
+    return false;
+  Value rowIdxTensor = rowExpDims.getSrc();
+
+  int64_t t0, tr0, t1, tr1;
+  Value i0, i1;
+  if (!matchLogicalIndex(rowIdxTensor, t0, tr0, i0))
+    return false;
+  if (!matchLogicalIndex(colIdxTensor, t1, tr1, i1))
+    return false;
+
+  out.basePtr = splatBase.getSrc();
+  out.elementType = tvPtr.getPointeeType();
+  out.rank = 2;
+  out.tile = {t0, t1};
+  out.traversal = {tr0, tr1};
+  out.stride = {rowStride, 1};
+  out.strideDyn = {rowStrideDyn, Value()};
+  out.index = {i0, i1};
+  out.fullSize = Value();
+  return true;
+}
+
+static bool matchAccess(Value ptrTensor, Value maskVal, Access &out) {
+  if (match2D(ptrTensor, out))
+    return true;
+  return match1D(ptrTensor, maskVal, out);
 }
 
 //===----------------------------------------------------------------------===//
 // Emission
 //===----------------------------------------------------------------------===//
 
-/// Build make_tensor_view + make_partition_view / make_strided_view; returns the
-/// encoded view.  Partition when traversalStride == tile, strided otherwise.
-static Value buildView(OpBuilder &b, Location loc, const ContigAccess &a) {
+/// Build make_tensor_view + make_partition_view / make_strided_view (rank-N);
+/// returns the encoded view.  Partition when traversal == tile in every dim.
+static Value buildView(OpBuilder &b, Location loc, const Access &a) {
   MLIRContext *ctx = b.getContext();
-  Value cStride = b.create<arith::ConstantIndexOp>(loc, a.elementStride);
-  Value nIdx;
-  if (a.fullSize) {
-    nIdx = b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.fullSize);
-  } else {
-    // Unmasked access: no explicit bound.  Use a large sentinel so Pass B's tail
-    // clamp folds to a full tile (the kernel guarantees in-bounds access).
-    nIdx = b.create<arith::ConstantIndexOp>(
-        loc, std::numeric_limits<int64_t>::max());
+  unsigned rank = a.rank;
+
+  // Per-dim element strides: SSA operand + type stride (static or kDynamic).
+  SmallVector<Value> strideOperands;
+  SmallVector<int64_t> strideTy;
+  for (unsigned d = 0; d < rank; ++d) {
+    if (a.stride[d] == ShapedType::kDynamic) {
+      strideOperands.push_back(
+          b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.strideDyn[d]));
+      strideTy.push_back(ShapedType::kDynamic);
+    } else {
+      strideOperands.push_back(
+          b.create<arith::ConstantIndexOp>(loc, a.stride[d]));
+      strideTy.push_back(a.stride[d]);
+    }
   }
 
-  SmallVector<int64_t> dynShape{ShapedType::kDynamic};
-  SmallVector<int64_t> strideVec{a.elementStride};
-  auto baseTy = tv::TensorViewType::get(dynShape, a.elementType, strideVec,
-                                        /*encoding=*/Attribute());
-  auto baseView = b.create<tv::MakeTensorViewOp>(
-      loc, baseTy, a.basePtr, ValueRange{nIdx}, ValueRange{cStride});
+  // Per-dim extents: the masked bound (1-D) or a large sentinel (folds to a full
+  // tile in Pass B for unmasked accesses).
+  SmallVector<Value> sizeOperands;
+  for (unsigned d = 0; d < rank; ++d) {
+    if (rank == 1 && a.fullSize)
+      sizeOperands.push_back(
+          b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.fullSize));
+    else
+      sizeOperands.push_back(b.create<arith::ConstantIndexOp>(
+          loc, std::numeric_limits<int64_t>::max()));
+  }
 
-  bool isPartition = (a.traversalStride == a.tileSize);
+  SmallVector<int64_t> dynShape(rank, ShapedType::kDynamic);
+  auto baseTy = tv::TensorViewType::get(dynShape, a.elementType, strideTy,
+                                        /*encoding=*/Attribute());
+  auto baseView = b.create<tv::MakeTensorViewOp>(loc, baseTy, a.basePtr,
+                                                 sizeOperands, strideOperands);
+
+  bool isPartition = true;
+  for (unsigned d = 0; d < rank; ++d)
+    if (a.traversal[d] != a.tile[d])
+      isPartition = false;
+
   Attribute enc;
   if (isPartition)
-    enc = tv::PartitionViewAttr::get(ctx, ArrayRef<int64_t>{a.tileSize});
+    enc = tv::PartitionViewAttr::get(ctx, a.tile);
   else
-    enc = tv::StridedViewAttr::get(ctx, ArrayRef<int64_t>{a.tileSize},
-                                   ArrayRef<int64_t>{a.traversalStride});
-  auto viewTy = tv::TensorViewType::get(dynShape, a.elementType, strideVec, enc);
+    enc = tv::StridedViewAttr::get(ctx, a.tile, a.traversal);
+  auto viewTy = tv::TensorViewType::get(dynShape, a.elementType, strideTy, enc);
   if (isPartition)
     return b.create<tv::MakePartitionViewOp>(loc, viewTy, baseView.getResult())
         .getResult();
@@ -224,53 +358,63 @@ static Value buildView(OpBuilder &b, Location loc, const ContigAccess &a) {
       .getResult();
 }
 
-/// Erase the (now dead) tensor addptr + splat (+ hoisted scalar addptr) feeding a
-/// converted access.  Taken by value (non-const op wrappers) so
-/// getOperation()/erase() are usable.  scalarAddptr may be null (non-hoisted).
-static void eraseDeadPtrChain(triton::AddPtrOp addptr, triton::SplatOp baseSplat,
-                              triton::AddPtrOp scalarAddptr) {
-  if (addptr->use_empty()) {
-    addptr->erase();
-    if (baseSplat->use_empty()) {
-      baseSplat->erase();
-      if (scalarAddptr && scalarAddptr->use_empty())
-        scalarAddptr->erase();
-    }
-  }
+static SmallVector<Value> castIndices(OpBuilder &b, Location loc,
+                                      const Access &a) {
+  SmallVector<Value> indices;
+  for (Value idx : a.index)
+    indices.push_back(b.create<arith::IndexCastOp>(loc, b.getIndexType(), idx));
+  return indices;
 }
 
 static LogicalResult rewriteLoad(triton::LoadOp load) {
-  ContigAccess a;
-  if (!matchContiguous1D(load.getPtr(), load.getMask(), a))
+  Access a;
+  if (!matchAccess(load.getPtr(), load.getMask(), a))
     return failure();
 
   OpBuilder b(load);
   Location loc = load.getLoc();
-  Value partView = buildView(b, loc, a);
-  Value idx = b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.tileIndex);
-  auto viewLoad = b.create<tv::ViewLoadOp>(loc, load.getResult().getType(),
-                                           partView, ValueRange{idx},
+  Value view = buildView(b, loc, a);
+  auto viewLoad = b.create<tv::ViewLoadOp>(loc, load.getResult().getType(), view,
+                                           castIndices(b, loc, a),
                                            /*mask=*/Value());
   load.getResult().replaceAllUsesWith(viewLoad.getResult());
   load.erase();
-  eraseDeadPtrChain(a.addptr, a.baseSplat, a.scalarAddptr);
   return success();
 }
 
 static LogicalResult rewriteStore(triton::StoreOp store) {
-  ContigAccess a;
-  if (!matchContiguous1D(store.getPtr(), store.getMask(), a))
+  Access a;
+  if (!matchAccess(store.getPtr(), store.getMask(), a))
     return failure();
 
   OpBuilder b(store);
   Location loc = store.getLoc();
-  Value partView = buildView(b, loc, a);
-  Value idx = b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.tileIndex);
-  b.create<tv::ViewStoreOp>(loc, partView, store.getValue(), ValueRange{idx},
+  Value view = buildView(b, loc, a);
+  b.create<tv::ViewStoreOp>(loc, view, store.getValue(), castIndices(b, loc, a),
                             /*mask=*/Value());
   store.erase();
-  eraseDeadPtrChain(a.addptr, a.baseSplat, a.scalarAddptr);
   return success();
+}
+
+/// Fixed-point erase of the now-dead pointer-chain ops.  Handles both the 1-D
+/// (addptr/splat) and 2-D (broadcast/expand_dims) forms, including the ops left
+/// type-inconsistent by the !tv.ptr argument rewrite.
+static void eraseDeadPtrOps(ModuleOp module) {
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    SmallVector<Operation *> dead;
+    module.walk([&](Operation *op) {
+      if ((isa<triton::AddPtrOp>(op) || isa<triton::SplatOp>(op) ||
+           isa<triton::BroadcastOp>(op) || isa<triton::ExpandDimsOp>(op)) &&
+          op->use_empty())
+        dead.push_back(op);
+    });
+    for (Operation *op : dead) {
+      op->erase();
+      changed = true;
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -332,6 +476,9 @@ struct TritonToTensorViewPass
       if (failed(rewriteStore(s)))
         s.emitError("TritonToTensorView: unsupported tt.store access pattern");
     }
+
+    // 3. Clean up the now-dead pointer-chain ops.
+    eraseDeadPtrOps(module);
   }
 };
 
