@@ -18,7 +18,7 @@ tt.func public @block2d(%in: !tv.ptr<f32>, %N: index, %im: index, %jn: index) {
   // CHECK: hivm.hir.load
   // CHECK: bufferization.to_tensor
   %t = tv.view_load %pv[%im, %jn]
-       : !tv.tensor_view<?x?xf32, strides=[?, 1], #tv.partition_view<tile = [64, 64], dim_map = [0, 1], padding = zero>>
+       : !tv.tensor_view<?x?xf32, strides=[?, 1], #tv.partition_view<tile = [64, 64], dim_map = [0, 1], padding = zero>>, index, index
       -> tensor<64x64xf32>
   tt.return
 }

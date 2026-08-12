@@ -11,6 +11,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpImplementation.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -116,6 +117,8 @@ LogicalResult MakeGatherScatterViewOp::verify() {
   if (!enc)
     return emitOpError("result must carry a #tv.gather_scatter_view encoding");
   int64_t rank = res.getRank();
+  if (static_cast<int64_t>(enc.getTile().size()) != rank)
+    return emitOpError("gather/scatter tile rank must match the view rank");
   for (int64_t d : enc.getSparseDim())
     if (d < 0 || d >= rank)
       return emitOpError("sparse_dim entry ")
@@ -139,10 +142,33 @@ LogicalResult ViewLoadOp::verify() {
   Attribute enc = view.getEncoding();
   if (!isViewEncoding(enc))
     return emitOpError("view operand must carry a view encoding");
-  if (static_cast<int64_t>(getIndices().size()) != getEncodingIndexSpaceRank(enc))
+  if (static_cast<int64_t>(getIndices().size()) !=
+      getEncodingIndexSpaceRank(enc))
     return emitOpError("expected ")
            << getEncodingIndexSpaceRank(enc) << " indices but got "
            << getIndices().size();
+  auto gather = dyn_cast<GatherScatterViewAttr>(enc);
+  for (auto [d, index] : llvm::enumerate(getIndices())) {
+    bool isSparse = gather && llvm::is_contained(gather.getSparseDim(), d);
+    if (isSparse) {
+      auto indexTy = dyn_cast<RankedTensorType>(index.getType());
+      if (!indexTy || indexTy.getRank() != 1)
+        return emitOpError("index for sparse dimension ")
+               << d << " must be a rank-1 tensor";
+      if (!indexTy.getElementType().isIndex() &&
+          !indexTy.getElementType().isInteger(32) &&
+          !indexTy.getElementType().isInteger(64))
+        return emitOpError("index tensor for sparse dimension ")
+               << d << " must have index, i32, or i64 elements";
+      int64_t length = indexTy.getShape()[0];
+      if (!ShapedType::isDynamic(length) && length != gather.getTile()[d])
+        return emitOpError("index tensor length for sparse dimension ")
+               << d << " must equal the corresponding tile size";
+    } else if (!index.getType().isIndex()) {
+      return emitOpError("index for regular dimension ")
+             << d << " must be a scalar index";
+    }
+  }
   auto resTy = cast<RankedTensorType>(getResult().getType());
   SmallVector<int64_t> tile = getEncodingTileShape(enc);
   if (resTy.getShape() != ArrayRef<int64_t>(tile))
@@ -162,10 +188,33 @@ LogicalResult ViewStoreOp::verify() {
   Attribute enc = view.getEncoding();
   if (!isViewEncoding(enc))
     return emitOpError("view operand must carry a view encoding");
-  if (static_cast<int64_t>(getIndices().size()) != getEncodingIndexSpaceRank(enc))
+  if (static_cast<int64_t>(getIndices().size()) !=
+      getEncodingIndexSpaceRank(enc))
     return emitOpError("expected ")
            << getEncodingIndexSpaceRank(enc) << " indices but got "
            << getIndices().size();
+  auto gather = dyn_cast<GatherScatterViewAttr>(enc);
+  for (auto [d, index] : llvm::enumerate(getIndices())) {
+    bool isSparse = gather && llvm::is_contained(gather.getSparseDim(), d);
+    if (isSparse) {
+      auto indexTy = dyn_cast<RankedTensorType>(index.getType());
+      if (!indexTy || indexTy.getRank() != 1)
+        return emitOpError("index for sparse dimension ")
+               << d << " must be a rank-1 tensor";
+      if (!indexTy.getElementType().isIndex() &&
+          !indexTy.getElementType().isInteger(32) &&
+          !indexTy.getElementType().isInteger(64))
+        return emitOpError("index tensor for sparse dimension ")
+               << d << " must have index, i32, or i64 elements";
+      int64_t length = indexTy.getShape()[0];
+      if (!ShapedType::isDynamic(length) && length != gather.getTile()[d])
+        return emitOpError("index tensor length for sparse dimension ")
+               << d << " must equal the corresponding tile size";
+    } else if (!index.getType().isIndex()) {
+      return emitOpError("index for regular dimension ")
+             << d << " must be a scalar index";
+    }
+  }
   auto valTy = cast<RankedTensorType>(getValue().getType());
   SmallVector<int64_t> tile = getEncodingTileShape(enc);
   if (valTy.getShape() != ArrayRef<int64_t>(tile))

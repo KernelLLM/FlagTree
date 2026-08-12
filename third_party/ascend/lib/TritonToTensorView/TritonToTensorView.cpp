@@ -18,8 +18,9 @@
 //        %v   = tv.view_load %pv[%pid]
 //   The compute side (arith / tt.dot) is untouched.
 //
-// Scope (Stage 2): 1-D contiguous partition accesses whose base pointer is a
-// function argument.  Strided / gather / mask lowering come later.
+// Supported access families include regular partition/strided tiles and the
+// 2-D single-sparse-dimension gather/scatter form recognized below.  More
+// general pointer tensors and mask lowering remain unsupported.
 //
 //===----------------------------------------------------------------------===//
 
@@ -35,6 +36,7 @@
 #include "mlir/Pass/Pass.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include <limits>
@@ -57,9 +59,9 @@ namespace {
 //===----------------------------------------------------------------------===//
 
 /// A recognized tiled access (rank-generic).  Per dim: tile size, traversal
-/// stride (== tile for partition, else strided), element stride (static value or
-/// ShapedType::kDynamic + an SSA i32), and the tile index.  Dead pointer-chain
-/// ops are cleaned by a post-pass sweep rather than tracked here.
+/// stride (== tile for partition, else strided), element stride (static value
+/// or ShapedType::kDynamic + an SSA i32), and the tile index.  Dead
+/// pointer-chain ops are cleaned by a post-pass sweep rather than tracked here.
 struct Access {
   Value basePtr;                 // scalar !tv.ptr<T>
   Type elementType;              // T
@@ -68,7 +70,8 @@ struct Access {
   SmallVector<int64_t> traversal;
   SmallVector<int64_t> stride;    // element stride, or ShapedType::kDynamic
   SmallVector<Value> strideDyn;   // dynamic element stride (i32) if kDynamic, else null
-  SmallVector<Value> index;       // i32 tile index per dim
+  SmallVector<Value> index;       // scalar tile index, or tensor index for a sparse dim
+  SmallVector<int64_t> sparseDims;
   Value fullSize;                 // 1-D masked bound (i32), else null
 };
 
@@ -301,18 +304,136 @@ static bool match2D(Value ptrTensor, Access &out) {
   return true;
 }
 
+/// Match a 2-D gather/scatter access with one data-dependent dimension and one
+/// regular dimension:
+///
+///   broadcast(addptr(splat(base), expand_dims(rowIndex, 1) * rowStride))
+///     + broadcast(expand_dims(colIndex, 0))
+///
+/// The data-dependent logical index is retained as the runtime tensor index.
+/// This matcher deliberately follows the regular 2-D matcher and therefore
+/// cannot steal partition/strided accesses from the existing path.
+static bool matchGatherScatter2D(Value ptrTensor, Access &out) {
+  auto outer = ptrTensor.getDefiningOp<triton::AddPtrOp>();
+  if (!outer)
+    return false;
+  auto bcPtr = outer.getPtr().getDefiningOp<triton::BroadcastOp>();
+  auto bcOff = outer.getOffset().getDefiningOp<triton::BroadcastOp>();
+  if (!bcPtr || !bcOff)
+    return false;
+
+  auto colExp = bcOff.getSrc().getDefiningOp<triton::ExpandDimsOp>();
+  if (!colExp)
+    return false;
+
+  auto innerAp = bcPtr.getSrc().getDefiningOp<triton::AddPtrOp>();
+  if (!innerAp)
+    return false;
+  auto splatBase = innerAp.getPtr().getDefiningOp<triton::SplatOp>();
+  if (!splatBase)
+    return false;
+  auto tvPtr = dyn_cast<tv::PtrType>(splatBase.getSrc().getType());
+  if (!tvPtr)
+    return false;
+
+  Value rowContrib = innerAp.getOffset();
+  int64_t rowStride = 1;
+  Value rowStrideDyn;
+  Value rowExp;
+  if (auto mul = rowContrib.getDefiningOp<arith::MulIOp>()) {
+    for (Value operand : {mul.getLhs(), mul.getRhs()}) {
+      if (operand.getDefiningOp<triton::ExpandDimsOp>()) {
+        rowExp = operand;
+      } else if (auto c = getSplatConstIntValue(operand)) {
+        rowStride = *c;
+      } else if (auto s = operand.getDefiningOp<triton::SplatOp>()) {
+        rowStrideDyn = s.getSrc();
+        rowStride = ShapedType::kDynamic;
+      }
+    }
+  } else {
+    rowExp = rowContrib;
+  }
+  if (!rowExp)
+    return false;
+  auto rowExpand = rowExp.getDefiningOp<triton::ExpandDimsOp>();
+  if (!rowExpand)
+    return false;
+  Value rowIndex = rowExpand.getSrc();
+  Value colIndexTensor = colExp.getSrc();
+
+  int64_t rowTile, rowTraversal, colTile, colTraversal;
+  Value rowRegularIndex, colRegularIndex;
+  bool rowIsRegular = matchLogicalIndex(rowIndex, rowTile, rowTraversal,
+                                        rowRegularIndex);
+  bool colIsRegular = matchLogicalIndex(colIndexTensor, colTile, colTraversal,
+                                        colRegularIndex);
+  if (rowIsRegular == colIsRegular)
+    return false;
+
+  auto getSparseTile = [](Value index) -> std::optional<int64_t> {
+    auto ty = dyn_cast<RankedTensorType>(index.getType());
+    if (!ty || ty.getRank() != 1 ||
+        (!ty.getElementType().isIndex() &&
+         !ty.getElementType().isInteger(32) &&
+         !ty.getElementType().isInteger(64)) ||
+        ShapedType::isDynamic(ty.getShape()[0]))
+      return std::nullopt;
+    return ty.getShape()[0];
+  };
+
+  SmallVector<int64_t> sparseDims;
+  Value rowViewIndex, colViewIndex;
+  if (rowIsRegular) {
+    auto sparseTile = getSparseTile(colIndexTensor);
+    if (!sparseTile)
+      return false;
+    colTile = *sparseTile;
+    colTraversal = colTile;
+    rowViewIndex = rowRegularIndex;
+    colViewIndex = colIndexTensor;
+    sparseDims.push_back(1);
+  } else {
+    auto sparseTile = getSparseTile(rowIndex);
+    if (!sparseTile)
+      return false;
+    rowTile = *sparseTile;
+    rowTraversal = rowTile;
+    rowViewIndex = rowIndex;
+    colViewIndex = colRegularIndex;
+    sparseDims.push_back(0);
+  }
+
+  out.basePtr = splatBase.getSrc();
+  out.elementType = tvPtr.getPointeeType();
+  out.rank = 2;
+  out.tile = {rowTile, colTile};
+  // A sparse dimension does not have a static inter-tile traversal.  Its value
+  // is unused for gather/scatter view construction and is set to the tile size.
+  out.traversal = {rowTraversal, colTraversal};
+  out.stride = {rowStride, 1};
+  out.strideDyn = {rowStrideDyn, Value()};
+  out.index = {rowViewIndex, colViewIndex};
+  out.sparseDims = sparseDims;
+  out.fullSize = Value();
+  return true;
+}
+
 static bool matchAccess(Value ptrTensor, Value maskVal, Access &out) {
   if (match2D(ptrTensor, out))
     return true;
-  return match1D(ptrTensor, maskVal, out);
+  if (match1D(ptrTensor, maskVal, out))
+    return true;
+  return matchGatherScatter2D(ptrTensor, out);
 }
 
 //===----------------------------------------------------------------------===//
 // Emission
 //===----------------------------------------------------------------------===//
 
-/// Build make_tensor_view + make_partition_view / make_strided_view (rank-N);
-/// returns the encoded view.  Partition when traversal == tile in every dim.
+/// Build make_tensor_view plus the encoded view (rank-N).  A non-empty sparse
+/// dimension list selects gather/scatter; otherwise partition when traversal ==
+/// tile in every dim, and strided for the remaining regular accesses.
 static Value buildView(OpBuilder &b, Location loc, const Access &a) {
   MLIRContext *ctx = b.getContext();
   unsigned rank = a.rank;
@@ -350,6 +471,15 @@ static Value buildView(OpBuilder &b, Location loc, const Access &a) {
   auto baseView = b.create<tv::MakeTensorViewOp>(loc, baseTy, a.basePtr,
                                                  sizeOperands, strideOperands);
 
+  if (!a.sparseDims.empty()) {
+    Attribute enc = tv::GatherScatterViewAttr::get(ctx, a.tile, a.sparseDims);
+    auto viewTy =
+        tv::TensorViewType::get(dynShape, a.elementType, strideTy, enc);
+    return b
+        .create<tv::MakeGatherScatterViewOp>(loc, viewTy, baseView.getResult())
+        .getResult();
+  }
+
   bool isPartition = true;
   for (unsigned d = 0; d < rank; ++d)
     if (a.traversal[d] != a.tile[d])
@@ -371,7 +501,11 @@ static Value buildView(OpBuilder &b, Location loc, const Access &a) {
 static SmallVector<Value> castIndices(OpBuilder &b, Location loc,
                                       const Access &a) {
   SmallVector<Value> indices;
-  for (Value idx : a.index) {
+  for (auto [d, idx] : llvm::enumerate(a.index)) {
+    if (llvm::is_contained(a.sparseDims, d)) {
+      indices.push_back(idx);
+      continue;
+    }
     if (idx)
       indices.push_back(
           b.create<arith::IndexCastOp>(loc, b.getIndexType(), idx));

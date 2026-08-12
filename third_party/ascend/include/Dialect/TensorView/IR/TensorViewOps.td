@@ -69,13 +69,13 @@ def TV_ViewLoadOp : TensorView_Op<"view_load",
   let summary = "Load the tile at the given index-space position into a tensor.";
   let arguments = (ins
     TV_TensorViewType:$view,
-    Variadic<Index>:$indices,
+    Variadic<TV_ViewIndex>:$indices,
     Optional<TV_BoolTensor>:$mask);
   let results = (outs AnyRankedTensor:$result);
   let hasVerifier = 1;
   let assemblyFormat = [{
     $view `[` $indices `]` (`,` `mask` $mask^ `:` type($mask))?
-    attr-dict `:` type($view) `->` type($result)
+    attr-dict `:` type($view) `,` type($indices) `->` type($result)
   }];
 }
 
@@ -86,13 +86,13 @@ def TV_ViewStoreOp : TensorView_Op<"view_store",
   let arguments = (ins
     TV_TensorViewType:$view,
     AnyRankedTensor:$value,
-    Variadic<Index>:$indices,
+    Variadic<TV_ViewIndex>:$indices,
     Optional<TV_BoolTensor>:$mask);
   let results = (outs);
   let hasVerifier = 1;
   let assemblyFormat = [{
     $view `[` $indices `]` `,` $value (`,` `mask` $mask^ `:` type($mask))?
-    attr-dict `:` type($view) `,` type($value)
+    attr-dict `:` type($view) `,` type($value) `,` type($indices)
   }];
 }
 

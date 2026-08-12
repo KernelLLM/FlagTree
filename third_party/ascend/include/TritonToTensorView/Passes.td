@@ -15,8 +15,9 @@ def TritonToTensorView : Pass<"triton-to-tensor-view", "mlir::ModuleOp"> {
   let summary = "Convert Triton pointer accesses to the TensorView (tv) dialect";
   let description = [{
     Replaces `!tt.ptr<T>` function inputs with `!tv.ptr<T>` and lowers the
-    contiguous `tt.load`/`tt.store` access clusters (splat + addptr) into
-    `tv.make_tensor_view` + `tv.make_partition_view` + `tv.view_load`/`view_store`.
+    supported `tt.load`/`tt.store` access clusters (regular tiled or the 2-D
+    single-sparse-dimension form) into `tv.make_tensor_view` plus an encoded
+    view and `tv.view_load`/`tv.view_store`.
     The compute side (arith / tt.dot) is left untouched and keeps flowing as
     tensors.
   }];

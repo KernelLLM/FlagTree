@@ -19,7 +19,7 @@ func.func @view_load_bad_shape(%p: !tv.ptr<f32>, %n: index, %i: index) {
        -> !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [128], dim_map = [0], padding = zero>>
   // expected-error @+1 {{result shape must equal the view tile shape}}
   %t = tv.view_load %pv[%i]
-       : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [128], dim_map = [0], padding = zero>>
+       : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [128], dim_map = [0], padding = zero>>, index
       -> tensor<64xf32>
   return
 }

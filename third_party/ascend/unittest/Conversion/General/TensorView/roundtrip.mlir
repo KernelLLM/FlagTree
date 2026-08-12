@@ -18,11 +18,11 @@ func.func @base_and_partition(%p: !tv.ptr<f32>, %n: index, %c1: index, %i: index
   // CHECK: tv.view_load %{{.*}}[%{{.*}}]
   // CHECK-SAME: tensor<128xf32>
   %t = tv.view_load %pv[%i]
-       : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [128], dim_map = [0], padding = zero>>
+       : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [128], dim_map = [0], padding = zero>>, index
       -> tensor<128xf32>
   // CHECK: tv.view_store
   tv.view_store %pv[%i], %t
-       : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [128], dim_map = [0], padding = zero>>, tensor<128xf32>
+       : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [128], dim_map = [0], padding = zero>>, tensor<128xf32>, index
   return
 }
 
@@ -38,13 +38,14 @@ func.func @partition_2d(%p: !tv.ptr<f32>, %m: index, %n: index, %sm: index, %s1:
   // CHECK: tv.view_load
   // CHECK-SAME: tensor<128x256xf32>
   %t = tv.view_load %pv[%i, %j]
-       : !tv.tensor_view<?x?xf32, strides=[?,1], #tv.partition_view<tile = [128, 256], dim_map = [0, 1], padding = zero>>
+       : !tv.tensor_view<?x?xf32, strides=[?,1], #tv.partition_view<tile = [128, 256], dim_map = [0, 1], padding = zero>>, index, index
       -> tensor<128x256xf32>
   return
 }
 
 // CHECK-LABEL: func.func @strided_and_gather
-func.func @strided_and_gather(%p: !tv.ptr<f32>, %s8: index, %s1: index) {
+func.func @strided_and_gather(%p: !tv.ptr<f32>, %s8: index, %s1: index,
+                              %sparse: tensor<4xi32>, %j: index) {
   %v = tv.make_tensor_view %p, sizes = [%s8, %s8], strides = [%s8, %s1]
        : !tv.ptr<f32> -> !tv.tensor_view<8x8xf32, strides=[8,1]>
   // CHECK: tv.make_strided_view
@@ -57,6 +58,14 @@ func.func @strided_and_gather(%p: !tv.ptr<f32>, %s8: index, %s1: index) {
   %gv = tv.make_gather_scatter_view %v
         : !tv.tensor_view<8x8xf32, strides=[8,1]>
        -> !tv.tensor_view<8x8xf32, strides=[8,1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [0], padding = zero>>
+  // CHECK: tv.view_load
+  // CHECK-SAME: tensor<4xi32>, index -> tensor<4x4xf32>
+  %gt = tv.view_load %gv[%sparse, %j]
+        : !tv.tensor_view<8x8xf32, strides=[8,1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [0], padding = zero>>, tensor<4xi32>, index
+       -> tensor<4x4xf32>
+  // CHECK: tv.view_store
+  tv.view_store %gv[%sparse, %j], %gt
+        : !tv.tensor_view<8x8xf32, strides=[8,1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [0], padding = zero>>, tensor<4x4xf32>, tensor<4xi32>, index
   return
 }
 

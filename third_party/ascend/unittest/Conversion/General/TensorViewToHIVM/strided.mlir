@@ -18,7 +18,7 @@ tt.func public @sliding(%in: !tv.ptr<f32>, %n: index, %i: index) {
   // CHECK: memref.reinterpret_cast
   // CHECK: hivm.hir.load
   %t = tv.view_load %sv[%i]
-       : !tv.tensor_view<?xf32, strides=[1], #tv.strided_view<tile = [1024], dim_map = [0], traversal_strides = [512], padding = zero>>
+       : !tv.tensor_view<?xf32, strides=[1], #tv.strided_view<tile = [1024], dim_map = [0], traversal_strides = [512], padding = zero>>, index
       -> tensor<1024xf32>
   tt.return
 }

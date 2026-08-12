@@ -71,6 +71,8 @@ def TV_TensorViewType : TensorView_Type<"TensorView", "tensor_view"> {
 //===----------------------------------------------------------------------===//
 def TV_BoolTensor  : RankedTensorOf<[I1]>;
 def TV_IndexTensor : RankedTensorOf<[Index]>;
+def TV_IndexLikeTensor : RankedTensorOf<[Index, I32, I64]>;
+def TV_ViewIndex   : AnyTypeOf<[Index, TV_IndexLikeTensor]>;
 def TV_PtrTensor   : RankedTensorOf<[TV_PtrType]>;
 
 #endif // TENSORVIEW_TYPES

@@ -27,7 +27,7 @@ tt.func public @add_kernel(%a: !tv.ptr<f32>, %b: !tv.ptr<f32>, %c: !tv.ptr<f32>,
   // CHECK: hivm.hir.load
   // CHECK: bufferization.to_tensor
   %ta = tv.view_load %pa[%i]
-        : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>
+        : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>, index
        -> tensor<1024xf32>
 
   %vb = tv.make_tensor_view %b, sizes = [%n_idx], strides = [%c1]
@@ -36,7 +36,7 @@ tt.func public @add_kernel(%a: !tv.ptr<f32>, %b: !tv.ptr<f32>, %c: !tv.ptr<f32>,
         : !tv.tensor_view<?xf32, strides=[1]>
        -> !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>
   %tb = tv.view_load %pb[%i]
-        : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>
+        : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>, index
        -> tensor<1024xf32>
 
   // CHECK: arith.addf %{{.*}}, %{{.*}} : tensor<1024xf32>
@@ -51,7 +51,7 @@ tt.func public @add_kernel(%a: !tv.ptr<f32>, %b: !tv.ptr<f32>, %c: !tv.ptr<f32>,
   // CHECK: memref.subview
   // CHECK: hivm.hir.store
   tv.view_store %pc[%i], %sum
-        : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>, tensor<1024xf32>
+        : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>, tensor<1024xf32>, index
   tt.return
 }
 
