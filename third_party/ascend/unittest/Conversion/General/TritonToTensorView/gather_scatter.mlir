@@ -54,7 +54,9 @@ tt.func public @gather_scatter_2d(%indices: !tt.ptr<i32>, %src: !tt.ptr<f32>,
 
   // CHECK: tv.make_gather_scatter_view
   // CHECK-SAME: #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [0], padding = zero>
-  // CHECK: tv.view_store %{{.*}}[%[[SPARSE]], %{{.*}}], %{{.*}}
+  // CHECK: tv.view_store
+  // CHECK-SAME: [%[[SPARSE]], %{{[^]]+}}]
+  // CHECK-SAME: #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [0], padding = zero>
   // CHECK-SAME: tensor<4x4xf32>, tensor<4xi32>, index
   tt.store %dst_ptrs, %value : tensor<4x4x!tt.ptr<f32>>
   tt.return
@@ -65,6 +67,7 @@ tt.func public @gather_scatter_2d(%indices: !tt.ptr<i32>, %src: !tt.ptr<f32>,
 
 // CHECK-LABEL: tt.func public @gather_last_dim
 tt.func public @gather_last_dim(%src: !tt.ptr<f32>,
+                                %dst: !tt.ptr<f32>,
                                 %cols: tensor<4xi32>) {
   %rows = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32>
   %rows_2d = tt.expand_dims %rows {axis = 1 : i32}
@@ -89,6 +92,24 @@ tt.func public @gather_last_dim(%src: !tt.ptr<f32>,
   // CHECK: tv.view_load %{{.*}}[%{{.*}}, %{{.*}}]
   // CHECK-SAME: index, tensor<4xi32> -> tensor<4x4xf32>
   %value = tt.load %src_ptrs : tensor<4x4x!tt.ptr<f32>>
+
+  // Keep the gather result live across canonicalization with a regular 2-D
+  // store.  This store is intentionally a partition access, independent of
+  // the sparse source-column indices above.
+  %regular_cols_2d = tt.expand_dims %rows {axis = 0 : i32}
+      : tensor<4xi32> -> tensor<1x4xi32>
+  %regular_cols = tt.broadcast %regular_cols_2d
+      : tensor<1x4xi32> -> tensor<4x4xi32>
+  %dst_base = tt.splat %dst : !tt.ptr<f32> -> tensor<4x1x!tt.ptr<f32>>
+  %dst_rows = tt.addptr %dst_base, %row_offsets
+      : tensor<4x1x!tt.ptr<f32>>, tensor<4x1xi32>
+  %dst_rows_2d = tt.broadcast %dst_rows
+      : tensor<4x1x!tt.ptr<f32>> -> tensor<4x4x!tt.ptr<f32>>
+  %dst_ptrs = tt.addptr %dst_rows_2d, %regular_cols
+      : tensor<4x4x!tt.ptr<f32>>, tensor<4x4xi32>
+  // CHECK: tv.make_partition_view
+  // CHECK: tv.view_store
+  tt.store %dst_ptrs, %value : tensor<4x4x!tt.ptr<f32>>
   tt.return
 }
 
