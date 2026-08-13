@@ -1,10 +1,17 @@
 // RUN: triton-opt %s --triton-to-tensor-view --canonicalize | FileCheck %s
+// RUN: triton-opt %s --triton-to-tensor-view --tensor-view-to-hivm --canonicalize | FileCheck %s --check-prefix=E2E
 
 // A data-dependent row index plus a regular contiguous column range is a
 // gather/scatter view.  The index load itself remains a regular partition
 // view; the data load and store carry that loaded tensor as sparse_dim 0.
 
 // CHECK-LABEL: tt.func public @gather_scatter_2d
+// E2E-LABEL: tt.func public @gather_scatter_2d
+// E2E: arith.maxsi
+// E2E: hivm.hir.load
+// E2E: scf.for
+// E2E: tensor.insert
+// E2E: hivm.hir.scatter_store
 tt.func public @gather_scatter_2d(%indices: !tt.ptr<i32>, %src: !tt.ptr<f32>,
                                   %dst: !tt.ptr<f32>) {
   %c4 = arith.constant 4 : i32
@@ -66,6 +73,12 @@ tt.func public @gather_scatter_2d(%indices: !tt.ptr<i32>, %src: !tt.ptr<f32>,
 // dimension is the last dimension.
 
 // CHECK-LABEL: tt.func public @gather_last_dim
+// E2E-LABEL: tt.func public @gather_last_dim
+// E2E: arith.maxsi
+// E2E: hivm.hir.load
+// E2E: hivm.hir.vbrc
+// E2E: hivm.hir.vgather
+// E2E: hivm.hir.store
 tt.func public @gather_last_dim(%src: !tt.ptr<f32>,
                                 %dst: !tt.ptr<f32>,
                                 %cols: tensor<4xi32>) {

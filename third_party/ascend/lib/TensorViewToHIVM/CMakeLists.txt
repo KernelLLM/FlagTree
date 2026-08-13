@@ -16,5 +16,7 @@ add_triton_library(TensorViewToHIVM
   MLIRArithDialect
   MLIRLinalgDialect
   MLIRFuncDialect
+  MLIRSCFDialect
+  MLIRTensorDialect
   TritonIR
 )

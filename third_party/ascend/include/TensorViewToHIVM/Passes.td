@@ -19,6 +19,9 @@ def TensorViewToHIVM : Pass<"tensor-view-to-hivm", "mlir::ModuleOp"> {
       - `tv.view_load`  -> reinterpret_cast(GM tile) + alloc(UB) + hivm.hir.load
                            + bufferization.to_tensor (boundary bridge)
       - `tv.view_store` -> bufferization.to_buffer(UB) + reinterpret_cast(GM) + hivm.hir.store
+      - gather load on the last dimension -> rectangular DMA + hivm.hir.vgather
+      - gather load on another dimension -> rectangular DMA + scalar scf loop decomposition
+      - scatter store -> physical offset tensor + hivm.hir.scatter_store
     The compute (arith on tensor) and the boundary to_tensor/to_buffer bridges
     are left for the downstream linalg bufferization to fold.
   }];
@@ -30,6 +33,8 @@ def TensorViewToHIVM : Pass<"tensor-view-to-hivm", "mlir::ModuleOp"> {
     "mlir::bufferization::BufferizationDialect",
     "mlir::arith::ArithDialect",
     "mlir::linalg::LinalgDialect",
+    "mlir::scf::SCFDialect",
+    "mlir::tensor::TensorDialect",
     "mlir::triton::TritonDialect"];
 }
 
