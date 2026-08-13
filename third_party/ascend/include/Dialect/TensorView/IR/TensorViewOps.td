@@ -101,35 +101,35 @@ def TV_ViewStoreOp : TensorView_Op<"view_store",
 //===----------------------------------------------------------------------===//
 def TV_PtrLoadOp : TensorView_Op<"ptr_load",
     [AttrSizedOperandSegments, MemoryEffects<[MemRead]>]> {
-  let summary = "Element-wise (diagonal) gather over a tensor of pointers.";
+  let summary = "Discrete gather from a base pointer: result[k] = load(base + idx[k]).";
   let arguments = (ins
-    TV_PtrTensor:$ptrs,
+    TV_PtrType:$base,
     Variadic<TV_IndexTensor>:$indices,
-    Optional<TV_BoolTensor>:$mask,
+    Optional<Index>:$count,
     TV_PadKindAttr:$padding);
   let results = (outs AnyRankedTensor:$result);
   let hasVerifier = 1;
   let assemblyFormat = [{
-    $ptrs `,` `indices` `=` `[` $indices `]` (`,` `mask` $mask^ `:` type($mask))?
-    attr-dict `:` type($ptrs) `,` type($indices) `->` type($result)
+    $base `,` `indices` `=` `[` $indices `]` (`,` `count` $count^ `:` type($count))?
+    attr-dict `:` type($base) `,` type($indices) `->` type($result)
   }];
 }
 
 def TV_PtrStoreOp : TensorView_Op<"ptr_store",
     [AttrSizedOperandSegments, MemoryEffects<[MemWrite]>]> {
-  let summary = "Element-wise (diagonal) scatter over a tensor of pointers.";
+  let summary = "Discrete scatter to a base pointer: store(base + idx[k]) = value[k].";
   let arguments = (ins
-    TV_PtrTensor:$ptrs,
+    TV_PtrType:$base,
     AnyRankedTensor:$value,
     Variadic<TV_IndexTensor>:$indices,
-    Optional<TV_BoolTensor>:$mask,
+    Optional<Index>:$count,
     TV_PadKindAttr:$padding);
   let results = (outs);
   let hasVerifier = 1;
   let assemblyFormat = [{
-    $ptrs `,` $value `,` `indices` `=` `[` $indices `]`
-    (`,` `mask` $mask^ `:` type($mask))?
-    attr-dict `:` type($ptrs) `,` type($value) `,` type($indices)
+    $base `,` $value `,` `indices` `=` `[` $indices `]`
+    (`,` `count` $count^ `:` type($count))?
+    attr-dict `:` type($base) `,` type($value) `,` type($indices)
   }];
 }
 

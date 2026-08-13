@@ -72,7 +72,7 @@ struct Access {
   SmallVector<Value> strideDyn;   // dynamic element stride (i32) if kDynamic, else null
   SmallVector<Value> index;       // scalar tile index, or tensor index for a sparse dim
   SmallVector<int64_t> sparseDims;
-  Value fullSize;                 // 1-D masked bound (i32), else null
+  SmallVector<Value> extent;      // per-dim masked bound (i32), null if unmasked
 };
 
 static std::optional<int64_t> getConstIntValue(Value v) {
@@ -98,7 +98,10 @@ static std::optional<int64_t> getSplatConstIntValue(Value v) {
 ///   addi(splat(muli(pid, STEP)), makeRange(0, TILE))
 /// yielding TILE, the traversal stride STEP, and the tile index (pid).  A bare
 /// makeRange (no pid origin, e.g. a matmul reduction dim tiled by a single tile)
-/// yields a null index, meaning a constant-0 tile position.
+/// yields a null index, meaning a constant-0 tile position.  A generic splat
+/// origin that is not `muli(pid, const)` -- e.g. an scf.for induction variable
+/// `k` in `addi(splat(%k), makeRange(0, TILE))` for a K-loop GEMM -- is treated
+/// as the element-offset origin itself (index = %k, traversal = 1).
 static bool matchLogicalIndex(Value idxTensor, int64_t &tile, int64_t &traversal,
                               Value &index) {
   if (auto mr = idxTensor.getDefiningOp<triton::MakeRangeOp>()) {
@@ -123,20 +126,23 @@ static bool matchLogicalIndex(Value idxTensor, int64_t &tile, int64_t &traversal
   if (!range || range.getStart() != 0 || !originSplatSrc)
     return false;
   tile = static_cast<int64_t>(range.getEnd());
-  auto muli = originSplatSrc.getDefiningOp<arith::MulIOp>();
-  if (!muli)
-    return false;
-  if (auto c = getConstIntValue(muli.getLhs())) {
-    traversal = *c;
-    index = muli.getRhs();
-    return true;
+  if (auto muli = originSplatSrc.getDefiningOp<arith::MulIOp>()) {
+    if (auto c = getConstIntValue(muli.getLhs())) {
+      traversal = *c;
+      index = muli.getRhs();
+      return true;
+    }
+    if (auto c = getConstIntValue(muli.getRhs())) {
+      traversal = *c;
+      index = muli.getLhs();
+      return true;
+    }
   }
-  if (auto c = getConstIntValue(muli.getRhs())) {
-    traversal = *c;
-    index = muli.getLhs();
-    return true;
-  }
-  return false;
+  // Generic origin (e.g. an scf.for induction variable): the splat source is
+  // already the element-offset tile origin, so use a unit traversal.
+  traversal = 1;
+  index = originSplatSrc;
+  return true;
 }
 
 /// Match a 1-D tiled access.  The tile-origin scalar (`pid * STEP`) may appear
@@ -224,66 +230,102 @@ static bool match1D(Value ptrTensor, Value maskVal, Access &out) {
   out.stride = {elementStride};
   out.strideDyn = {Value()};
   out.index = {index};
-  out.fullSize = fullSize;
+  out.extent = {fullSize};
   return true;
 }
 
-/// Match a 2-D block access:
-///   addptr(broadcast(addptr(splat(base), muli(expand_dims(rowIdx,1), splat(rowStride)))),
-///          broadcast(expand_dims(colIdx, 0)))
-/// where rowStride is a runtime value (dynamic element stride) or a constant, and
-/// col stride is 1.  (Block-aligned; no mask handled here yet.)
-static bool match2D(Value ptrTensor, Access &out) {
+/// Peel `broadcast`, then an optional `muli(_, stride)`, down to the
+/// `expand_dims`; report the (constant or dynamic) element stride.  Returns the
+/// expand_dims op, or a null op if the shape does not match.
+static triton::ExpandDimsOp peelContribution(Value v, int64_t &stride,
+                                             Value &strideDyn) {
+  stride = 1;
+  strideDyn = Value();
+  if (auto bc = v.getDefiningOp<triton::BroadcastOp>())
+    v = bc.getSrc();
+  if (auto mul = v.getDefiningOp<arith::MulIOp>()) {
+    Value expSide;
+    for (Value op : {mul.getLhs(), mul.getRhs()}) {
+      if (op.getDefiningOp<triton::ExpandDimsOp>())
+        expSide = op;
+      else if (auto c = getSplatConstIntValue(op))
+        stride = *c;
+      else if (auto s = op.getDefiningOp<triton::SplatOp>()) {
+        strideDyn = s.getSrc();
+        stride = ShapedType::kDynamic;
+      }
+    }
+    v = expSide;
+  }
+  return v ? v.getDefiningOp<triton::ExpandDimsOp>() : triton::ExpandDimsOp();
+}
+
+/// Match a 2-D block access in either pointer form:
+///   Form 1 (two-level addptr):
+///     addptr(broadcast(addptr(splat(base), rowContrib)), broadcast(colContrib))
+///   Form 2 (combined offset, single addptr):
+///     addptr(splat(base), addi(broadcast(rowContrib), broadcast(colContrib)))
+/// where rowContrib = muli(expand_dims(rowIdx,1), rowStride) | expand_dims(rowIdx,1)
+/// (rowStride constant or dynamic) and colContrib = expand_dims(colIdx,0), col
+/// stride 1.  An optional 2-D mask
+///   andi(broadcast(cmpi slt, expand_dims(rowIdx,1), splat(M)),
+///        broadcast(cmpi slt, expand_dims(colIdx,0), splat(N)))
+/// contributes the per-dim extents (M, N) for tail handling.
+static bool match2D(Value ptrTensor, Value maskVal, Access &out) {
   auto outer = ptrTensor.getDefiningOp<triton::AddPtrOp>();
   if (!outer)
     return false;
-  auto bcPtr = outer.getPtr().getDefiningOp<triton::BroadcastOp>();
-  auto bcOff = outer.getOffset().getDefiningOp<triton::BroadcastOp>();
-  if (!bcPtr || !bcOff)
-    return false;
 
-  // last-dim (col) offset: broadcast(expand_dims(colIdx, axis=0)), stride 1.
-  auto colExp = bcOff.getSrc().getDefiningOp<triton::ExpandDimsOp>();
-  if (!colExp)
+  Value baseSrc, contribA, contribB;
+  if (auto bcPtr = outer.getPtr().getDefiningOp<triton::BroadcastOp>()) {
+    // Form 1.
+    auto bcOff = outer.getOffset().getDefiningOp<triton::BroadcastOp>();
+    if (!bcOff)
+      return false;
+    auto innerAp = bcPtr.getSrc().getDefiningOp<triton::AddPtrOp>();
+    if (!innerAp)
+      return false;
+    auto splatBase = innerAp.getPtr().getDefiningOp<triton::SplatOp>();
+    if (!splatBase)
+      return false;
+    baseSrc = splatBase.getSrc();
+    contribA = innerAp.getOffset(); // rowContrib (un-broadcast)
+    contribB = bcOff.getSrc();      // colContrib (un-broadcast)
+  } else if (auto splatBase = outer.getPtr().getDefiningOp<triton::SplatOp>()) {
+    // Form 2.
+    baseSrc = splatBase.getSrc();
+    auto add = outer.getOffset().getDefiningOp<arith::AddIOp>();
+    if (!add)
+      return false;
+    contribA = add.getLhs();
+    contribB = add.getRhs();
+  } else {
     return false;
-  Value colIdxTensor = colExp.getSrc();
+  }
 
-  // first-dim (row) ptr: broadcast(addptr(splat(base), rowContrib)).
-  auto innerAp = bcPtr.getSrc().getDefiningOp<triton::AddPtrOp>();
-  if (!innerAp)
-    return false;
-  auto splatBase = innerAp.getPtr().getDefiningOp<triton::SplatOp>();
-  if (!splatBase)
-    return false;
-  auto tvPtr = dyn_cast<tv::PtrType>(splatBase.getSrc().getType());
+  auto tvPtr = dyn_cast<tv::PtrType>(baseSrc.getType());
   if (!tvPtr)
     return false;
 
-  // rowContrib = muli(expand_dims(rowIdx,1), splat(rowStride))  OR  expand_dims(rowIdx,1).
-  Value rowContrib = innerAp.getOffset();
-  int64_t rowStride = 1;
+  // Peel both contributions; classify by expand_dims axis (1 -> row, 0 -> col).
+  int64_t sA, sB;
+  Value sdA, sdB;
+  auto expA = peelContribution(contribA, sA, sdA);
+  auto expB = peelContribution(contribB, sB, sdB);
+  if (!expA || !expB)
+    return false;
+  triton::ExpandDimsOp rowExpDims, colExp;
+  int64_t rowStride;
   Value rowStrideDyn;
-  Value rowExp;
-  if (auto mul = rowContrib.getDefiningOp<arith::MulIOp>()) {
-    for (Value op : {mul.getLhs(), mul.getRhs()}) {
-      if (op.getDefiningOp<triton::ExpandDimsOp>()) {
-        rowExp = op;
-      } else if (auto c = getSplatConstIntValue(op)) {
-        rowStride = *c;
-      } else if (auto s = op.getDefiningOp<triton::SplatOp>()) {
-        rowStrideDyn = s.getSrc();
-        rowStride = ShapedType::kDynamic;
-      }
-    }
+  if (expA.getAxis() == 1 && expB.getAxis() == 0) {
+    rowExpDims = expA; colExp = expB; rowStride = sA; rowStrideDyn = sdA;
+  } else if (expA.getAxis() == 0 && expB.getAxis() == 1) {
+    rowExpDims = expB; colExp = expA; rowStride = sB; rowStrideDyn = sdB;
   } else {
-    rowExp = rowContrib;
+    return false;
   }
-  if (!rowExp)
-    return false;
-  auto rowExpDims = rowExp.getDefiningOp<triton::ExpandDimsOp>();
-  if (!rowExpDims)
-    return false;
   Value rowIdxTensor = rowExpDims.getSrc();
+  Value colIdxTensor = colExp.getSrc();
 
   int64_t t0, tr0, t1, tr1;
   Value i0, i1;
@@ -292,7 +334,36 @@ static bool match2D(Value ptrTensor, Access &out) {
   if (!matchLogicalIndex(colIdxTensor, t1, tr1, i1))
     return false;
 
-  out.basePtr = splatBase.getSrc();
+  // Optional 2-D mask -> per-dim extent bound.  Walk the andi/broadcast tree,
+  // and for each `cmpi slt, expand_dims(idx, ?), splat(bound)` map the bound to
+  // the dim whose index tensor matches (row -> dim0, col -> dim1).
+  Value ext0, ext1;
+  if (maskVal) {
+    SmallVector<Value> work{maskVal};
+    while (!work.empty()) {
+      Value v = work.pop_back_val();
+      if (auto andOp = v.getDefiningOp<arith::AndIOp>()) {
+        work.push_back(andOp.getLhs());
+        work.push_back(andOp.getRhs());
+      } else if (auto bc = v.getDefiningOp<triton::BroadcastOp>()) {
+        work.push_back(bc.getSrc());
+      } else if (auto cmp = v.getDefiningOp<arith::CmpIOp>()) {
+        Value idxSrc, boundSrc;
+        for (Value op : {cmp.getLhs(), cmp.getRhs()}) {
+          if (auto ed = op.getDefiningOp<triton::ExpandDimsOp>())
+            idxSrc = ed.getSrc();
+          else if (auto s = op.getDefiningOp<triton::SplatOp>())
+            boundSrc = s.getSrc();
+        }
+        if (boundSrc && idxSrc == rowIdxTensor)
+          ext0 = boundSrc;
+        else if (boundSrc && idxSrc == colIdxTensor)
+          ext1 = boundSrc;
+      }
+    }
+  }
+
+  out.basePtr = baseSrc;
   out.elementType = tvPtr.getPointeeType();
   out.rank = 2;
   out.tile = {t0, t1};
@@ -300,7 +371,7 @@ static bool match2D(Value ptrTensor, Access &out) {
   out.stride = {rowStride, 1};
   out.strideDyn = {rowStrideDyn, Value()};
   out.index = {i0, i1};
-  out.fullSize = Value();
+  out.extent = {ext0, ext1};
   return true;
 }
 
@@ -415,12 +486,12 @@ static bool matchGatherScatter2D(Value ptrTensor, Access &out) {
   out.strideDyn = {rowStrideDyn, Value()};
   out.index = {rowViewIndex, colViewIndex};
   out.sparseDims = sparseDims;
-  out.fullSize = Value();
+  out.extent = {Value(), Value()};
   return true;
 }
 
 static bool matchAccess(Value ptrTensor, Value maskVal, Access &out) {
-  if (match2D(ptrTensor, out))
+  if (match2D(ptrTensor, maskVal, out))
     return true;
   if (match1D(ptrTensor, maskVal, out))
     return true;
@@ -453,13 +524,13 @@ static Value buildView(OpBuilder &b, Location loc, const Access &a) {
     }
   }
 
-  // Per-dim extents: the masked bound (1-D) or a large sentinel (folds to a full
-  // tile in Pass B for unmasked accesses).
+  // Per-dim extents: the masked bound or a large sentinel (folds to a full tile
+  // in Pass B for unmasked dims).
   SmallVector<Value> sizeOperands;
   for (unsigned d = 0; d < rank; ++d) {
-    if (rank == 1 && a.fullSize)
+    if (d < a.extent.size() && a.extent[d])
       sizeOperands.push_back(
-          b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.fullSize));
+          b.create<arith::IndexCastOp>(loc, b.getIndexType(), a.extent[d]));
     else
       sizeOperands.push_back(b.create<arith::ConstantIndexOp>(
           loc, std::numeric_limits<int64_t>::max()));
@@ -515,34 +586,127 @@ static SmallVector<Value> castIndices(OpBuilder &b, Location loc,
   return indices;
 }
 
-static LogicalResult rewriteLoad(triton::LoadOp load) {
-  Access a;
-  if (!matchAccess(load.getPtr(), load.getMask(), a))
-    return failure();
+/// Discrete pointer access fallback (used when the structured matchers fail):
+///   addptr(splat(base), idxTensor)   with base a `!tv.ptr` and idxTensor a
+/// general 1-D i32 index tensor (e.g. a data-dependent gather index).
+static bool matchPtrAccess(Value ptrTensor, Value &basePtr, Value &idxTensor) {
+  auto addptr = ptrTensor.getDefiningOp<triton::AddPtrOp>();
+  if (!addptr)
+    return false;
+  auto splat = addptr.getPtr().getDefiningOp<triton::SplatOp>();
+  if (!splat || !isa<tv::PtrType>(splat.getSrc().getType()))
+    return false;
+  basePtr = splat.getSrc();
+  idxTensor = addptr.getOffset();
+  return true;
+}
 
+/// Cast an integer index tensor to `tensor<...xindex>` (tv index tensor type).
+static Value toIndexTensor(OpBuilder &b, Location loc, Value idxTensor) {
+  auto ty = cast<RankedTensorType>(idxTensor.getType());
+  if (ty.getElementType().isIndex())
+    return idxTensor;
+  return b.create<arith::IndexCastOp>(
+      loc, RankedTensorType::get(ty.getShape(), b.getIndexType()), idxTensor);
+}
+
+/// Valid-lane count for a contiguous-prefix mask `cmpi slt, addi(splat(origin),
+/// make_range(0, blk)), splat(bound)` -> clamp(min(bound - origin, blk), 0, blk).
+/// Used as the discrete loop bound (avoids a per-lane scf.if, which the backend
+/// does not lower correctly).  Null if the mask is absent / not this shape.
+static Value computePtrCount(OpBuilder &b, Location loc, Value mask,
+                             int64_t blk) {
+  if (!mask)
+    return Value();
+  auto cmp = mask.getDefiningOp<arith::CmpIOp>();
+  if (!cmp)
+    return Value();
+  Value bound, offExpr;
+  for (Value op : {cmp.getLhs(), cmp.getRhs()}) {
+    if (auto s = op.getDefiningOp<triton::SplatOp>())
+      bound = s.getSrc();
+    else
+      offExpr = op;
+  }
+  if (!bound || !offExpr)
+    return Value();
+  Value origin;
+  if (auto addi = offExpr.getDefiningOp<arith::AddIOp>())
+    for (Value op : {addi.getLhs(), addi.getRhs()})
+      if (auto s = op.getDefiningOp<triton::SplatOp>())
+        origin = s.getSrc();
+
+  Value boundI = b.create<arith::IndexCastOp>(loc, b.getIndexType(), bound);
+  Value diff = boundI;
+  if (origin) {
+    Value originI = b.create<arith::IndexCastOp>(loc, b.getIndexType(), origin);
+    diff = b.create<arith::SubIOp>(loc, boundI, originI);
+  }
+  Value cBlk = b.create<arith::ConstantIndexOp>(loc, blk);
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value len = b.create<arith::MinSIOp>(loc, diff, cBlk);
+  return b.create<arith::MaxSIOp>(loc, len, c0);
+}
+
+static LogicalResult rewriteLoad(triton::LoadOp load) {
   OpBuilder b(load);
   Location loc = load.getLoc();
-  Value view = buildView(b, loc, a);
-  auto viewLoad = b.create<tv::ViewLoadOp>(loc, load.getResult().getType(), view,
-                                           castIndices(b, loc, a),
-                                           /*mask=*/Value());
-  load.getResult().replaceAllUsesWith(viewLoad.getResult());
-  load.erase();
-  return success();
+
+  Access a;
+  if (matchAccess(load.getPtr(), load.getMask(), a)) {
+    Value view = buildView(b, loc, a);
+    auto viewLoad = b.create<tv::ViewLoadOp>(
+        loc, load.getResult().getType(), view, castIndices(b, loc, a),
+        /*mask=*/Value());
+    load.getResult().replaceAllUsesWith(viewLoad.getResult());
+    load.erase();
+    return success();
+  }
+
+  // Discrete gather fallback -> ptr_load (rank-1 only).
+  Value base, idxTensor;
+  auto resTy = dyn_cast<RankedTensorType>(load.getResult().getType());
+  if (resTy && resTy.getRank() == 1 &&
+      matchPtrAccess(load.getPtr(), base, idxTensor)) {
+    Value idx = toIndexTensor(b, loc, idxTensor);
+    Value count = computePtrCount(b, loc, load.getMask(), resTy.getShape()[0]);
+    auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
+    auto ptrLoad = b.create<tv::PtrLoadOp>(loc, resTy, base, ValueRange{idx},
+                                           /*count=*/count, pad);
+    load.getResult().replaceAllUsesWith(ptrLoad.getResult());
+    load.erase();
+    return success();
+  }
+  return failure();
 }
 
 static LogicalResult rewriteStore(triton::StoreOp store) {
-  Access a;
-  if (!matchAccess(store.getPtr(), store.getMask(), a))
-    return failure();
-
   OpBuilder b(store);
   Location loc = store.getLoc();
-  Value view = buildView(b, loc, a);
-  b.create<tv::ViewStoreOp>(loc, view, store.getValue(), castIndices(b, loc, a),
-                            /*mask=*/Value());
-  store.erase();
-  return success();
+
+  Access a;
+  if (matchAccess(store.getPtr(), store.getMask(), a)) {
+    Value view = buildView(b, loc, a);
+    b.create<tv::ViewStoreOp>(loc, view, store.getValue(),
+                              castIndices(b, loc, a), /*mask=*/Value());
+    store.erase();
+    return success();
+  }
+
+  // Discrete scatter fallback -> ptr_store (rank-1 only).
+  Value base, idxTensor;
+  auto valTy = dyn_cast<RankedTensorType>(store.getValue().getType());
+  if (valTy && valTy.getRank() == 1 &&
+      matchPtrAccess(store.getPtr(), base, idxTensor)) {
+    Value idx = toIndexTensor(b, loc, idxTensor);
+    Value count = computePtrCount(b, loc, store.getMask(), valTy.getShape()[0]);
+    auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
+    b.create<tv::PtrStoreOp>(loc, base, store.getValue(), ValueRange{idx},
+                             /*count=*/count, pad);
+    store.erase();
+    return success();
+  }
+  return failure();
 }
 
 /// Fixed-point erase of the now-dead pointer-chain ops.  Handles both the 1-D

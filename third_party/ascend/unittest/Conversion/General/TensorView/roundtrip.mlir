@@ -70,16 +70,16 @@ func.func @strided_and_gather(%p: !tv.ptr<f32>, %s8: index, %s1: index,
 }
 
 // CHECK-LABEL: func.func @ptr_gather_scatter
-func.func @ptr_gather_scatter(%ptrs: tensor<8x8x!tv.ptr<f32>>, %i0: tensor<4xindex>,
-                              %i1: tensor<4xindex>, %vals: tensor<4xf32>) {
-  // CHECK: tv.ptr_load %{{.*}}, indices = [%{{.*}}, %{{.*}}]
+func.func @ptr_gather_scatter(%base: !tv.ptr<f32>, %i0: tensor<4xindex>,
+                              %vals: tensor<4xf32>) {
+  // CHECK: tv.ptr_load %{{.*}}, indices = [%{{.*}}]
   // CHECK-SAME: padding = #tv.pad<zero>
   // CHECK-SAME: tensor<4xf32>
-  %g = tv.ptr_load %ptrs, indices = [%i0, %i1] {padding = #tv.pad<zero>}
-       : tensor<8x8x!tv.ptr<f32>>, tensor<4xindex>, tensor<4xindex> -> tensor<4xf32>
+  %g = tv.ptr_load %base, indices = [%i0] {padding = #tv.pad<zero>}
+       : !tv.ptr<f32>, tensor<4xindex> -> tensor<4xf32>
   // CHECK: tv.ptr_store
   // CHECK-SAME: padding = #tv.pad<zero>
-  tv.ptr_store %ptrs, %vals, indices = [%i0, %i1] {padding = #tv.pad<zero>}
-       : tensor<8x8x!tv.ptr<f32>>, tensor<4xf32>, tensor<4xindex>, tensor<4xindex>
+  tv.ptr_store %base, %vals, indices = [%i0] {padding = #tv.pad<zero>}
+       : !tv.ptr<f32>, tensor<4xf32>, tensor<4xindex>
   return
 }

@@ -254,10 +254,9 @@ static LogicalResult verifyIndexTensors(Operation *op, OperandRange indices,
 }
 
 LogicalResult PtrLoadOp::verify() {
-  auto ptrsTy = cast<RankedTensorType>(getPtrs().getType());
-  auto ptrElem = dyn_cast<PtrType>(ptrsTy.getElementType());
+  auto ptrElem = dyn_cast<PtrType>(getBase().getType());
   if (!ptrElem)
-    return emitOpError("ptrs must be a tensor of tv.ptr");
+    return emitOpError("base must be a tv.ptr");
   int64_t len = ShapedType::kDynamic;
   if (failed(verifyIndexTensors(*this, getIndices(), len)))
     return failure();
@@ -273,10 +272,9 @@ LogicalResult PtrLoadOp::verify() {
 }
 
 LogicalResult PtrStoreOp::verify() {
-  auto ptrsTy = cast<RankedTensorType>(getPtrs().getType());
-  auto ptrElem = dyn_cast<PtrType>(ptrsTy.getElementType());
+  auto ptrElem = dyn_cast<PtrType>(getBase().getType());
   if (!ptrElem)
-    return emitOpError("ptrs must be a tensor of tv.ptr");
+    return emitOpError("base must be a tv.ptr");
   int64_t len = ShapedType::kDynamic;
   if (failed(verifyIndexTensors(*this, getIndices(), len)))
     return failure();

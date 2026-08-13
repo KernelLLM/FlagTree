@@ -46,6 +46,7 @@
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/Pass/Pass.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "llvm/ADT/SmallVector.h"
@@ -184,13 +185,42 @@ static Value computeOffset(OpBuilder &b, Location loc, const ViewInfo &vi,
   return off;
 }
 
-/// `[0 : len]` subview of a 1-D memref (the in-bounds prefix).
+/// `[0 : len_d]` rank-N subview of a memref (the in-bounds tile prefix).
 static Value emitPrefixSubview(OpBuilder &b, Location loc, Value src,
-                               Value len) {
-  return b.create<memref::SubViewOp>(
-      loc, src, ArrayRef<OpFoldResult>{b.getIndexAttr(0)},
-      ArrayRef<OpFoldResult>{OpFoldResult(len)},
-      ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
+                               ValueRange lens) {
+  SmallVector<OpFoldResult> offsets, sizes, strides;
+  for (Value len : lens) {
+    offsets.push_back(b.getIndexAttr(0));
+    sizes.push_back(OpFoldResult(len));
+    strides.push_back(b.getIndexAttr(1));
+  }
+  return b.create<memref::SubViewOp>(loc, src, offsets, sizes, strides);
+}
+
+/// True if `v` is the "unmasked" extent sentinel (INT64_MAX constant) emitted by
+/// Pass A for dims without a mask bound.
+static bool isSentinelExtent(Value v) {
+  APInt val;
+  if (matchPattern(v, m_ConstantInt(&val)))
+    return val.getSExtValue() == std::numeric_limits<int64_t>::max();
+  return false;
+}
+
+/// Per-dim in-bounds length `len_d = min(n_d - idx_d*trav_d, tile_d)` and the
+/// physical tile-origin offset `Σ (idx_d*trav_d) * stride_d`.
+static Value emitTailGeometry(OpBuilder &b, Location loc, const ViewInfo &vi,
+                              ValueRange indices, SmallVectorImpl<Value> &lens) {
+  Value off;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal[d]);
+    Value offLog = b.create<arith::MulIOp>(loc, indices[d], cTrav);
+    Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
+    Value nMinus = b.create<arith::SubIOp>(loc, vi.n[d], offLog);
+    lens.push_back(b.create<arith::MinSIOp>(loc, nMinus, cTile));
+    Value phys = b.create<arith::MulIOp>(loc, offLog, vi.strideVal[d]);
+    off = d == 0 ? phys : b.create<arith::AddIOp>(loc, off, phys);
+  }
+  return off;
 }
 
 /// Return true for the sentinel used by Pass A when a raw pointer has no
@@ -407,8 +437,9 @@ static Value emitScatterOffsets(OpBuilder &b, Location loc, const ViewInfo &vi,
 }
 
 //===----------------------------------------------------------------------===//
-// Lowering.  1-D uses contiguous tail handling (pad + partial DMA); rank > 1 is
-// currently block-aligned (full tile).
+// Lowering.  Unmasked tiles DMA the full block (this clean form is what the
+// native cube path recognizes for tt.dot operands).  Masked tiles (any dim with
+// a real extent) zero-pad the buffer and DMA only the in-bounds rank-N prefix.
 //===----------------------------------------------------------------------===//
 
 static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
@@ -467,26 +498,28 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
   auto localTy = MemRefType::get(vi.tile, vi.elementType);
   Value buf = b.create<memref::AllocOp>(loc, localTy);
 
-  if (vi.rank == 1) {
-    Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[0]);
-    Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal[0]);
-    Value offLogical =
-        b.create<arith::MulIOp>(loc, load.getIndices()[0], cTrav);
-    Value nMinusOff = b.create<arith::SubIOp>(loc, vi.n[0], offLogical);
-    Value len = b.create<arith::MinSIOp>(loc, nMinusOff, cTile);
-    Value off = b.create<arith::MulIOp>(loc, offLogical, vi.strideVal[0]);
-    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-    // Zero-pad the whole tile (padding = zero), then DMA the valid prefix.
-    Value zero =
-        b.create<arith::ConstantOp>(loc, b.getZeroAttr(vi.elementType));
-    b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{buf});
-    Value gmSub = emitPrefixSubview(b, loc, gm, len);
-    Value bufSub = emitPrefixSubview(b, loc, buf, len);
-    b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, bufSub);
-  } else {
+  bool masked = false;
+  for (Value n : vi.n)
+    if (!isSentinelExtent(n)) {
+      masked = true;
+      break;
+    }
+
+  if (!masked) {
     Value off = computeOffset(b, loc, vi, load.getIndices());
     Value gm = emitGmTile(b, loc, vi, off, gmSpace);
     b.create<hivm::LoadOp>(loc, TypeRange{}, gm, buf);
+  } else {
+    SmallVector<Value> lens;
+    Value off = emitTailGeometry(b, loc, vi, load.getIndices(), lens);
+    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    // Zero-pad the whole tile (padding = zero), then DMA the in-bounds prefix.
+    Value zero =
+        b.create<arith::ConstantOp>(loc, b.getZeroAttr(vi.elementType));
+    b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{buf});
+    Value gmSub = emitPrefixSubview(b, loc, gm, lens);
+    Value bufSub = emitPrefixSubview(b, loc, buf, lens);
+    b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, bufSub);
   }
 
   Value t = b.create<bufferization::ToTensorOp>(loc, tensorTy, buf,
@@ -543,25 +576,142 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
   Value vm = b.create<bufferization::ToBufferOp>(loc, localTy, store.getValue());
 #endif
 
-  if (vi.rank == 1) {
-    Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[0]);
-    Value cTrav = b.create<arith::ConstantIndexOp>(loc, vi.traversal[0]);
-    Value offLogical =
-        b.create<arith::MulIOp>(loc, store.getIndices()[0], cTrav);
-    Value nMinusOff = b.create<arith::SubIOp>(loc, vi.n[0], offLogical);
-    Value len = b.create<arith::MinSIOp>(loc, nMinusOff, cTile);
-    Value off = b.create<arith::MulIOp>(loc, offLogical, vi.strideVal[0]);
-    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-    Value gmSub = emitPrefixSubview(b, loc, gm, len);
-    Value vmSub = emitPrefixSubview(b, loc, vm, len);
-    b.create<hivm::StoreOp>(loc, TypeRange{}, vmSub, gmSub);
-  } else {
+  bool masked = false;
+  for (Value n : vi.n)
+    if (!isSentinelExtent(n)) {
+      masked = true;
+      break;
+    }
+
+  if (!masked) {
     Value off = computeOffset(b, loc, vi, store.getIndices());
     Value gm = emitGmTile(b, loc, vi, off, gmSpace);
     b.create<hivm::StoreOp>(loc, TypeRange{}, vm, gm);
+  } else {
+    SmallVector<Value> lens;
+    Value off = emitTailGeometry(b, loc, vi, store.getIndices(), lens);
+    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    Value gmSub = emitPrefixSubview(b, loc, gm, lens);
+    Value vmSub = emitPrefixSubview(b, loc, vm, lens);
+    b.create<hivm::StoreOp>(loc, TypeRange{}, vmSub, gmSub);
   }
 
   store.erase();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Discrete gather/scatter: ptr_load / ptr_store -> scalar scf.for loop
+// (reinterpret_cast base offset:[idx[k]] sizes:[1] + memref.load/store), the
+// same form the native discrete-access lowering produces.  The base is a scalar
+// !tv.ptr (func arg, already rewritten to memref); the gather index comes from
+// the op's index operand.
+//===----------------------------------------------------------------------===//
+
+/// reinterpret_cast %base to offset:[%ik] sizes:[1] strides:[1] : ... #gm .
+static Value emitScalarGmElem(OpBuilder &b, Location loc, Value base, Value ik,
+                              Type elemTy, hivm::AddressSpaceAttr gmSpace) {
+  auto layout = StridedLayoutAttr::get(b.getContext(),
+                                       /*offset=*/ShapedType::kDynamic, {1});
+  auto ty = MemRefType::get({1}, elemTy, layout, gmSpace);
+  return b.create<memref::ReinterpretCastOp>(
+      loc, ty, base, OpFoldResult(ik),
+      ArrayRef<OpFoldResult>{b.getIndexAttr(1)},
+      ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
+}
+
+static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
+                                  hivm::AddressSpaceAttr gmSpace) {
+  // NOTE: read the base untyped -- rewriteFuncPtrArgs has changed the underlying
+  // function argument to a memref, so op.getBase() (TypedValue<PtrType>) asserts.
+  Value base = op->getOperand(0);
+  if (!isa<MemRefType>(base.getType()) || op.getIndices().empty())
+    return failure();
+  Value idx = op.getIndices()[0]; // tensor<Nxindex>
+  Value count = op.getCount();    // optional valid-lane count (null if absent)
+  auto resTy = cast<RankedTensorType>(op.getResult().getType());
+  int64_t n = resTy.getShape()[0];
+  if (ShapedType::isDynamic(n))
+    return failure();
+  Type elemTy = resTy.getElementType();
+
+  OpBuilder b(op);
+  Location loc = op.getLoc();
+  auto bufTy = MemRefType::get({n}, elemTy);
+  Value buf = b.create<memref::AllocOp>(loc, bufTy);
+  Value zero = b.create<arith::ConstantOp>(loc, b.getZeroAttr(elemTy));
+  b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{buf});
+
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
+  // Loop only over the in-bounds lanes (native form); the pad (0) covers the
+  // rest.  A per-lane scf.if is NOT used -- the backend mis-lowers it.
+  Value ub = count ? count : b.create<arith::ConstantIndexOp>(loc, n);
+  auto loop = b.create<scf::ForOp>(loc, c0, ub, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(loop.getBody());
+    Value k = loop.getInductionVar();
+    auto ext = b.create<tensor::ExtractOp>(loc, idx, ValueRange{k});
+    ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
+    Value rc = emitScalarGmElem(b, loc, base, ext.getResult(), elemTy, gmSpace);
+    Value v = b.create<memref::LoadOp>(loc, rc, ValueRange{c0});
+    b.create<memref::StoreOp>(loc, v, buf, ValueRange{k});
+  }
+
+  Value t = b.create<bufferization::ToTensorOp>(loc, resTy, buf,
+                                                /*restrict=*/true,
+                                                /*writable=*/false);
+  op.getResult().replaceAllUsesWith(t);
+  op.erase();
+  return success();
+}
+
+static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
+                                   hivm::AddressSpaceAttr gmSpace) {
+  // Base read untyped (see lowerPtrLoad): the arg is now a memref.
+  Value base = op->getOperand(0);
+  if (!isa<MemRefType>(base.getType()) || op.getIndices().empty())
+    return failure();
+  Value idx = op.getIndices()[0];
+  Value count = op.getCount(); // optional valid-lane count (null if absent)
+  Value value = op.getValue();
+  auto valTy = cast<RankedTensorType>(value.getType());
+  int64_t n = valTy.getShape()[0];
+  if (ShapedType::isDynamic(n))
+    return failure();
+  Type elemTy = valTy.getElementType();
+
+  OpBuilder b(op);
+  Location loc = op.getLoc();
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
+  // Loop only over the in-bounds lanes (crucial: the padded tail must NOT
+  // scatter, or it would clobber base[idx_pad]).  No per-lane scf.if.
+  Value ub = count ? count : b.create<arith::ConstantIndexOp>(loc, n);
+  auto loop = b.create<scf::ForOp>(loc, c0, ub, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(loop.getBody());
+    Value k = loop.getInductionVar();
+    // Discrete GM write must use the native tensor-materialize form (a raw
+    // memref.store to a #gm reinterpret is NOT lowered by the backend): extract
+    // idx[k]/value[k] from the tensors (DiscreteMemAccess), wrap the scalar in a
+    // tensor<1>, and materialize_in_destination into the 1-element GM slot.
+    auto extIdx = b.create<tensor::ExtractOp>(loc, idx, ValueRange{k});
+    extIdx->setAttr("DiscreteMemAccess", b.getUnitAttr());
+    auto extVal = b.create<tensor::ExtractOp>(loc, value, ValueRange{k});
+    extVal->setAttr("DiscreteMemAccess", b.getUnitAttr());
+    Value rc = emitScalarGmElem(b, loc, base, extIdx.getResult(), elemTy, gmSpace);
+    Value empty = b.create<tensor::EmptyOp>(loc, ArrayRef<int64_t>{1}, elemTy);
+    Value ins =
+        b.create<tensor::InsertOp>(loc, extVal.getResult(), empty, ValueRange{c0});
+    auto mat = b.create<bufferization::MaterializeInDestinationOp>(loc, ins, rc);
+    mat->setAttr("writable", b.getUnitAttr());
+  }
+  loop->setAttr("ExtractedLoadOrStore", b.getUnitAttr());
+
+  op.erase();
   return success();
 }
 
@@ -614,11 +764,17 @@ struct TensorViewToHIVMPass
     // 2. Lower access ops (collect first to avoid mutation during walk).
     SmallVector<tv::ViewLoadOp> loads;
     SmallVector<tv::ViewStoreOp> stores;
+    SmallVector<tv::PtrLoadOp> ptrLoads;
+    SmallVector<tv::PtrStoreOp> ptrStores;
     module.walk([&](Operation *op) {
       if (auto l = dyn_cast<tv::ViewLoadOp>(op))
         loads.push_back(l);
       else if (auto s = dyn_cast<tv::ViewStoreOp>(op))
         stores.push_back(s);
+      else if (auto pl = dyn_cast<tv::PtrLoadOp>(op))
+        ptrLoads.push_back(pl);
+      else if (auto ps = dyn_cast<tv::PtrStoreOp>(op))
+        ptrStores.push_back(ps);
     });
     for (tv::ViewLoadOp l : loads)
       if (failed(lowerViewLoad(l, gmSpace)))
@@ -626,6 +782,12 @@ struct TensorViewToHIVMPass
     for (tv::ViewStoreOp s : stores)
       if (failed(lowerViewStore(s, gmSpace)))
         s.emitError("TensorViewToHIVM: unsupported view_store");
+    for (tv::PtrLoadOp pl : ptrLoads)
+      if (failed(lowerPtrLoad(pl, gmSpace)))
+        pl.emitError("TensorViewToHIVM: unsupported ptr_load");
+    for (tv::PtrStoreOp ps : ptrStores)
+      if (failed(lowerPtrStore(ps, gmSpace)))
+        ps.emitError("TensorViewToHIVM: unsupported ptr_store");
 
     // 3. Erase the now-dead make_partition_view / make_tensor_view ops.
     bool changed = true;
