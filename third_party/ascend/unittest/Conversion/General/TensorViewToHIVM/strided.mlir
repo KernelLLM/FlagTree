@@ -4,7 +4,7 @@
 // origin steps by the traversal stride (512), not the tile size (1024).
 
 // CHECK-LABEL: tt.func public @sliding
-// CHECK-SAME: memref<?xf32, #hivm.address_space<gm>>
+// CHECK-SAME: memref<?xf32>
 tt.func public @sliding(%in: !tv.ptr<f32>, %n: index, %i: index) {
   %c1 = arith.constant 1 : index
   %v = tv.make_tensor_view %in, sizes = [%n], strides = [%c1]
@@ -16,7 +16,7 @@ tt.func public @sliding(%in: !tv.ptr<f32>, %n: index, %i: index) {
   // CHECK: memref.alloc() : memref<1024xf32>
   // CHECK: arith.constant 512 : index
   // CHECK: memref.reinterpret_cast
-  // CHECK: hivm.hir.load
+  // CHECK: memref.copy
   %t = tv.view_load %sv[%i]
        : !tv.tensor_view<?xf32, strides=[1], #tv.strided_view<tile = [1024], dim_map = [0], traversal_strides = [512], padding = zero>>, index
       -> tensor<1024xf32>

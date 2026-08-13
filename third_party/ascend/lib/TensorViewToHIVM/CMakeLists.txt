@@ -6,7 +6,6 @@ add_triton_library(TensorViewToHIVM
 
   LINK_LIBS
   TensorViewIR
-  BiShengIRHIVMDialect
   MLIRIR
   MLIRPass
   MLIRTransforms

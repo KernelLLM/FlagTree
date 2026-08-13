@@ -12,22 +12,21 @@
 include "mlir/Pass/PassBase.td"
 
 def TensorViewToHIVM : Pass<"tensor-view-to-hivm", "mlir::ModuleOp"> {
-  let summary = "Lower TensorView access ops to memref + HIVM (Route A)";
+  let summary = "Lower TensorView access ops to generic community memref ops";
   let description = [{
-    Lowers the TensorView access ops to memref + HIVM DMA:
-      - `!tv.ptr<T>` function inputs -> `memref<?xT, #hivm.address_space<gm>>`
-      - `tv.view_load`  -> reinterpret_cast(GM tile) + alloc(UB) + hivm.hir.load
-                           + bufferization.to_tensor (boundary bridge)
-      - `tv.view_store` -> bufferization.to_buffer(UB) + reinterpret_cast(GM) + hivm.hir.store
-      - gather load on the last dimension -> rectangular DMA + hivm.hir.vgather
-      - gather load on another dimension -> rectangular DMA + scalar scf loop decomposition
-      - scatter store -> physical offset tensor + hivm.hir.scatter_store
-    The compute (arith on tensor) and the boundary to_tensor/to_buffer bridges
-    are left for the downstream linalg bufferization to fold.
+    GENERIC lowering variant: lowers the TensorView access ops to *community*
+    memref/bufferization/scf/tensor ops only (no HIVM dialect), mirroring the
+    native tt->linalg access form so the backend does placement + DMA lowering:
+      - `!tv.ptr<T>` function inputs -> plain `memref<?xT>`
+      - `tv.view_load`  -> reinterpret_cast + alloc + memref.copy + to_tensor
+      - `tv.view_store` -> to_buffer + reinterpret_cast + memref.copy
+      - gather load  -> reinterpret window + memref.copy + scalar scf.for
+                        (tensor.extract/insert)
+      - scatter store -> scalar scf.for + materialize_in_destination
+      - ptr_load/ptr_store -> scalar scf.for (memref.load / materialize)
   }];
   let constructor = "triton::createTensorViewToHIVMPass()";
   let dependentDialects = [
-    "hivm::HIVMDialect",
     "mlir::triton::tv::TensorViewDialect",
     "mlir::memref::MemRefDialect",
     "mlir::bufferization::BufferizationDialect",

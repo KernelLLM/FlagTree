@@ -1,4 +1,4 @@
-//===- TensorViewToHIVM.cpp - tv access ops -> memref + HIVM ---------------===//
+//===- TensorViewToHIVM.cpp - tv access ops -> generic memref -------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,29 +6,28 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Pass B of the TensorView flow (Route A, late placement).  Lowers the tv
-// access ops to memref + HIVM DMA, bridging to/from tensor at the boundary and
-// leaving the compute (arith on tensor) + bridges for the downstream linalg
-// bufferization to fold.
+// Pass B of the TensorView flow -- GENERIC lowering variant.  Lowers the tv
+// access ops to *community* memref/bufferization/scf/tensor ops only (no HIVM
+// dialect dependency), mirroring the native tt->linalg access form.  The
+// backend (bishengir) does address-space marking and the memref.copy ->
+// hir.load/store lowering, exactly as it does for the native path.
 //
-//   !tv.ptr<T> func input        -> memref<?xT, #hivm.address_space<gm>>
-//   tv.view_load %pv[%i]         -> %off = %i * TILE
-//                                   %gm  = reinterpret_cast %base off:[%off] sizes:[TILE] strides:[S]
-//                                   %buf = alloc() : memref<TILExT>       (untagged)
-//                                   hivm.hir.load ins(%gm) outs(%buf)
-//                                   %t   = bufferization.to_tensor %buf   (bridge)
-//   tv.view_store %pv[%i], %v    -> %vm  = bufferization.to_buffer %v : memref<TILExT>  (untagged)
+//   !tv.ptr<T> func input        -> memref<?xT>                 (plain, no space)
+//   tv.view_load %pv[%i]         -> %gm  = reinterpret_cast %base off:[%off] sizes:[TILE] strides:[S]
+//                                   %buf = alloc() : memref<TILExT>
+//                                   memref.copy %gm, %buf       (bishengir -> DMA)
+//                                   %t   = bufferization.to_tensor %buf
+//   tv.view_store %pv[%i], %v    -> %vm  = bufferization.to_buffer %v
 //                                   %gm  = reinterpret_cast %base_out ...
-//                                   hivm.hir.store ins(%vm) outs(%gm)
+//                                   memref.copy %vm, %gm
+//   gather/scatter view          -> reinterpret window + memref.copy + scalar
+//                                   scf.for (tensor.extract/insert / materialize)
+//   ptr_load/ptr_store           -> scalar scf.for (memref.load / materialize)
 //
-// Address-space policy: only the GM source/dest (function pointer args) is
-// tagged #gm -- the anchor hivm.hir.load/store need (src==gm for load, dst==gm
-// for store).  The on-chip staging buffer is left UNTAGGED: the HIVM DMA memory-
-// space verifier is skipped when either side is unspaced, so a single
-// hir.load ins(#gm) outs(<untagged>) is valid, and bishengir's mem-planning
-// assigns the buffer's real space by consumer (ub for vector, L0A/L0B for the
-// cube).  Pass B therefore no longer pre-commits ub vs L0 -- placement stays
-// with the backend, matching the native lowering path.
+// No address space is committed and no hivm op is emitted -- placement (ub /
+// L0A-L0B / cc) and DMA form are left entirely to the backend.  This decouples
+// tv from AscendNPU-IR at the cost of the HIVM vgather/scatter_store fast paths
+// (gather/scatter fall back to the portable scalar decomposition).
 //
 //===----------------------------------------------------------------------===//
 
@@ -36,7 +35,6 @@
 
 #include "ascend/include/Dialect/TensorView/IR/TensorViewDialect.h"
 
-#include "bishengir/Dialect/HIVM/IR/HIVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -71,7 +69,7 @@ namespace {
 
 /// Info recovered from a partition/strided view chain (rank-generic).
 struct ViewInfo {
-  Value base;                        // flat memref<?xT, #gm>
+  Value base;                        // flat memref<?xT> (plain, no address space)
   Type elementType;
   unsigned rank = 0;
   SmallVector<int64_t> tile;         // per-dim tile size
@@ -155,11 +153,11 @@ static ViewInfo traceView(Value viewVal) {
 /// reinterpret_cast %base to offset:[off] sizes:[tile...] strides:[stride...],
 /// yielding the (possibly strided, N-D) GM tile view.  No memory is accessed.
 static Value emitGmTile(OpBuilder &b, Location loc, const ViewInfo &vi,
-                        Value off, hivm::AddressSpaceAttr gmSpace) {
+                        Value off) {
   MLIRContext *ctx = b.getContext();
   auto layout = StridedLayoutAttr::get(ctx, /*offset=*/ShapedType::kDynamic,
                                        vi.strideStatic);
-  auto gmTileTy = MemRefType::get(vi.tile, vi.elementType, layout, gmSpace);
+  auto gmTileTy = MemRefType::get(vi.tile, vi.elementType, layout);
   SmallVector<OpFoldResult> sizes, strides;
   for (unsigned d = 0; d < vi.rank; ++d) {
     sizes.push_back(b.getIndexAttr(vi.tile[d]));
@@ -267,13 +265,12 @@ struct GatherWindow {
 
 static GatherWindow emitGatherWindow(OpBuilder &b, Location loc,
                                      const ViewInfo &vi, ValueRange indices,
-                                     unsigned sparseDim, Value sparseSpan,
-                                     hivm::AddressSpaceAttr gmSpace) {
+                                     unsigned sparseDim, Value sparseSpan) {
   SmallVector<int64_t> shape(vi.tile.begin(), vi.tile.end());
   shape[sparseDim] = ShapedType::kDynamic;
   auto layout = StridedLayoutAttr::get(
       b.getContext(), /*offset=*/ShapedType::kDynamic, vi.strideStatic);
-  auto gmTy = MemRefType::get(shape, vi.elementType, layout, gmSpace);
+  auto gmTy = MemRefType::get(shape, vi.elementType, layout);
 
   Value off;
   for (unsigned d = 0; d < vi.rank; ++d) {
@@ -299,66 +296,12 @@ static GatherWindow emitGatherWindow(OpBuilder &b, Location loc,
       loc, gmTy, vi.base, OpFoldResult(off), sizes, strides);
   auto localTy = MemRefType::get(shape, vi.elementType);
   Value local = b.create<memref::AllocOp>(loc, localTy, ValueRange{sparseSpan});
-  b.create<hivm::LoadOp>(loc, TypeRange{}, gm, local);
+  b.create<memref::CopyOp>(loc, gm, local);
   return {local, localTy};
 }
 
-static Value castSparseTensorToI32(OpBuilder &b, Location loc, Value value) {
-  auto type = cast<RankedTensorType>(value.getType());
-  if (type.getElementType().isInteger(32))
-    return value;
-  auto i32Type = RankedTensorType::get(type.getShape(), b.getI32Type());
-  if (type.getElementType().isIndex())
-    return b.create<arith::IndexCastOp>(loc, i32Type, value);
-  return b.create<arith::TruncIOp>(loc, i32Type, value);
-}
-
-static bool supportsVGather(Type elementType) {
-  if (elementType.isF16() || elementType.isBF16() || elementType.isF32())
-    return true;
-  auto integerType = dyn_cast<IntegerType>(elementType);
-  return integerType &&
-         (integerType.getWidth() == 16 || integerType.getWidth() == 32);
-}
-
-/// Expand a rank-1 sparse index to rank N and broadcast it across all regular
-/// dimensions, producing the index shape required by hivm.hir.vgather.
-static Value broadcastSparseIndices(OpBuilder &b, Location loc,
-                                    const ViewInfo &vi, Value sparseIndex,
-                                    unsigned sparseDim) {
-  sparseIndex = castSparseTensorToI32(b, loc, sparseIndex);
-  SmallVector<int64_t> expandedShape(vi.rank, 1);
-  expandedShape[sparseDim] = vi.tile[sparseDim];
-  auto expandedType = RankedTensorType::get(expandedShape, b.getI32Type());
-  SmallVector<ReassociationIndices> reassociation(1);
-  for (unsigned d = 0; d < vi.rank; ++d)
-    reassociation[0].push_back(d);
-  Value expanded = b.create<tensor::ExpandShapeOp>(loc, expandedType,
-                                                   sparseIndex, reassociation);
-
-  auto expandedMemrefType =
-      MemRefType::get(expandedShape, b.getI32Type());
-#ifndef __LLVM_MAJOR_VERSION_22_COMPATIBLE__
-  Value expandedBuffer = b.create<bufferization::ToMemrefOp>(
-      loc, expandedMemrefType, expanded);
-#else
-  Value expandedBuffer = b.create<bufferization::ToBufferOp>(
-      loc, expandedMemrefType, expanded);
-#endif
-
-  auto fullType = MemRefType::get(vi.tile, b.getI32Type());
-  Value full = b.create<memref::AllocOp>(loc, fullType);
-  SmallVector<int64_t> broadcastDims;
-  for (unsigned d = 0; d < vi.rank; ++d)
-    if (d != sparseDim)
-      broadcastDims.push_back(d);
-  b.create<hivm::VBrcOp>(loc, TypeRange{}, expandedBuffer, full,
-                         b.getDenseI64ArrayAttr(broadcastDims));
-  return full;
-}
-
-/// Native AscendNPU-IR fallback for a gather axis that is not the last one:
-/// nested scalar tensor.extract/tensor.insert loops.
+/// Rank-N nested scalar gather: for each tile coordinate, read the sparse index
+/// and extract source[.., sparse, ..].  Portable community-op form (no vgather).
 static Value emitScalarGather(OpBuilder &b, Location loc, const ViewInfo &vi,
                               Value source, Value sparseIndex,
                               unsigned sparseDim, RankedTensorType resultType) {
@@ -380,9 +323,10 @@ static Value emitScalarGather(OpBuilder &b, Location loc, const ViewInfo &vi,
     coords.push_back(loop.getInductionVar());
   }
 
-  Value sparse =
+  auto sparseExt =
       b.create<tensor::ExtractOp>(loc, sparseIndex, coords[sparseDim]);
-  sparse = asIndex(b, loc, sparse);
+  sparseExt->setAttr("DiscreteMemAccess", b.getUnitAttr());
+  Value sparse = asIndex(b, loc, sparseExt.getResult());
   SmallVector<Value> sourceCoords(coords);
   sourceCoords[sparseDim] = sparse;
   Value element = b.create<tensor::ExtractOp>(loc, source, sourceCoords);
@@ -393,23 +337,36 @@ static Value emitScalarGather(OpBuilder &b, Location loc, const ViewInfo &vi,
   return loops.front().getResult(0);
 }
 
-/// Construct per-element physical offsets for hivm.hir.scatter_store.
-static Value emitScatterOffsets(OpBuilder &b, Location loc, const ViewInfo &vi,
-                                ValueRange indices, unsigned sparseDim) {
-  auto offsetType = RankedTensorType::get(vi.tile, b.getI64Type());
-  Value init = b.create<tensor::EmptyOp>(loc, offsetType.getShape(),
-                                         offsetType.getElementType());
+/// reinterpret_cast %base to offset:[%ik] sizes:[1] strides:[1] (1-element view;
+/// plain memref, address space assigned by the backend).
+static Value emitScalarGmElem(OpBuilder &b, Location loc, Value base, Value ik,
+                              Type elemTy) {
+  auto layout = StridedLayoutAttr::get(b.getContext(),
+                                       /*offset=*/ShapedType::kDynamic, {1});
+  auto ty = MemRefType::get({1}, elemTy, layout);
+  return b.create<memref::ReinterpretCastOp>(
+      loc, ty, base, OpFoldResult(ik),
+      ArrayRef<OpFoldResult>{b.getIndexAttr(1)},
+      ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
+}
+
+/// Rank-N nested scalar scatter: for each tile coordinate compute the physical
+/// offset (regular dim: idx*tile + coord; sparse dim: the runtime index) and
+/// materialize value[coord] into the 1-element GM slot.  Portable community-op
+/// form (no hivm.scatter_store).
+static void emitScalarScatter(OpBuilder &b, Location loc, const ViewInfo &vi,
+                              Value base, Value value, ValueRange indices,
+                              unsigned sparseDim) {
   Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
   Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
-  SmallVector<scf::ForOp> loops;
+  OpBuilder::InsertionGuard guard(b);
   SmallVector<Value> coords;
+  scf::ForOp outer;
   for (unsigned d = 0; d < vi.rank; ++d) {
-    Value iterArg = loops.empty() ? init : loops.back().getRegionIterArg(0);
     Value upper = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
-    auto loop = b.create<scf::ForOp>(loc, c0, upper, c1, iterArg);
-    if (!loops.empty())
-      b.create<scf::YieldOp>(loc, loop.getResult(0));
-    loops.push_back(loop);
+    auto loop = b.create<scf::ForOp>(loc, c0, upper, c1);
+    if (d == 0)
+      outer = loop;
     b.setInsertionPointToStart(loop.getBody());
     coords.push_back(loop.getInductionVar());
   }
@@ -418,8 +375,9 @@ static Value emitScatterOffsets(OpBuilder &b, Location loc, const ViewInfo &vi,
   for (unsigned d = 0; d < vi.rank; ++d) {
     Value logical;
     if (d == sparseDim) {
-      logical = b.create<tensor::ExtractOp>(loc, indices[d], coords[d]);
-      logical = asIndex(b, loc, logical);
+      auto ext = b.create<tensor::ExtractOp>(loc, indices[d], coords[d]);
+      ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
+      logical = asIndex(b, loc, ext.getResult());
     } else {
       Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
       Value origin = b.create<arith::MulIOp>(loc, indices[d], cTile);
@@ -428,12 +386,16 @@ static Value emitScatterOffsets(OpBuilder &b, Location loc, const ViewInfo &vi,
     Value phys = b.create<arith::MulIOp>(loc, logical, vi.strideVal[d]);
     offset = offset ? b.create<arith::AddIOp>(loc, offset, phys) : phys;
   }
-  Value offset64 = b.create<arith::IndexCastOp>(loc, b.getI64Type(), offset);
-  Value target = loops.back().getRegionIterArg(0);
-  Value result = b.create<tensor::InsertOp>(loc, offset64, target, coords);
-  b.create<scf::YieldOp>(loc, result);
-  b.setInsertionPointAfter(loops.front());
-  return loops.front().getResult(0);
+  auto elem = b.create<tensor::ExtractOp>(loc, value, coords);
+  elem->setAttr("DiscreteMemAccess", b.getUnitAttr());
+  Value rc = emitScalarGmElem(b, loc, base, offset, vi.elementType);
+  Value empty =
+      b.create<tensor::EmptyOp>(loc, ArrayRef<int64_t>{1}, vi.elementType);
+  Value ins =
+      b.create<tensor::InsertOp>(loc, elem.getResult(), empty, ValueRange{c0});
+  auto mat = b.create<bufferization::MaterializeInDestinationOp>(loc, ins, rc);
+  mat->setAttr("writable", b.getUnitAttr());
+  outer->setAttr("ExtractedLoadOrStore", b.getUnitAttr());
 }
 
 //===----------------------------------------------------------------------===//
@@ -442,8 +404,7 @@ static Value emitScatterOffsets(OpBuilder &b, Location loc, const ViewInfo &vi,
 // a real extent) zero-pad the buffer and DMA only the in-bounds rank-N prefix.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
-                                   hivm::AddressSpaceAttr gmSpace) {
+static LogicalResult lowerViewLoad(tv::ViewLoadOp load) {
   ViewInfo vi = traceView(load.getView());
   if (!vi.ok || load.getIndices().size() != vi.rank)
     return failure();
@@ -465,36 +426,24 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
     Value sparseSpan = vi.n[sparseDim];
     if (isUnknownExtent(sparseSpan))
       sparseSpan = computeSparseSpan(b, loc, sparseIndex, vi.tile[sparseDim]);
-    GatherWindow window = emitGatherWindow(b, loc, vi, load.getIndices(),
-                                           sparseDim, sparseSpan, gmSpace);
-
-    Value result;
-    if (sparseDim == vi.rank - 1 && supportsVGather(vi.elementType)) {
-      Value fullIndices =
-          broadcastSparseIndices(b, loc, vi, sparseIndex, sparseDim);
-      auto resultMemrefType = MemRefType::get(vi.tile, vi.elementType);
-      Value resultBuffer = b.create<memref::AllocOp>(loc, resultMemrefType);
-      b.create<hivm::VGatherOp>(loc, TypeRange{}, window.local, fullIndices,
-                                resultBuffer);
-      result = b.create<bufferization::ToTensorOp>(
-          loc, tensorTy, resultBuffer, /*restrict=*/true, /*writable=*/false);
-    } else {
-      auto sourceTensorType =
-          RankedTensorType::get(window.localType.getShape(), vi.elementType);
-      Value source = b.create<bufferization::ToTensorOp>(
-          loc, sourceTensorType, window.local, /*restrict=*/true,
-          /*writable=*/false);
-      result = emitScalarGather(b, loc, vi, source, sparseIndex, sparseDim,
-                                tensorTy);
-    }
+    // memref.copy the addressable GM window into a local buffer, then gather
+    // scalar-by-scalar (portable form; no hivm.vgather).
+    GatherWindow window =
+        emitGatherWindow(b, loc, vi, load.getIndices(), sparseDim, sparseSpan);
+    auto sourceTensorType =
+        RankedTensorType::get(window.localType.getShape(), vi.elementType);
+    Value source = b.create<bufferization::ToTensorOp>(
+        loc, sourceTensorType, window.local, /*restrict=*/true,
+        /*writable=*/false);
+    Value result = emitScalarGather(b, loc, vi, source, sparseIndex, sparseDim,
+                                    tensorTy);
     load.getResult().replaceAllUsesWith(result);
     load.erase();
     return success();
   }
 
-  // On-chip staging buffer left UNTAGGED (see file header): a single
-  // hir.load ins(#gm) outs(<untagged>) is valid and bishengir assigns the
-  // buffer's real space (ub / L0A / L0B) by consumer.
+  // On-chip staging buffer left UNTAGGED: memref.copy from the GM tile; the
+  // backend assigns the buffer's real space (ub / L0A-L0B) by consumer.
   auto localTy = MemRefType::get(vi.tile, vi.elementType);
   Value buf = b.create<memref::AllocOp>(loc, localTy);
 
@@ -507,19 +456,19 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
 
   if (!masked) {
     Value off = computeOffset(b, loc, vi, load.getIndices());
-    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-    b.create<hivm::LoadOp>(loc, TypeRange{}, gm, buf);
+    Value gm = emitGmTile(b, loc, vi, off);
+    b.create<memref::CopyOp>(loc, gm, buf);
   } else {
     SmallVector<Value> lens;
     Value off = emitTailGeometry(b, loc, vi, load.getIndices(), lens);
-    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-    // Zero-pad the whole tile (padding = zero), then DMA the in-bounds prefix.
+    Value gm = emitGmTile(b, loc, vi, off);
+    // Zero-pad the whole tile (padding = zero), then copy the in-bounds prefix.
     Value zero =
         b.create<arith::ConstantOp>(loc, b.getZeroAttr(vi.elementType));
     b.create<linalg::FillOp>(loc, ValueRange{zero}, ValueRange{buf});
     Value gmSub = emitPrefixSubview(b, loc, gm, lens);
     Value bufSub = emitPrefixSubview(b, loc, buf, lens);
-    b.create<hivm::LoadOp>(loc, TypeRange{}, gmSub, bufSub);
+    b.create<memref::CopyOp>(loc, gmSub, bufSub);
   }
 
   Value t = b.create<bufferization::ToTensorOp>(loc, tensorTy, buf,
@@ -530,8 +479,7 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load,
   return success();
 }
 
-static LogicalResult lowerViewStore(tv::ViewStoreOp store,
-                                    hivm::AddressSpaceAttr gmSpace) {
+static LogicalResult lowerViewStore(tv::ViewStoreOp store) {
   ViewInfo vi = traceView(store.getView());
   if (!vi.ok || store.getIndices().size() != vi.rank)
     return failure();
@@ -548,27 +496,15 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
       if (d != sparseDim && !store.getIndices()[d].getType().isIndex())
         return failure();
 
-    Value offsets =
-        emitScatterOffsets(b, loc, vi, store.getIndices(), sparseDim);
-    int64_t burstLength = 1;
-    int64_t expectedStride = 1;
-    for (int64_t d = static_cast<int64_t>(vi.rank) - 1;
-         d > static_cast<int64_t>(sparseDim); --d) {
-      if (vi.strideStatic[d] != expectedStride)
-        break;
-      burstLength *= vi.tile[d];
-      expectedStride *= vi.tile[d];
-    }
-    Value burst = b.create<arith::ConstantIntOp>(loc, burstLength, 64);
-    b.create<hivm::ScatterStoreOp>(
-        loc, TypeRange{}, offsets, store.getValue(), burst, Value(), vi.base,
-        /*cache=*/nullptr, /*evict=*/nullptr);
+    // Scalar scatter (portable form; no hivm.scatter_store).
+    emitScalarScatter(b, loc, vi, vi.base, store.getValue(),
+                      store.getIndices(), sparseDim);
     store.erase();
     return success();
   }
 
-  // Untagged on-chip source buffer (see file header): hir.store dst==gm is the
-  // only anchor; bishengir assigns the source buffer's space by producer.
+  // Untagged on-chip source buffer: memref.copy into the GM tile; the backend
+  // assigns spaces + the DMA form.
   auto localTy = MemRefType::get(vi.tile, vi.elementType);
 #ifndef __LLVM_MAJOR_VERSION_22_COMPATIBLE__
   Value vm = b.create<bufferization::ToMemrefOp>(loc, localTy, store.getValue());
@@ -585,15 +521,15 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
 
   if (!masked) {
     Value off = computeOffset(b, loc, vi, store.getIndices());
-    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
-    b.create<hivm::StoreOp>(loc, TypeRange{}, vm, gm);
+    Value gm = emitGmTile(b, loc, vi, off);
+    b.create<memref::CopyOp>(loc, vm, gm);
   } else {
     SmallVector<Value> lens;
     Value off = emitTailGeometry(b, loc, vi, store.getIndices(), lens);
-    Value gm = emitGmTile(b, loc, vi, off, gmSpace);
+    Value gm = emitGmTile(b, loc, vi, off);
     Value gmSub = emitPrefixSubview(b, loc, gm, lens);
     Value vmSub = emitPrefixSubview(b, loc, vm, lens);
-    b.create<hivm::StoreOp>(loc, TypeRange{}, vmSub, gmSub);
+    b.create<memref::CopyOp>(loc, vmSub, gmSub);
   }
 
   store.erase();
@@ -602,26 +538,13 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store,
 
 //===----------------------------------------------------------------------===//
 // Discrete gather/scatter: ptr_load / ptr_store -> scalar scf.for loop
-// (reinterpret_cast base offset:[idx[k]] sizes:[1] + memref.load/store), the
-// same form the native discrete-access lowering produces.  The base is a scalar
-// !tv.ptr (func arg, already rewritten to memref); the gather index comes from
-// the op's index operand.
+// (reinterpret_cast base offset:[idx[k]] sizes:[1] + memref.load / materialize),
+// the same portable form the native discrete-access lowering produces.  The base
+// is a scalar !tv.ptr (func arg, already rewritten to a plain memref); the gather
+// index comes from the op's index operand.
 //===----------------------------------------------------------------------===//
 
-/// reinterpret_cast %base to offset:[%ik] sizes:[1] strides:[1] : ... #gm .
-static Value emitScalarGmElem(OpBuilder &b, Location loc, Value base, Value ik,
-                              Type elemTy, hivm::AddressSpaceAttr gmSpace) {
-  auto layout = StridedLayoutAttr::get(b.getContext(),
-                                       /*offset=*/ShapedType::kDynamic, {1});
-  auto ty = MemRefType::get({1}, elemTy, layout, gmSpace);
-  return b.create<memref::ReinterpretCastOp>(
-      loc, ty, base, OpFoldResult(ik),
-      ArrayRef<OpFoldResult>{b.getIndexAttr(1)},
-      ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
-}
-
-static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
-                                  hivm::AddressSpaceAttr gmSpace) {
+static LogicalResult lowerPtrLoad(tv::PtrLoadOp op) {
   // NOTE: read the base untyped -- rewriteFuncPtrArgs has changed the underlying
   // function argument to a memref, so op.getBase() (TypedValue<PtrType>) asserts.
   Value base = op->getOperand(0);
@@ -654,7 +577,7 @@ static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
     Value k = loop.getInductionVar();
     auto ext = b.create<tensor::ExtractOp>(loc, idx, ValueRange{k});
     ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
-    Value rc = emitScalarGmElem(b, loc, base, ext.getResult(), elemTy, gmSpace);
+    Value rc = emitScalarGmElem(b, loc, base, ext.getResult(), elemTy);
     Value v = b.create<memref::LoadOp>(loc, rc, ValueRange{c0});
     b.create<memref::StoreOp>(loc, v, buf, ValueRange{k});
   }
@@ -667,8 +590,7 @@ static LogicalResult lowerPtrLoad(tv::PtrLoadOp op,
   return success();
 }
 
-static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
-                                   hivm::AddressSpaceAttr gmSpace) {
+static LogicalResult lowerPtrStore(tv::PtrStoreOp op) {
   // Base read untyped (see lowerPtrLoad): the arg is now a memref.
   Value base = op->getOperand(0);
   if (!isa<MemRefType>(base.getType()) || op.getIndices().empty())
@@ -702,7 +624,7 @@ static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
     extIdx->setAttr("DiscreteMemAccess", b.getUnitAttr());
     auto extVal = b.create<tensor::ExtractOp>(loc, value, ValueRange{k});
     extVal->setAttr("DiscreteMemAccess", b.getUnitAttr());
-    Value rc = emitScalarGmElem(b, loc, base, extIdx.getResult(), elemTy, gmSpace);
+    Value rc = emitScalarGmElem(b, loc, base, extIdx.getResult(), elemTy);
     Value empty = b.create<tensor::EmptyOp>(loc, ArrayRef<int64_t>{1}, elemTy);
     Value ins =
         b.create<tensor::InsertOp>(loc, extVal.getResult(), empty, ValueRange{c0});
@@ -716,15 +638,13 @@ static LogicalResult lowerPtrStore(tv::PtrStoreOp op,
 }
 
 //===----------------------------------------------------------------------===//
-// Function-argument rewrite: !tv.ptr<T> -> memref<?xT, #gm>
+// Function-argument rewrite: !tv.ptr<T> -> plain memref<?xT> (backend marks GM)
 //===----------------------------------------------------------------------===//
 
-static void rewriteFuncPtrArgs(triton::FuncOp func,
-                               hivm::AddressSpaceAttr gmSpace) {
+static void rewriteFuncPtrArgs(triton::FuncOp func) {
   auto ptrToMemref = [&](Type t) -> Type {
     if (auto p = dyn_cast<tv::PtrType>(t))
-      return MemRefType::get({ShapedType::kDynamic}, p.getPointeeType(),
-                             MemRefLayoutAttrInterface{}, gmSpace);
+      return MemRefType::get({ShapedType::kDynamic}, p.getPointeeType());
     return t;
   };
 
@@ -755,11 +675,9 @@ struct TensorViewToHIVMPass
     : public mlir::triton::impl::TensorViewToHIVMBase<TensorViewToHIVMPass> {
   void runOnOperation() override {
     ModuleOp module = getOperation();
-    MLIRContext *ctx = &getContext();
-    auto gmSpace = hivm::AddressSpaceAttr::get(ctx, hivm::AddressSpace::GM);
 
-    // 1. Rewrite !tv.ptr function inputs to GM memrefs.
-    module.walk([&](triton::FuncOp func) { rewriteFuncPtrArgs(func, gmSpace); });
+    // 1. Rewrite !tv.ptr function inputs to plain memrefs.
+    module.walk([&](triton::FuncOp func) { rewriteFuncPtrArgs(func); });
 
     // 2. Lower access ops (collect first to avoid mutation during walk).
     SmallVector<tv::ViewLoadOp> loads;
@@ -777,16 +695,16 @@ struct TensorViewToHIVMPass
         ptrStores.push_back(ps);
     });
     for (tv::ViewLoadOp l : loads)
-      if (failed(lowerViewLoad(l, gmSpace)))
+      if (failed(lowerViewLoad(l)))
         l.emitError("TensorViewToHIVM: unsupported view_load");
     for (tv::ViewStoreOp s : stores)
-      if (failed(lowerViewStore(s, gmSpace)))
+      if (failed(lowerViewStore(s)))
         s.emitError("TensorViewToHIVM: unsupported view_store");
     for (tv::PtrLoadOp pl : ptrLoads)
-      if (failed(lowerPtrLoad(pl, gmSpace)))
+      if (failed(lowerPtrLoad(pl)))
         pl.emitError("TensorViewToHIVM: unsupported ptr_load");
     for (tv::PtrStoreOp ps : ptrStores)
-      if (failed(lowerPtrStore(ps, gmSpace)))
+      if (failed(lowerPtrStore(ps)))
         ps.emitError("TensorViewToHIVM: unsupported ptr_store");
 
     // 3. Erase the now-dead make_partition_view / make_tensor_view ops.
