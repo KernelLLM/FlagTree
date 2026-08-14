@@ -271,9 +271,9 @@ static void emitBlockGeometry(OpBuilder &b, Location loc, const ViewInfo &vi,
 /// result buffer.  The {ExtractedLoadOrStore}/{DiscreteMemAccess} markers let
 /// the backend recognize the discrete access (vector core + per-block DMA)
 /// instead of a per-element scalar fallback.
-static Value emitScalarGather(OpBuilder &b, Location loc, const ViewInfo &vi,
-                              Value base, ValueRange indices, unsigned sparseDim,
-                              RankedTensorType resultType) {
+static Value emitBlockGather(OpBuilder &b, Location loc, const ViewInfo &vi,
+                             Value base, ValueRange indices, unsigned sparseDim,
+                             RankedTensorType resultType) {
   auto bufTy = MemRefType::get(vi.tile, vi.elementType);
   Value buf = b.create<memref::AllocOp>(loc, bufTy);
   SmallVector<int64_t> blk(vi.tile.begin(), vi.tile.end());
@@ -310,12 +310,12 @@ static Value emitScalarGather(OpBuilder &b, Location loc, const ViewInfo &vi,
                                              /*restrict=*/true, /*writable=*/false);
 }
 
-/// Structured scatter, symmetric to emitScalarGather: loop over the SPARSE dim;
+/// Structured scatter, symmetric to emitBlockGather: loop over the SPARSE dim;
 /// each iteration materialize_in_destination's a contiguous value block into the
 /// data-dependent GM block (store direction cannot use memref.copy).
-static void emitScalarScatter(OpBuilder &b, Location loc, const ViewInfo &vi,
-                              Value base, Value value, ValueRange indices,
-                              unsigned sparseDim) {
+static void emitBlockScatter(OpBuilder &b, Location loc, const ViewInfo &vi,
+                             Value base, Value value, ValueRange indices,
+                             unsigned sparseDim) {
   SmallVector<int64_t> blk(vi.tile.begin(), vi.tile.end());
   blk[sparseDim] = 1;
   auto layout = StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic,
@@ -348,6 +348,132 @@ static void emitScalarScatter(OpBuilder &b, Location loc, const ViewInfo &vi,
     mat->setAttr("writable", b.getUnitAttr());
   }
   loop->setAttr("ExtractedLoadOrStore", b.getUnitAttr());
+}
+
+/// The block form collapses the sparse dim to 1 and DMAs the contiguous run of
+/// the remaining (regular) dims.  It is only valid when some regular dim carries
+/// unit stride, i.e. the sparse dim is NOT the innermost contiguous dim.  When
+/// the sparse dim itself is the unit-stride dim (a column gather/scatter) there
+/// is no contiguous run: a collapsed [.,1] block strided by the row pitch is a
+/// data-dependent single-column DMA whose base violates MTE alignment (vector
+/// core exception).  Such cases must fall back to the per-element form.
+static bool canBlockCopy(const ViewInfo &vi, unsigned sparseDim) {
+  for (unsigned d = 0; d < vi.rank; ++d)
+    if (d != sparseDim && vi.strideStatic[d] == 1)
+      return true;
+  return false;
+}
+
+/// Per-element gather: nested scf.for over the whole tile, scalar load of each
+/// data-dependent element into the result tensor.  Used when the sparse dim is
+/// the contiguous dim (no block DMA is expressible).
+static Value emitElementwiseGather(OpBuilder &b, Location loc, const ViewInfo &vi,
+                                   Value base, ValueRange indices,
+                                   unsigned sparseDim,
+                                   RankedTensorType resultType) {
+  Value init = b.create<tensor::EmptyOp>(loc, resultType.getShape(),
+                                         resultType.getElementType());
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
+  SmallVector<scf::ForOp> loops;
+  SmallVector<Value> coords;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    Value iterArg = loops.empty() ? init : loops.back().getRegionIterArg(0);
+    Value upper = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
+    auto loop = b.create<scf::ForOp>(loc, c0, upper, c1, iterArg);
+    if (!loops.empty())
+      b.create<scf::YieldOp>(loc, loop.getResult(0));
+    loops.push_back(loop);
+    b.setInsertionPointToStart(loop.getBody());
+    coords.push_back(loop.getInductionVar());
+  }
+
+  Value offset;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    Value logical;
+    if (d == sparseDim) {
+      auto ext = b.create<tensor::ExtractOp>(loc, indices[d], coords[d]);
+      ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
+      logical = asIndex(b, loc, ext.getResult());
+    } else {
+      Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
+      Value origin = b.create<arith::MulIOp>(loc, indices[d], cTile);
+      logical = b.create<arith::AddIOp>(loc, origin, coords[d]);
+    }
+    Value phys = b.create<arith::MulIOp>(loc, logical, vi.strideVal[d]);
+    offset = offset ? b.create<arith::AddIOp>(loc, offset, phys) : phys;
+  }
+  Value rc = emitScalarGmElem(b, loc, base, offset, vi.elementType);
+  Value v = b.create<memref::LoadOp>(loc, rc, ValueRange{c0});
+  Value target = loops.back().getRegionIterArg(0);
+  Value result = b.create<tensor::InsertOp>(loc, v, target, coords);
+  b.create<scf::YieldOp>(loc, result);
+  b.setInsertionPointAfter(loops.front());
+  return loops.front().getResult(0);
+}
+
+/// Per-element scatter, symmetric to emitElementwiseGather.
+static void emitElementwiseScatter(OpBuilder &b, Location loc,
+                                   const ViewInfo &vi, Value base, Value value,
+                                   ValueRange indices, unsigned sparseDim) {
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
+  OpBuilder::InsertionGuard guard(b);
+  SmallVector<Value> coords;
+  scf::ForOp outer;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    Value upper = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
+    auto loop = b.create<scf::ForOp>(loc, c0, upper, c1);
+    if (d == 0)
+      outer = loop;
+    b.setInsertionPointToStart(loop.getBody());
+    coords.push_back(loop.getInductionVar());
+  }
+
+  Value offset;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    Value logical;
+    if (d == sparseDim) {
+      auto ext = b.create<tensor::ExtractOp>(loc, indices[d], coords[d]);
+      ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
+      logical = asIndex(b, loc, ext.getResult());
+    } else {
+      Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
+      Value origin = b.create<arith::MulIOp>(loc, indices[d], cTile);
+      logical = b.create<arith::AddIOp>(loc, origin, coords[d]);
+    }
+    Value phys = b.create<arith::MulIOp>(loc, logical, vi.strideVal[d]);
+    offset = offset ? b.create<arith::AddIOp>(loc, offset, phys) : phys;
+  }
+  auto elem = b.create<tensor::ExtractOp>(loc, value, coords);
+  elem->setAttr("DiscreteMemAccess", b.getUnitAttr());
+  Value rc = emitScalarGmElem(b, loc, base, offset, vi.elementType);
+  Value empty =
+      b.create<tensor::EmptyOp>(loc, ArrayRef<int64_t>{1}, vi.elementType);
+  Value ins =
+      b.create<tensor::InsertOp>(loc, elem.getResult(), empty, ValueRange{c0});
+  auto mat = b.create<bufferization::MaterializeInDestinationOp>(loc, ins, rc);
+  mat->setAttr("writable", b.getUnitAttr());
+  outer->setAttr("ExtractedLoadOrStore", b.getUnitAttr());
+}
+
+/// Dispatch: block DMA when the sparse dim is not the contiguous dim (native,
+/// efficient), else per-element.
+static Value emitScalarGather(OpBuilder &b, Location loc, const ViewInfo &vi,
+                              Value base, ValueRange indices, unsigned sparseDim,
+                              RankedTensorType resultType) {
+  if (canBlockCopy(vi, sparseDim))
+    return emitBlockGather(b, loc, vi, base, indices, sparseDim, resultType);
+  return emitElementwiseGather(b, loc, vi, base, indices, sparseDim, resultType);
+}
+
+static void emitScalarScatter(OpBuilder &b, Location loc, const ViewInfo &vi,
+                              Value base, Value value, ValueRange indices,
+                              unsigned sparseDim) {
+  if (canBlockCopy(vi, sparseDim))
+    emitBlockScatter(b, loc, vi, base, value, indices, sparseDim);
+  else
+    emitElementwiseScatter(b, loc, vi, base, value, indices, sparseDim);
 }
 
 //===----------------------------------------------------------------------===//
