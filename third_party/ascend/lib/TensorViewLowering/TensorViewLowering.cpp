@@ -240,100 +240,114 @@ static Value emitScalarGmElem(OpBuilder &b, Location loc, Value base, Value ik,
       ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
 }
 
-/// Rank-N nested scalar gather: for each tile coordinate compute the physical
-/// offset (regular dim: idx*tile + coord; sparse dim: the runtime index) and
-/// load base[offset] from GM directly (reinterpret sizes:[1] + memref.load).
-/// No pre-loaded window -> no dynamic-shape buffer (which the backend rejects).
+/// Per-dim block geometry for the "extracted load/store" form: the tile with the
+/// sparse dim collapsed to 1 (the contiguous block DMA'd each iteration), the
+/// data-dependent base offset, and the result subview offsets.
+static void emitBlockGeometry(OpBuilder &b, Location loc, const ViewInfo &vi,
+                              ValueRange indices, unsigned sparseDim, Value sIdx,
+                              Value &off, SmallVectorImpl<OpFoldResult> &sizes,
+                              SmallVectorImpl<OpFoldResult> &strides,
+                              SmallVectorImpl<OpFoldResult> &subOffs) {
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    int64_t blk = (d == sparseDim) ? 1 : vi.tile[d];
+    Value logical =
+        d == sparseDim
+            ? sIdx
+            : b.create<arith::MulIOp>(
+                  loc, indices[d], b.create<arith::ConstantIndexOp>(loc, vi.tile[d]));
+    Value phys = b.create<arith::MulIOp>(loc, logical, vi.strideVal[d]);
+    off = off ? b.create<arith::AddIOp>(loc, off, phys) : phys;
+    sizes.push_back(b.getIndexAttr(blk));
+    strides.push_back(vi.strideStatic[d] == ShapedType::kDynamic
+                          ? OpFoldResult(vi.strideVal[d])
+                          : OpFoldResult(b.getIndexAttr(vi.strideStatic[d])));
+    subOffs.push_back(b.getIndexAttr(0)); // sparse offset overwritten by caller
+  }
+}
+
+/// Structured gather in the native "extracted load" form: loop over the SPARSE
+/// dim only; each iteration reinterprets a contiguous block (tile with the
+/// sparse dim = 1) at the data-dependent offset and memref.copy's it into the
+/// result buffer.  The {ExtractedLoadOrStore}/{DiscreteMemAccess} markers let
+/// the backend recognize the discrete access (vector core + per-block DMA)
+/// instead of a per-element scalar fallback.
 static Value emitScalarGather(OpBuilder &b, Location loc, const ViewInfo &vi,
                               Value base, ValueRange indices, unsigned sparseDim,
                               RankedTensorType resultType) {
-  Value init = b.create<tensor::EmptyOp>(loc, resultType.getShape(),
-                                         resultType.getElementType());
+  auto bufTy = MemRefType::get(vi.tile, vi.elementType);
+  Value buf = b.create<memref::AllocOp>(loc, bufTy);
+  SmallVector<int64_t> blk(vi.tile.begin(), vi.tile.end());
+  blk[sparseDim] = 1;
+  auto layout = StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic,
+                                       vi.strideStatic);
+  auto gmBlkTy = MemRefType::get(blk, vi.elementType, layout);
+
   Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
   Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
-  SmallVector<scf::ForOp> loops;
-  SmallVector<Value> coords;
-  for (unsigned d = 0; d < vi.rank; ++d) {
-    Value iterArg = loops.empty() ? init : loops.back().getRegionIterArg(0);
-    Value upper = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
-    auto loop = b.create<scf::ForOp>(loc, c0, upper, c1, iterArg);
-    if (!loops.empty())
-      b.create<scf::YieldOp>(loc, loop.getResult(0));
-    loops.push_back(loop);
+  Value upper = b.create<arith::ConstantIndexOp>(loc, vi.tile[sparseDim]);
+  auto loop = b.create<scf::ForOp>(loc, c0, upper, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(loop.getBody());
-    coords.push_back(loop.getInductionVar());
-  }
+    Value k = loop.getInductionVar();
+    auto ext = b.create<tensor::ExtractOp>(loc, indices[sparseDim], ValueRange{k});
+    ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
+    Value sIdx = asIndex(b, loc, ext.getResult());
 
-  Value offset;
-  for (unsigned d = 0; d < vi.rank; ++d) {
-    Value logical;
-    if (d == sparseDim) {
-      auto ext = b.create<tensor::ExtractOp>(loc, indices[d], coords[d]);
-      ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
-      logical = asIndex(b, loc, ext.getResult());
-    } else {
-      Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
-      Value origin = b.create<arith::MulIOp>(loc, indices[d], cTile);
-      logical = b.create<arith::AddIOp>(loc, origin, coords[d]);
-    }
-    Value phys = b.create<arith::MulIOp>(loc, logical, vi.strideVal[d]);
-    offset = offset ? b.create<arith::AddIOp>(loc, offset, phys) : phys;
+    Value off;
+    SmallVector<OpFoldResult> sizes, strides, subOffs;
+    emitBlockGeometry(b, loc, vi, indices, sparseDim, sIdx, off, sizes, strides,
+                      subOffs);
+    subOffs[sparseDim] = OpFoldResult(k);
+    SmallVector<OpFoldResult> subStr(vi.rank, b.getIndexAttr(1));
+    Value gm = b.create<memref::ReinterpretCastOp>(loc, gmBlkTy, base,
+                                                   OpFoldResult(off), sizes, strides);
+    Value sub = b.create<memref::SubViewOp>(loc, buf, subOffs, sizes, subStr);
+    b.create<memref::CopyOp>(loc, gm, sub);
   }
-  Value rc = emitScalarGmElem(b, loc, base, offset, vi.elementType);
-  Value v = b.create<memref::LoadOp>(loc, rc, ValueRange{c0});
-  Value target = loops.back().getRegionIterArg(0);
-  Value result = b.create<tensor::InsertOp>(loc, v, target, coords);
-  b.create<scf::YieldOp>(loc, result);
-  b.setInsertionPointAfter(loops.front());
-  return loops.front().getResult(0);
+  loop->setAttr("ExtractedLoadOrStore", b.getUnitAttr());
+  return b.create<bufferization::ToTensorOp>(loc, resultType, buf,
+                                             /*restrict=*/true, /*writable=*/false);
 }
 
-/// Rank-N nested scalar scatter: for each tile coordinate compute the physical
-/// offset (regular dim: idx*tile + coord; sparse dim: the runtime index) and
-/// materialize value[coord] into the 1-element GM slot.  Portable community-op
-/// form (no hivm.scatter_store).
+/// Structured scatter, symmetric to emitScalarGather: loop over the SPARSE dim;
+/// each iteration materialize_in_destination's a contiguous value block into the
+/// data-dependent GM block (store direction cannot use memref.copy).
 static void emitScalarScatter(OpBuilder &b, Location loc, const ViewInfo &vi,
                               Value base, Value value, ValueRange indices,
                               unsigned sparseDim) {
+  SmallVector<int64_t> blk(vi.tile.begin(), vi.tile.end());
+  blk[sparseDim] = 1;
+  auto layout = StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic,
+                                       vi.strideStatic);
+  auto gmBlkTy = MemRefType::get(blk, vi.elementType, layout);
+
   Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
   Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
-  OpBuilder::InsertionGuard guard(b);
-  SmallVector<Value> coords;
-  scf::ForOp outer;
-  for (unsigned d = 0; d < vi.rank; ++d) {
-    Value upper = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
-    auto loop = b.create<scf::ForOp>(loc, c0, upper, c1);
-    if (d == 0)
-      outer = loop;
+  Value upper = b.create<arith::ConstantIndexOp>(loc, vi.tile[sparseDim]);
+  auto loop = b.create<scf::ForOp>(loc, c0, upper, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(loop.getBody());
-    coords.push_back(loop.getInductionVar());
-  }
+    Value k = loop.getInductionVar();
+    auto ext = b.create<tensor::ExtractOp>(loc, indices[sparseDim], ValueRange{k});
+    ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
+    Value sIdx = asIndex(b, loc, ext.getResult());
 
-  Value offset;
-  for (unsigned d = 0; d < vi.rank; ++d) {
-    Value logical;
-    if (d == sparseDim) {
-      auto ext = b.create<tensor::ExtractOp>(loc, indices[d], coords[d]);
-      ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
-      logical = asIndex(b, loc, ext.getResult());
-    } else {
-      Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
-      Value origin = b.create<arith::MulIOp>(loc, indices[d], cTile);
-      logical = b.create<arith::AddIOp>(loc, origin, coords[d]);
-    }
-    Value phys = b.create<arith::MulIOp>(loc, logical, vi.strideVal[d]);
-    offset = offset ? b.create<arith::AddIOp>(loc, offset, phys) : phys;
+    Value off;
+    SmallVector<OpFoldResult> sizes, strides, subOffs;
+    emitBlockGeometry(b, loc, vi, indices, sparseDim, sIdx, off, sizes, strides,
+                      subOffs);
+    subOffs[sparseDim] = OpFoldResult(k);
+    SmallVector<OpFoldResult> subStr(vi.rank, b.getIndexAttr(1));
+    Value gm = b.create<memref::ReinterpretCastOp>(loc, gmBlkTy, base,
+                                                   OpFoldResult(off), sizes, strides);
+    Value slice =
+        b.create<tensor::ExtractSliceOp>(loc, value, subOffs, sizes, subStr);
+    auto mat = b.create<bufferization::MaterializeInDestinationOp>(loc, slice, gm);
+    mat->setAttr("writable", b.getUnitAttr());
   }
-  auto elem = b.create<tensor::ExtractOp>(loc, value, coords);
-  elem->setAttr("DiscreteMemAccess", b.getUnitAttr());
-  Value rc = emitScalarGmElem(b, loc, base, offset, vi.elementType);
-  Value empty =
-      b.create<tensor::EmptyOp>(loc, ArrayRef<int64_t>{1}, vi.elementType);
-  Value ins =
-      b.create<tensor::InsertOp>(loc, elem.getResult(), empty, ValueRange{c0});
-  auto mat = b.create<bufferization::MaterializeInDestinationOp>(loc, ins, rc);
-  mat->setAttr("writable", b.getUnitAttr());
-  outer->setAttr("ExtractedLoadOrStore", b.getUnitAttr());
+  loop->setAttr("ExtractedLoadOrStore", b.getUnitAttr());
 }
 
 //===----------------------------------------------------------------------===//

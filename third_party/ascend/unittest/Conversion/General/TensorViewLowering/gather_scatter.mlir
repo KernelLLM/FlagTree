@@ -1,7 +1,8 @@
 // RUN: triton-opt %s --tensor-view-lowering | FileCheck %s
 
-// Gather (generic path): scalar-by-scalar load straight from GM
-// (reinterpret sizes:[1] + memref.load per element).  No window, no vgather.
+// Gather (generic path, native "extracted load" form): loop over the sparse
+// dim only; each iteration memref.copy's a contiguous block (tile with sparse
+// dim = 1) from the data-dependent offset.  {ExtractedLoadOrStore} marks it.
 
 // CHECK-LABEL: tt.func public @gather_last_dim
 // CHECK-SAME: memref<?xf32>
@@ -16,13 +17,13 @@ tt.func public @gather_last_dim(%src: !tv.ptr<f32>,
   %view = tv.make_gather_scatter_view %base
       : !tv.tensor_view<4x12xf32, strides=[12, 1]>
      -> !tv.tensor_view<4x12xf32, strides=[12, 1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [1], padding = zero>>
-  // CHECK: scf.for
+  // CHECK: memref.alloc
   // CHECK: scf.for
   // CHECK: tensor.extract
   // CHECK: memref.reinterpret_cast
-  // CHECK-SAME: sizes: [1]
-  // CHECK: memref.load
-  // CHECK: tensor.insert
+  // CHECK: memref.subview
+  // CHECK: memref.copy
+  // CHECK: bufferization.to_tensor
   // CHECK-NOT: hivm
   %result = tv.view_load %view[%c0, %cols]
       : !tv.tensor_view<4x12xf32, strides=[12, 1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [1], padding = zero>>, index, tensor<4xi32>
@@ -44,13 +45,13 @@ tt.func public @gather_non_last_dim(%src: !tv.ptr<f32>,
   %view = tv.make_gather_scatter_view %base
       : !tv.tensor_view<12x4xf32, strides=[4, 1]>
      -> !tv.tensor_view<12x4xf32, strides=[4, 1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [0], padding = zero>>
-  // CHECK: scf.for
+  // CHECK: memref.alloc
   // CHECK: scf.for
   // CHECK: tensor.extract %{{.*}}[%{{.*}}] : tensor<4xi32>
   // CHECK: memref.reinterpret_cast
-  // CHECK-SAME: sizes: [1]
-  // CHECK: memref.load
-  // CHECK: tensor.insert
+  // CHECK: memref.subview
+  // CHECK: memref.copy
+  // CHECK: bufferization.to_tensor
   // CHECK-NOT: hivm
   %result = tv.view_load %view[%rows, %c0]
       : !tv.tensor_view<12x4xf32, strides=[4, 1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [0], padding = zero>>, tensor<4xi32>, index
@@ -75,10 +76,9 @@ tt.func public @scatter_non_last_dim(%dst: !tv.ptr<f32>,
       : !tv.tensor_view<12x4xf32, strides=[4, 1]>
      -> !tv.tensor_view<12x4xf32, strides=[4, 1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [0], padding = zero>>
   // CHECK: scf.for
-  // CHECK: scf.for
   // CHECK: tensor.extract %{{.*}}[%{{.*}}] : tensor<4xi32>
-  // CHECK: tensor.extract %{{.*}}[%{{.*}}, %{{.*}}] : tensor<4x4xf32>
   // CHECK: memref.reinterpret_cast
+  // CHECK: tensor.extract_slice
   // CHECK: bufferization.materialize_in_destination
   // CHECK-NOT: hivm
   tv.view_store %view[%rows, %c0], %value
