@@ -1,8 +1,8 @@
-add_triton_library(TensorViewToHIVM
-  TensorViewToHIVM.cpp
+add_triton_library(TensorViewLowering
+  TensorViewLowering.cpp
 
   DEPENDS
-  TensorViewToHIVMConversionPassIncGen
+  TensorViewLoweringConversionPassIncGen
 
   LINK_LIBS
   TensorViewIR

@@ -169,7 +169,7 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
         # TensorView Pass B (tv -> memref + hivm): late placement, just before the
         # native buffer point (add_triton_to_linalg), which folds the boundary bridges.
         if opt.use_tensor_view:
-            ascend.passes.ttir.add_tensor_view_to_hivm(pm)
+            ascend.passes.ttir.add_tensor_view_lowering(pm)
 
         ascend.passes.ttir.add_triton_to_linalg(pm, False, named_ops, enable_nd2nz_on_vector, enable_select_analysis,
                                                 compile_on_910_95)

@@ -1,4 +1,4 @@
-// RUN: triton-opt %s --tensor-view-to-hivm | FileCheck %s
+// RUN: triton-opt %s --tensor-view-lowering | FileCheck %s
 
 // A rank-2 partition view_load (dynamic row stride) lowers to a 2-D
 // reinterpret_cast (strided) + 2-D alloc + memref.copy (full tile).

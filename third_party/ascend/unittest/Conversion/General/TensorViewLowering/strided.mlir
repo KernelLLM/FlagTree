@@ -1,4 +1,4 @@
-// RUN: triton-opt %s --tensor-view-to-hivm | FileCheck %s
+// RUN: triton-opt %s --tensor-view-lowering | FileCheck %s
 
 // A strided (overlapping-tile) view_load lowers like partition but the GM tile
 // origin steps by the traversal stride (512), not the tile size (1024).

@@ -1,7 +1,7 @@
-// RUN: triton-opt %s --tensor-view-to-hivm | FileCheck %s
+// RUN: triton-opt %s --tensor-view-lowering | FileCheck %s
 
-// Gather (generic path): rectangular memref.copy of the addressable window into
-// a local buffer, then a portable scalar scf.for decomposition (no vgather).
+// Gather (generic path): scalar-by-scalar load straight from GM
+// (reinterpret sizes:[1] + memref.load per element).  No window, no vgather.
 
 // CHECK-LABEL: tt.func public @gather_last_dim
 // CHECK-SAME: memref<?xf32>
@@ -16,14 +16,12 @@ tt.func public @gather_last_dim(%src: !tv.ptr<f32>,
   %view = tv.make_gather_scatter_view %base
       : !tv.tensor_view<4x12xf32, strides=[12, 1]>
      -> !tv.tensor_view<4x12xf32, strides=[12, 1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [1], padding = zero>>
-  // CHECK: memref.reinterpret_cast
-  // CHECK-SAME: to memref<4x?xf32, strided<[12, 1]
-  // CHECK: memref.alloc(%{{.*}}) : memref<4x?xf32>
-  // CHECK: memref.copy
-  // CHECK: bufferization.to_tensor
   // CHECK: scf.for
   // CHECK: scf.for
   // CHECK: tensor.extract
+  // CHECK: memref.reinterpret_cast
+  // CHECK-SAME: sizes: [1]
+  // CHECK: memref.load
   // CHECK: tensor.insert
   // CHECK-NOT: hivm
   %result = tv.view_load %view[%c0, %cols]
@@ -46,12 +44,12 @@ tt.func public @gather_non_last_dim(%src: !tv.ptr<f32>,
   %view = tv.make_gather_scatter_view %base
       : !tv.tensor_view<12x4xf32, strides=[4, 1]>
      -> !tv.tensor_view<12x4xf32, strides=[4, 1], #tv.gather_scatter_view<tile = [4, 4], sparse_dim = [0], padding = zero>>
-  // CHECK: memref.copy
-  // CHECK: bufferization.to_tensor
   // CHECK: scf.for
   // CHECK: scf.for
   // CHECK: tensor.extract %{{.*}}[%{{.*}}] : tensor<4xi32>
-  // CHECK: tensor.extract %{{.*}}[%{{.*}}, %{{.*}}] : tensor<?x4xf32>
+  // CHECK: memref.reinterpret_cast
+  // CHECK-SAME: sizes: [1]
+  // CHECK: memref.load
   // CHECK: tensor.insert
   // CHECK-NOT: hivm
   %result = tv.view_load %view[%rows, %c0]

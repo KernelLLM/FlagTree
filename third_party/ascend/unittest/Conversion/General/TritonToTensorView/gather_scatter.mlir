@@ -1,5 +1,5 @@
 // RUN: triton-opt %s --triton-to-tensor-view --canonicalize | FileCheck %s
-// RUN: triton-opt %s --triton-to-tensor-view --tensor-view-to-hivm --canonicalize | FileCheck %s --check-prefix=E2E
+// RUN: triton-opt %s --triton-to-tensor-view --tensor-view-lowering --canonicalize | FileCheck %s --check-prefix=E2E
 
 // A data-dependent row index plus a regular contiguous column range is a
 // gather/scatter view.  The index load itself remains a regular partition

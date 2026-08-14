@@ -1,4 +1,4 @@
-// RUN: triton-opt %s --tensor-view-to-hivm | FileCheck %s
+// RUN: triton-opt %s --tensor-view-lowering | FileCheck %s
 
 // The tv access ops (Pass A output) lower to generic community memref ops:
 //   !tv.ptr args -> plain memref; view_load -> reinterpret_cast+alloc+memref.copy
@@ -47,9 +47,10 @@ tt.func public @add_kernel(%a: !tv.ptr<f32>, %b: !tv.ptr<f32>, %c: !tv.ptr<f32>,
   %pc = tv.make_partition_view %vc
         : !tv.tensor_view<?xf32, strides=[1]>
        -> !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>
-  // CHECK: bufferization.to_{{(memref|buffer)}}
+  // CHECK: memref.reinterpret_cast
   // CHECK: memref.subview
-  // CHECK: memref.copy
+  // CHECK: tensor.extract_slice
+  // CHECK: bufferization.materialize_in_destination
   tv.view_store %pc[%i], %sum
         : !tv.tensor_view<?xf32, strides=[1], #tv.partition_view<tile = [1024], dim_map = [0], padding = zero>>, tensor<1024xf32>, index
   tt.return

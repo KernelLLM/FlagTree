@@ -1,4 +1,4 @@
-//===- TensorViewToHIVM.cpp - tv access ops -> generic memref -------------===//
+//===- TensorViewLowering.cpp - tv access ops -> generic memref -------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -17,11 +17,11 @@
 //                                   %buf = alloc() : memref<TILExT>
 //                                   memref.copy %gm, %buf       (bishengir -> DMA)
 //                                   %t   = bufferization.to_tensor %buf
-//   tv.view_store %pv[%i], %v    -> %vm  = bufferization.to_buffer %v
-//                                   %gm  = reinterpret_cast %base_out ...
-//                                   memref.copy %vm, %gm
-//   gather/scatter view          -> reinterpret window + memref.copy + scalar
-//                                   scf.for (tensor.extract/insert / materialize)
+//   tv.view_store %pv[%i], %v    -> %gm  = reinterpret_cast %base_out ...
+//                                   bufferization.materialize_in_destination %v in %gm
+//   gather/scatter view          -> scalar scf.for over the tile: reinterpret
+//                                   sizes:[1] + memref.load (gather) /
+//                                   materialize_in_destination (scatter)
 //   ptr_load/ptr_store           -> scalar scf.for (memref.load / materialize)
 //
 // No address space is committed and no hivm op is emitted -- placement (ub /
@@ -31,7 +31,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ascend/include/TensorViewToHIVM/Passes.h"
+#include "ascend/include/TensorViewLowering/Passes.h"
 
 #include "ascend/include/Dialect/TensorView/IR/TensorViewDialect.h"
 
@@ -53,8 +53,8 @@
 
 namespace mlir {
 namespace triton {
-#define GEN_PASS_DEF_TENSORVIEWTOHIVM
-#include "ascend/include/TensorViewToHIVM/Passes.h.inc"
+#define GEN_PASS_DEF_TENSORVIEWLOWERING
+#include "ascend/include/TensorViewLowering/Passes.h.inc"
 } // namespace triton
 } // namespace mlir
 
@@ -221,120 +221,10 @@ static Value emitTailGeometry(OpBuilder &b, Location loc, const ViewInfo &vi,
   return off;
 }
 
-/// Return true for the sentinel used by Pass A when a raw pointer has no
-/// recoverable source extent.
-static bool isUnknownExtent(Value extent) {
-  auto constant = extent.getDefiningOp<arith::ConstantIndexOp>();
-  return constant && constant.value() == std::numeric_limits<int64_t>::max();
-}
-
 static Value asIndex(OpBuilder &b, Location loc, Value value) {
   if (value.getType().isIndex())
     return value;
   return b.create<arith::IndexCastOp>(loc, b.getIndexType(), value);
-}
-
-/// With no source extent available from a raw Triton pointer, materialize only
-/// the prefix needed by the sparse indices instead of allocating Pass A's
-/// INT64_MAX sentinel.  Negative/out-of-range indices retain the frontend's UB
-/// semantics.
-static Value computeSparseSpan(OpBuilder &b, Location loc, Value sparseIndex,
-                               int64_t length) {
-  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
-  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
-  Value upper = b.create<arith::ConstantIndexOp>(loc, length);
-  auto loop = b.create<scf::ForOp>(
-      loc, c0, upper, c1, ValueRange{c0},
-      [&](OpBuilder &nested, Location nestedLoc, Value iv, ValueRange args) {
-        Value idx =
-            nested.create<tensor::ExtractOp>(nestedLoc, sparseIndex, iv);
-        idx = asIndex(nested, nestedLoc, idx);
-        Value max = nested.create<arith::MaxSIOp>(nestedLoc, args[0], idx);
-        nested.create<scf::YieldOp>(nestedLoc, max);
-      });
-  return b.create<arith::AddIOp>(loc, loop.getResult(0), c1);
-}
-
-/// GM/local source window used before vgather or scalar gather decomposition.
-/// Regular dimensions contain one tile; the sparse dimension contains the
-/// addressable prefix [0, sparseSpan).
-struct GatherWindow {
-  Value local;
-  MemRefType localType;
-};
-
-static GatherWindow emitGatherWindow(OpBuilder &b, Location loc,
-                                     const ViewInfo &vi, ValueRange indices,
-                                     unsigned sparseDim, Value sparseSpan) {
-  SmallVector<int64_t> shape(vi.tile.begin(), vi.tile.end());
-  shape[sparseDim] = ShapedType::kDynamic;
-  auto layout = StridedLayoutAttr::get(
-      b.getContext(), /*offset=*/ShapedType::kDynamic, vi.strideStatic);
-  auto gmTy = MemRefType::get(shape, vi.elementType, layout);
-
-  Value off;
-  for (unsigned d = 0; d < vi.rank; ++d) {
-    if (d == sparseDim)
-      continue;
-    Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
-    Value logical = b.create<arith::MulIOp>(loc, indices[d], cTile);
-    Value phys = b.create<arith::MulIOp>(loc, logical, vi.strideVal[d]);
-    off = off ? b.create<arith::AddIOp>(loc, off, phys) : phys;
-  }
-  if (!off)
-    off = b.create<arith::ConstantIndexOp>(loc, 0);
-
-  SmallVector<OpFoldResult> sizes, strides;
-  for (unsigned d = 0; d < vi.rank; ++d) {
-    sizes.push_back(d == sparseDim ? OpFoldResult(sparseSpan)
-                                   : OpFoldResult(b.getIndexAttr(vi.tile[d])));
-    strides.push_back(vi.strideStatic[d] == ShapedType::kDynamic
-                          ? OpFoldResult(vi.strideVal[d])
-                          : OpFoldResult(b.getIndexAttr(vi.strideStatic[d])));
-  }
-  Value gm = b.create<memref::ReinterpretCastOp>(
-      loc, gmTy, vi.base, OpFoldResult(off), sizes, strides);
-  auto localTy = MemRefType::get(shape, vi.elementType);
-  Value local = b.create<memref::AllocOp>(loc, localTy, ValueRange{sparseSpan});
-  b.create<memref::CopyOp>(loc, gm, local);
-  return {local, localTy};
-}
-
-/// Rank-N nested scalar gather: for each tile coordinate, read the sparse index
-/// and extract source[.., sparse, ..].  Portable community-op form (no vgather).
-static Value emitScalarGather(OpBuilder &b, Location loc, const ViewInfo &vi,
-                              Value source, Value sparseIndex,
-                              unsigned sparseDim, RankedTensorType resultType) {
-  Value init = b.create<tensor::EmptyOp>(loc, resultType.getShape(),
-                                         resultType.getElementType());
-  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
-  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
-  SmallVector<scf::ForOp> loops;
-  SmallVector<Value> coords;
-
-  for (unsigned d = 0; d < vi.rank; ++d) {
-    Value iterArg = loops.empty() ? init : loops.back().getRegionIterArg(0);
-    Value upper = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
-    auto loop = b.create<scf::ForOp>(loc, c0, upper, c1, iterArg);
-    if (!loops.empty())
-      b.create<scf::YieldOp>(loc, loop.getResult(0));
-    loops.push_back(loop);
-    b.setInsertionPointToStart(loop.getBody());
-    coords.push_back(loop.getInductionVar());
-  }
-
-  auto sparseExt =
-      b.create<tensor::ExtractOp>(loc, sparseIndex, coords[sparseDim]);
-  sparseExt->setAttr("DiscreteMemAccess", b.getUnitAttr());
-  Value sparse = asIndex(b, loc, sparseExt.getResult());
-  SmallVector<Value> sourceCoords(coords);
-  sourceCoords[sparseDim] = sparse;
-  Value element = b.create<tensor::ExtractOp>(loc, source, sourceCoords);
-  Value target = loops.back().getRegionIterArg(0);
-  Value result = b.create<tensor::InsertOp>(loc, element, target, coords);
-  b.create<scf::YieldOp>(loc, result);
-  b.setInsertionPointAfter(loops.front());
-  return loops.front().getResult(0);
 }
 
 /// reinterpret_cast %base to offset:[%ik] sizes:[1] strides:[1] (1-element view;
@@ -348,6 +238,54 @@ static Value emitScalarGmElem(OpBuilder &b, Location loc, Value base, Value ik,
       loc, ty, base, OpFoldResult(ik),
       ArrayRef<OpFoldResult>{b.getIndexAttr(1)},
       ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
+}
+
+/// Rank-N nested scalar gather: for each tile coordinate compute the physical
+/// offset (regular dim: idx*tile + coord; sparse dim: the runtime index) and
+/// load base[offset] from GM directly (reinterpret sizes:[1] + memref.load).
+/// No pre-loaded window -> no dynamic-shape buffer (which the backend rejects).
+static Value emitScalarGather(OpBuilder &b, Location loc, const ViewInfo &vi,
+                              Value base, ValueRange indices, unsigned sparseDim,
+                              RankedTensorType resultType) {
+  Value init = b.create<tensor::EmptyOp>(loc, resultType.getShape(),
+                                         resultType.getElementType());
+  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
+  SmallVector<scf::ForOp> loops;
+  SmallVector<Value> coords;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    Value iterArg = loops.empty() ? init : loops.back().getRegionIterArg(0);
+    Value upper = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
+    auto loop = b.create<scf::ForOp>(loc, c0, upper, c1, iterArg);
+    if (!loops.empty())
+      b.create<scf::YieldOp>(loc, loop.getResult(0));
+    loops.push_back(loop);
+    b.setInsertionPointToStart(loop.getBody());
+    coords.push_back(loop.getInductionVar());
+  }
+
+  Value offset;
+  for (unsigned d = 0; d < vi.rank; ++d) {
+    Value logical;
+    if (d == sparseDim) {
+      auto ext = b.create<tensor::ExtractOp>(loc, indices[d], coords[d]);
+      ext->setAttr("DiscreteMemAccess", b.getUnitAttr());
+      logical = asIndex(b, loc, ext.getResult());
+    } else {
+      Value cTile = b.create<arith::ConstantIndexOp>(loc, vi.tile[d]);
+      Value origin = b.create<arith::MulIOp>(loc, indices[d], cTile);
+      logical = b.create<arith::AddIOp>(loc, origin, coords[d]);
+    }
+    Value phys = b.create<arith::MulIOp>(loc, logical, vi.strideVal[d]);
+    offset = offset ? b.create<arith::AddIOp>(loc, offset, phys) : phys;
+  }
+  Value rc = emitScalarGmElem(b, loc, base, offset, vi.elementType);
+  Value v = b.create<memref::LoadOp>(loc, rc, ValueRange{c0});
+  Value target = loops.back().getRegionIterArg(0);
+  Value result = b.create<tensor::InsertOp>(loc, v, target, coords);
+  b.create<scf::YieldOp>(loc, result);
+  b.setInsertionPointAfter(loops.front());
+  return loops.front().getResult(0);
 }
 
 /// Rank-N nested scalar scatter: for each tile coordinate compute the physical
@@ -422,21 +360,10 @@ static LogicalResult lowerViewLoad(tv::ViewLoadOp load) {
       if (d != sparseDim && !load.getIndices()[d].getType().isIndex())
         return failure();
 
-    Value sparseIndex = load.getIndices()[sparseDim];
-    Value sparseSpan = vi.n[sparseDim];
-    if (isUnknownExtent(sparseSpan))
-      sparseSpan = computeSparseSpan(b, loc, sparseIndex, vi.tile[sparseDim]);
-    // memref.copy the addressable GM window into a local buffer, then gather
-    // scalar-by-scalar (portable form; no hivm.vgather).
-    GatherWindow window =
-        emitGatherWindow(b, loc, vi, load.getIndices(), sparseDim, sparseSpan);
-    auto sourceTensorType =
-        RankedTensorType::get(window.localType.getShape(), vi.elementType);
-    Value source = b.create<bufferization::ToTensorOp>(
-        loc, sourceTensorType, window.local, /*restrict=*/true,
-        /*writable=*/false);
-    Value result = emitScalarGather(b, loc, vi, source, sparseIndex, sparseDim,
-                                    tensorTy);
+    // Scalar-by-scalar gather straight from GM (reinterpret sizes:[1] +
+    // memref.load per element).  No pre-loaded window -> no dynamic-shape alloc.
+    Value result = emitScalarGather(b, loc, vi, vi.base, load.getIndices(),
+                                    sparseDim, tensorTy);
     load.getResult().replaceAllUsesWith(result);
     load.erase();
     return success();
@@ -503,14 +430,10 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store) {
     return success();
   }
 
-  // Untagged on-chip source buffer: memref.copy into the GM tile; the backend
-  // assigns spaces + the DMA form.
-  auto localTy = MemRefType::get(vi.tile, vi.elementType);
-#ifndef __LLVM_MAJOR_VERSION_22_COMPATIBLE__
-  Value vm = b.create<bufferization::ToMemrefOp>(loc, localTy, store.getValue());
-#else
-  Value vm = b.create<bufferization::ToBufferOp>(loc, localTy, store.getValue());
-#endif
+  // Store the tensor into the GM tile with bufferization.materialize_in_
+  // destination (NOT memref.copy: the store-direction memref.copy(local->gm) is
+  // mis-lowered by the backend; materialize is the form the native path uses).
+  Value value = store.getValue();
 
   bool masked = false;
   for (Value n : vi.n)
@@ -522,14 +445,24 @@ static LogicalResult lowerViewStore(tv::ViewStoreOp store) {
   if (!masked) {
     Value off = computeOffset(b, loc, vi, store.getIndices());
     Value gm = emitGmTile(b, loc, vi, off);
-    b.create<memref::CopyOp>(loc, vm, gm);
+    auto mat = b.create<bufferization::MaterializeInDestinationOp>(loc, value, gm);
+    mat->setAttr("writable", b.getUnitAttr());
   } else {
     SmallVector<Value> lens;
     Value off = emitTailGeometry(b, loc, vi, store.getIndices(), lens);
     Value gm = emitGmTile(b, loc, vi, off);
     Value gmSub = emitPrefixSubview(b, loc, gm, lens);
-    Value vmSub = emitPrefixSubview(b, loc, vm, lens);
-    b.create<memref::CopyOp>(loc, vmSub, gmSub);
+    // Store only the in-bounds prefix: extract_slice(value)[0:len] -> subview.
+    SmallVector<OpFoldResult> offs, szs, strs;
+    for (Value len : lens) {
+      offs.push_back(b.getIndexAttr(0));
+      szs.push_back(OpFoldResult(len));
+      strs.push_back(b.getIndexAttr(1));
+    }
+    Value slice = b.create<tensor::ExtractSliceOp>(loc, value, offs, szs, strs);
+    auto mat =
+        b.create<bufferization::MaterializeInDestinationOp>(loc, slice, gmSub);
+    mat->setAttr("writable", b.getUnitAttr());
   }
 
   store.erase();
@@ -671,8 +604,8 @@ static void rewriteFuncPtrArgs(triton::FuncOp func) {
 // Pass
 //===----------------------------------------------------------------------===//
 
-struct TensorViewToHIVMPass
-    : public mlir::triton::impl::TensorViewToHIVMBase<TensorViewToHIVMPass> {
+struct TensorViewLoweringPass
+    : public mlir::triton::impl::TensorViewLoweringBase<TensorViewLoweringPass> {
   void runOnOperation() override {
     ModuleOp module = getOperation();
 
@@ -696,16 +629,16 @@ struct TensorViewToHIVMPass
     });
     for (tv::ViewLoadOp l : loads)
       if (failed(lowerViewLoad(l)))
-        l.emitError("TensorViewToHIVM: unsupported view_load");
+        l.emitError("TensorViewLowering: unsupported view_load");
     for (tv::ViewStoreOp s : stores)
       if (failed(lowerViewStore(s)))
-        s.emitError("TensorViewToHIVM: unsupported view_store");
+        s.emitError("TensorViewLowering: unsupported view_store");
     for (tv::PtrLoadOp pl : ptrLoads)
       if (failed(lowerPtrLoad(pl)))
-        pl.emitError("TensorViewToHIVM: unsupported ptr_load");
+        pl.emitError("TensorViewLowering: unsupported ptr_load");
     for (tv::PtrStoreOp ps : ptrStores)
       if (failed(lowerPtrStore(ps)))
-        ps.emitError("TensorViewToHIVM: unsupported ptr_store");
+        ps.emitError("TensorViewLowering: unsupported ptr_store");
 
     // 3. Erase the now-dead make_partition_view / make_tensor_view ops.
     bool changed = true;
@@ -731,6 +664,6 @@ struct TensorViewToHIVMPass
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::triton::createTensorViewToHIVMPass() {
-  return std::make_unique<TensorViewToHIVMPass>();
+mlir::triton::createTensorViewLoweringPass() {
+  return std::make_unique<TensorViewLoweringPass>();
 }
