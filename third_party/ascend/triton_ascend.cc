@@ -12,6 +12,7 @@
 #include "ascend/include/AutoBlockify/Passes.h"
 #include "ascend/include/Dialect/TritonAscend/IR/TritonAscendDialect.h"
 #include "ascend/include/Dialect/TensorView/IR/TensorViewDialect.h"
+#include "ascend/include/TritonToTensorView/Matcher.h"
 #include "ascend/include/TritonToAnnotation/Passes.h"
 #include "ascend/include/TritonToHFusion/Passes.h"
 #include "ascend/include/TritonToHIVM/Passes.h"
@@ -338,6 +339,33 @@ void init_triton_ascend_ir(py::module &&m) {
              auto annotationOp = self.create<triton::ascend::AnnotationOp>(ptr);
              annotationOp->setAttr(self.getBuilder().getStringAttr(attrKey),
                                    attrVal);
+           })
+      //===----------------------------------------------------------------===//
+      // TensorView (tv): inline tl->tt lowering hook.  Called from
+      // python/triton/language/semantic.py's _load_legacy/_store_legacy right
+      // before they would build a plain tt.load/tt.store, so that -- gated on
+      // use_tensor_view -- the memory-access op that tl's own lowering emits
+      // is `tv` instead of `tt` directly, with no separate conversion pass.
+      // Reuses TritonToTensorView.cpp's (Pass A's) matcher via Matcher.h; Pass
+      // A itself remains in the gated pipeline as a safety net for whatever
+      // this inline attempt doesn't recognize.
+      //===----------------------------------------------------------------===//
+      .def("try_tv_load",
+           [](TritonOpBuilder &self, Value ptr, py::object maskObj,
+              Type resultTy) -> py::object {
+             Value mask = maskObj.is_none() ? Value() : maskObj.cast<Value>();
+             Value result = triton::tv::tryEmitTvLoad(
+                 self.getBuilder(), self.getLastLoc(), ptr, mask, resultTy);
+             if (!result)
+               return py::none();
+             return py::cast(result);
+           })
+      .def("try_tv_store",
+           [](TritonOpBuilder &self, Value ptr, Value value,
+              py::object maskObj) -> bool {
+             Value mask = maskObj.is_none() ? Value() : maskObj.cast<Value>();
+             return triton::tv::tryEmitTvStore(
+                 self.getBuilder(), self.getLastLoc(), ptr, value, mask);
            });
 }
 

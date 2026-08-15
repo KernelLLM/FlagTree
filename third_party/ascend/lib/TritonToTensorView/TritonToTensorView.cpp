@@ -27,6 +27,7 @@
 #include "ascend/include/TritonToTensorView/Passes.h"
 
 #include "ascend/include/Dialect/TensorView/IR/TensorViewDialect.h"
+#include "ascend/include/TritonToTensorView/Matcher.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -74,6 +75,19 @@ struct Access {
   SmallVector<int64_t> sparseDims;
   SmallVector<Value> extent;      // per-dim masked bound (i32), null if unmasked
 };
+
+/// Pointee type of `t`, whether `t` is already `!tv.ptr` (Pass A, which
+/// upfront-rewrites all function pointer args before matching) or still
+/// `!tt.ptr` (the inline hook, called before any such rewrite -- the matched
+/// base is retyped lazily via ensureTvPtr once a match succeeds).  Null if
+/// `t` isn't a pointer at all.
+static Type getPtrPointeeType(Type t) {
+  if (auto p = dyn_cast<tv::PtrType>(t))
+    return p.getPointeeType();
+  if (auto p = dyn_cast<triton::PointerType>(t))
+    return p.getPointeeType();
+  return Type();
+}
 
 static std::optional<int64_t> getConstIntValue(Value v) {
   if (auto c = v.getDefiningOp<arith::ConstantOp>())
@@ -162,8 +176,8 @@ static bool match1D(Value ptrTensor, Value maskVal, Access &out) {
     originScalar = scalarAp.getOffset();
     scalarPtr = scalarAp.getPtr();
   }
-  auto tvPtr = dyn_cast<tv::PtrType>(scalarPtr.getType());
-  if (!tvPtr)
+  Type elemTy = getPtrPointeeType(scalarPtr.getType());
+  if (!elemTy)
     return false;
 
   int64_t elementStride = 1;
@@ -223,7 +237,7 @@ static bool match1D(Value ptrTensor, Value maskVal, Access &out) {
   }
 
   out.basePtr = scalarPtr;
-  out.elementType = tvPtr.getPointeeType();
+  out.elementType = elemTy;
   out.rank = 1;
   out.tile = {tile};
   out.traversal = {traversal};
@@ -303,8 +317,8 @@ static bool match2D(Value ptrTensor, Value maskVal, Access &out) {
     return false;
   }
 
-  auto tvPtr = dyn_cast<tv::PtrType>(baseSrc.getType());
-  if (!tvPtr)
+  Type elemTy = getPtrPointeeType(baseSrc.getType());
+  if (!elemTy)
     return false;
 
   // Peel both contributions; classify by expand_dims axis (1 -> row, 0 -> col).
@@ -364,7 +378,7 @@ static bool match2D(Value ptrTensor, Value maskVal, Access &out) {
   }
 
   out.basePtr = baseSrc;
-  out.elementType = tvPtr.getPointeeType();
+  out.elementType = elemTy;
   out.rank = 2;
   out.tile = {t0, t1};
   out.traversal = {tr0, tr1};
@@ -403,8 +417,8 @@ static bool matchGatherScatter2D(Value ptrTensor, Access &out) {
   auto splatBase = innerAp.getPtr().getDefiningOp<triton::SplatOp>();
   if (!splatBase)
     return false;
-  auto tvPtr = dyn_cast<tv::PtrType>(splatBase.getSrc().getType());
-  if (!tvPtr)
+  Type elemTy = getPtrPointeeType(splatBase.getSrc().getType());
+  if (!elemTy)
     return false;
 
   Value rowContrib = innerAp.getOffset();
@@ -476,7 +490,7 @@ static bool matchGatherScatter2D(Value ptrTensor, Access &out) {
   }
 
   out.basePtr = splatBase.getSrc();
-  out.elementType = tvPtr.getPointeeType();
+  out.elementType = elemTy;
   out.rank = 2;
   out.tile = {rowTile, colTile};
   // A sparse dimension does not have a static inter-tile traversal.  Its value
@@ -594,7 +608,7 @@ static bool matchPtrAccess(Value ptrTensor, Value &basePtr, Value &idxTensor) {
   if (!addptr)
     return false;
   auto splat = addptr.getPtr().getDefiningOp<triton::SplatOp>();
-  if (!splat || !isa<tv::PtrType>(splat.getSrc().getType()))
+  if (!splat || !getPtrPointeeType(splat.getSrc().getType()))
     return false;
   basePtr = splat.getSrc();
   idxTensor = addptr.getOffset();
@@ -648,65 +662,117 @@ static Value computePtrCount(OpBuilder &b, Location loc, Value mask,
   return b.create<arith::MaxSIOp>(loc, len, c0);
 }
 
-static LogicalResult rewriteLoad(triton::LoadOp load) {
-  OpBuilder b(load);
-  Location loc = load.getLoc();
+} // namespace
 
+//===----------------------------------------------------------------------===//
+// Public entry points (declared in Matcher.h): the same matcher, callable
+// either from Pass A below (module-wide, after !tt.ptr args are upfront-
+// rewritten) or inline from the tl->tt lowering itself (triton_ascend.cc's
+// try_tv_load/try_tv_store, called from python/triton/language/semantic.py
+// before a tt.load/tt.store would be built).  In the inline case the base
+// pointer is still !tt.ptr, hence ensureTvPtr's lazy per-value retype.
+//===----------------------------------------------------------------------===//
+
+namespace mlir {
+namespace triton {
+namespace tv {
+
+Value ensureTvPtr(Value v) {
+  if (isa<tv::PtrType>(v.getType()))
+    return v;
+  auto tt = dyn_cast<triton::PointerType>(v.getType());
+  if (!tt)
+    return v;
+  v.setType(tv::PtrType::get(tt.getPointeeType()));
+  if (auto ba = dyn_cast<BlockArgument>(v)) {
+    Block *blk = ba.getOwner();
+    if (auto fn = dyn_cast<triton::FuncOp>(blk->getParentOp())) {
+      SmallVector<Type> inputs(blk->getArgumentTypes().begin(),
+                               blk->getArgumentTypes().end());
+      fn.setFunctionType(FunctionType::get(
+          fn.getContext(), inputs, fn.getFunctionType().getResults()));
+    }
+  }
+  return v;
+}
+
+Value tryEmitTvLoad(OpBuilder &b, Location loc, Value ptr, Value mask,
+                    Type resultTy) {
   Access a;
-  if (matchAccess(load.getPtr(), load.getMask(), a)) {
+  if (matchAccess(ptr, mask, a)) {
+    a.basePtr = ensureTvPtr(a.basePtr);
     Value view = buildView(b, loc, a);
-    auto viewLoad = b.create<tv::ViewLoadOp>(
-        loc, load.getResult().getType(), view, castIndices(b, loc, a),
-        /*mask=*/Value());
-    load.getResult().replaceAllUsesWith(viewLoad.getResult());
-    load.erase();
-    return success();
+    auto viewLoad = b.create<tv::ViewLoadOp>(loc, resultTy, view,
+                                             castIndices(b, loc, a),
+                                             /*mask=*/Value());
+    return viewLoad.getResult();
   }
 
   // Discrete gather fallback -> ptr_load (rank-1 only).
   Value base, idxTensor;
-  auto resTy = dyn_cast<RankedTensorType>(load.getResult().getType());
-  if (resTy && resTy.getRank() == 1 &&
-      matchPtrAccess(load.getPtr(), base, idxTensor)) {
+  auto resTy = dyn_cast<RankedTensorType>(resultTy);
+  if (resTy && resTy.getRank() == 1 && matchPtrAccess(ptr, base, idxTensor)) {
+    base = ensureTvPtr(base);
     Value idx = toIndexTensor(b, loc, idxTensor);
-    Value count = computePtrCount(b, loc, load.getMask(), resTy.getShape()[0]);
+    Value count = computePtrCount(b, loc, mask, resTy.getShape()[0]);
     auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
     auto ptrLoad = b.create<tv::PtrLoadOp>(loc, resTy, base, ValueRange{idx},
                                            /*count=*/count, pad);
-    load.getResult().replaceAllUsesWith(ptrLoad.getResult());
-    load.erase();
-    return success();
+    return ptrLoad.getResult();
   }
-  return failure();
+  return Value();
 }
 
-static LogicalResult rewriteStore(triton::StoreOp store) {
-  OpBuilder b(store);
-  Location loc = store.getLoc();
-
+bool tryEmitTvStore(OpBuilder &b, Location loc, Value ptr, Value value,
+                    Value mask) {
   Access a;
-  if (matchAccess(store.getPtr(), store.getMask(), a)) {
+  if (matchAccess(ptr, mask, a)) {
+    a.basePtr = ensureTvPtr(a.basePtr);
     Value view = buildView(b, loc, a);
-    b.create<tv::ViewStoreOp>(loc, view, store.getValue(),
-                              castIndices(b, loc, a), /*mask=*/Value());
-    store.erase();
-    return success();
+    b.create<tv::ViewStoreOp>(loc, view, value, castIndices(b, loc, a),
+                              /*mask=*/Value());
+    return true;
   }
 
   // Discrete scatter fallback -> ptr_store (rank-1 only).
   Value base, idxTensor;
-  auto valTy = dyn_cast<RankedTensorType>(store.getValue().getType());
-  if (valTy && valTy.getRank() == 1 &&
-      matchPtrAccess(store.getPtr(), base, idxTensor)) {
+  auto valTy = dyn_cast<RankedTensorType>(value.getType());
+  if (valTy && valTy.getRank() == 1 && matchPtrAccess(ptr, base, idxTensor)) {
+    base = ensureTvPtr(base);
     Value idx = toIndexTensor(b, loc, idxTensor);
-    Value count = computePtrCount(b, loc, store.getMask(), valTy.getShape()[0]);
+    Value count = computePtrCount(b, loc, mask, valTy.getShape()[0]);
     auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
-    b.create<tv::PtrStoreOp>(loc, base, store.getValue(), ValueRange{idx},
+    b.create<tv::PtrStoreOp>(loc, base, value, ValueRange{idx},
                              /*count=*/count, pad);
-    store.erase();
-    return success();
+    return true;
   }
-  return failure();
+  return false;
+}
+
+} // namespace tv
+} // namespace triton
+} // namespace mlir
+
+namespace {
+
+static LogicalResult rewriteLoad(triton::LoadOp load) {
+  OpBuilder b(load);
+  Value result = tv::tryEmitTvLoad(b, load.getLoc(), load.getPtr(),
+                                   load.getMask(), load.getResult().getType());
+  if (!result)
+    return failure();
+  load.getResult().replaceAllUsesWith(result);
+  load.erase();
+  return success();
+}
+
+static LogicalResult rewriteStore(triton::StoreOp store) {
+  OpBuilder b(store);
+  if (!tv::tryEmitTvStore(b, store.getLoc(), store.getPtr(),
+                          store.getValue(), store.getMask()))
+    return failure();
+  store.erase();
+  return success();
 }
 
 /// Fixed-point erase of the now-dead pointer-chain ops.  Handles both the 1-D

@@ -1133,6 +1133,22 @@ class TritonSemantic(Generic[TensorTy]):
             # Load by de-referencing the pointer of scalar
             dst_ty = elt_ty
 
+        # begin flagtree tv
+        # TensorView: try to emit `tv` ops directly for this access instead of
+        # `tt.load`, gated on use_tensor_view.  A no-op (falls through below)
+        # when disabled, or for any access pattern not (yet) recognized.
+        if getattr(self.builder.options, "use_tensor_view", False):
+            tv_handle = self.builder.try_tv_load(ptr.handle, mask.handle if mask is not None else None,
+                                                 dst_ty.to_ir(self.builder))
+            if tv_handle is not None:
+                if is_bool:
+                    tv_handle.set_attr("was_bool_to_int8", self.builder.get_bool_attr(True))
+                ret = self.tensor(tv_handle, dst_ty)
+                if is_bool:
+                    ret.was_bool_to_int8 = True
+                return ret
+        # end flagtree tv
+
         # Build IR
         if mask is None:
             load_handle = self.builder.create_load(ptr.handle, cache, eviction, is_volatile)
@@ -1349,6 +1365,15 @@ class TritonSemantic(Generic[TensorTy]):
 
         # Cast to target data type
         val = self.cast(val, elt_ty)
+
+        # begin flagtree tv
+        # TensorView: try to emit `tv` ops directly for this access instead of
+        # `tt.store`, gated on use_tensor_view.  Falls through below when
+        # disabled or the access pattern isn't recognized.
+        if getattr(self.builder.options, "use_tensor_view", False):
+            if self.builder.try_tv_store(ptr.handle, val.handle, mask.handle if mask is not None else None):
+                return self.tensor(None, tl.void)
+        # end flagtree tv
 
         # Build IR
         if mask is None:
