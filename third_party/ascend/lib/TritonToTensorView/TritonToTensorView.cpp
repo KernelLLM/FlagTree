@@ -662,6 +662,35 @@ static Value computePtrCount(OpBuilder &b, Location loc, Value mask,
   return b.create<arith::MaxSIOp>(loc, len, c0);
 }
 
+/// Erase `v`'s defining op, and recurse into its operands, as long as each is
+/// a pointer-chain op (addptr/splat/broadcast/expand_dims) that has become
+/// dead.  Needed by the inline call sites (tryEmitTvLoad/tryEmitTvStore):
+/// unlike Pass A -- which matches only after the whole function is built, and
+/// sweeps all now-dead pointer-chain ops in one pass at the very end -- the
+/// inline hook runs the moment a single tl.load/tl.store is being lowered.
+/// The `ptr` expression (e.g. `x + off`) was already built as an ordinary
+/// tt.addptr/tt.splat chain *before* the load/store call, so once a tv result
+/// is substituted for it, that now-unused chain must be cleaned up
+/// immediately -- ensureTvPtr's retype of the chain's base pointer would
+/// otherwise leave it type-inconsistent (still present, but its operand no
+/// longer `!tt.ptr`) for the module verifier that runs right after
+/// ast_to_ttir, well before Pass A (if it runs at all) would get a chance to.
+static void eraseIfDeadPtrChain(Value v) {
+  Operation *op = v.getDefiningOp();
+  if (!op)
+    return;
+  if (!isa<triton::AddPtrOp, triton::SplatOp, triton::BroadcastOp,
+           triton::ExpandDimsOp>(op))
+    return;
+  if (!op->use_empty())
+    return;
+  SmallVector<Value> operands(op->getOperands().begin(),
+                              op->getOperands().end());
+  op->erase();
+  for (Value operand : operands)
+    eraseIfDeadPtrChain(operand);
+}
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -705,6 +734,7 @@ Value tryEmitTvLoad(OpBuilder &b, Location loc, Value ptr, Value mask,
     auto viewLoad = b.create<tv::ViewLoadOp>(loc, resultTy, view,
                                              castIndices(b, loc, a),
                                              /*mask=*/Value());
+    eraseIfDeadPtrChain(ptr);
     return viewLoad.getResult();
   }
 
@@ -718,6 +748,7 @@ Value tryEmitTvLoad(OpBuilder &b, Location loc, Value ptr, Value mask,
     auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
     auto ptrLoad = b.create<tv::PtrLoadOp>(loc, resTy, base, ValueRange{idx},
                                            /*count=*/count, pad);
+    eraseIfDeadPtrChain(ptr);
     return ptrLoad.getResult();
   }
   return Value();
@@ -731,6 +762,7 @@ bool tryEmitTvStore(OpBuilder &b, Location loc, Value ptr, Value value,
     Value view = buildView(b, loc, a);
     b.create<tv::ViewStoreOp>(loc, view, value, castIndices(b, loc, a),
                               /*mask=*/Value());
+    eraseIfDeadPtrChain(ptr);
     return true;
   }
 
@@ -744,6 +776,7 @@ bool tryEmitTvStore(OpBuilder &b, Location loc, Value ptr, Value value,
     auto pad = tv::PadKindAttr::get(b.getContext(), tv::PadKind::Zero);
     b.create<tv::PtrStoreOp>(loc, base, value, ValueRange{idx},
                              /*count=*/count, pad);
+    eraseIfDeadPtrChain(ptr);
     return true;
   }
   return false;
