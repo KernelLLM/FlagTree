@@ -39,7 +39,6 @@ if(TRITON_BUILD_PYTHON_MODULE)
     MLIRTargetLLVMIRImport
     TleIR
     CommonIRIR
-    BiShengIRHIVMDialect
     # MLIRMeshDialect
     TritonTLETransforms
     TritonIR)
