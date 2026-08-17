@@ -10,7 +10,9 @@
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
 #include "ascend/include/AutoBlockify/Passes.h"
+#ifdef __TLE_DSA__
 #include "ascend/include/CommonIRToHIVM/Passes.h"
+#endif
 #include "ascend/include/Dialect/TritonAscend/IR/TritonAscendDialect.h"
 #include "ascend/include/TritonToAnnotation/Passes.h"
 #include "ascend/include/TritonToHFusion/Passes.h"
@@ -31,7 +33,9 @@
 
 #include <pybind11/pybind11.h>
 
+#ifdef __TLE_DSA__
 #include "llvm/Config/llvm-config.h"
+#endif
 
 namespace py = pybind11;
 using namespace ir;
@@ -389,9 +393,11 @@ void init_triton_ascend_passes_ttir(py::module &&m) {
     pm.addPass(mlir::triton::createTritonToHIVMPass());
   });
 
+#ifdef __TLE_DSA__
   m.def("add_commonir_to_hivm", [](mlir::PassManager &pm) {
     pm.addPass(mlir::triton::createCommonIRToHIVMPass());
   });
+#endif
 
   m.def("add_triton_to_llvm", [](mlir::PassManager &pm) {
     pm.addPass(mlir::triton::createTritonToLLVMPass());

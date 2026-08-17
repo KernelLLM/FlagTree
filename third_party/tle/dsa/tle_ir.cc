@@ -9,9 +9,11 @@
 
 #include "tle/dsa/dialect/include/IR/Dialect.h"
 
+#ifdef __TLE_DSA__
 #include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
+#endif
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
@@ -27,6 +29,7 @@ namespace py = pybind11;
 
 constexpr unsigned kIntegerAttrBitWidth = 64;
 
+#ifdef __TLE_DSA__
 // Convert an address-space attribute to a CommonIR MemorySpace enum. The DSA
 // layer passes a hivm::AddressSpaceAttr (from ascend's get_target_attribute);
 // decode it so buffers carry their real space (L1/L0A/...). Falls back to UB.
@@ -105,6 +108,7 @@ static mlir::triton::tile::MemorySpace attrToMemSpace(Attribute attr) {
 #endif
   return MS::UB;
 }
+#endif
 
 void init_tle_dsa_ir(py::module &&m) {
   m.def("load_dialects", [](MLIRContext &context) {
@@ -377,6 +381,7 @@ void init_tle_dsa_ir(py::module &&m) {
   // CommonIR builder methods — create tile.* dialect ops
   // ============================================================================
 
+#ifdef __TLE_DSA__
   // Helper: load CommonIR dialect into context
   m.def("load_tile_dialects", [](MLIRContext &context) {
     DialectRegistry registry;
@@ -543,4 +548,5 @@ void init_tle_dsa_ir(py::module &&m) {
       .def("create_tile_cube_wait", [](TritonOpBuilder &self) -> void {
         self.create<mlir::triton::tile::CubeWaitOp>();
       });
+#endif
 }
