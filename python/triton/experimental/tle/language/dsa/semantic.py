@@ -47,6 +47,7 @@ def copy(src, dst, shape: List[Union[tl.constexpr, int]], inter_no_alias: bool, 
 
 
 def _tile_buffer_binary_op(input: buffer, other: buffer, result: buffer, op_name: str, builder: ir.builder):
+    # commonir: route buffer arithmetic through tile.to_tensor/tile.store_tensor.
     lhs = tile_to_tensor(input, False, builder)
     rhs = tile_to_tensor(other, False, builder)
 

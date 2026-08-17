@@ -144,9 +144,8 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
             passes.common.add_cse(pm)
             passes.common.add_canonicalizer(pm)
 
+        # commonir: lower tile.* ops and inline unresolved !tile.buf signatures.
         ascend.passes.ttir.add_commonir_to_hivm(pm)
-        # some function signature contains !tile.buf which we did not resolve
-        # we just uses an inline pass instead
         passes.common.add_inliner(pm)
         passes.common.add_canonicalizer(pm)
 
