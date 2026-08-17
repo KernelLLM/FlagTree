@@ -8,12 +8,12 @@
 
 include "mlir/Pass/PassBase.td"
 
-def TileIRToHIVM : Pass<"tileir-to-hivm", "mlir::ModuleOp"> {
-  let summary = "Convert TileIR dialect to HIVM dialect";
-  let constructor = "triton::createTileIRToHIVMPass()";
+def CommonIRToHIVM : Pass<"commonir-to-hivm", "mlir::ModuleOp"> {
+  let summary = "Convert CommonIR dialect to HIVM dialect";
+  let constructor = "triton::createCommonIRToHIVMPass()";
   let dependentDialects = [
     "hivm::HIVMDialect",
-    "triton::tile::TileIRDialect",
+    "triton::tile::CommonIRDialect",
     "mlir::bufferization::BufferizationDialect",
     "mlir::memref::MemRefDialect",
     "mlir::tensor::TensorDialect",

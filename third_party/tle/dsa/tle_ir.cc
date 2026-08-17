@@ -9,7 +9,7 @@
 
 #include "tle/dsa/dialect/include/IR/Dialect.h"
 
-#include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
+#include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
 
@@ -27,7 +27,7 @@ namespace py = pybind11;
 
 constexpr unsigned kIntegerAttrBitWidth = 64;
 
-// Convert an address-space attribute to a TileIR MemorySpace enum. The DSA
+// Convert an address-space attribute to a CommonIR MemorySpace enum. The DSA
 // layer passes a hivm::AddressSpaceAttr (from ascend's get_target_attribute);
 // decode it so buffers carry their real space (L1/L0A/...). Falls back to UB.
 static mlir::triton::tile::MemorySpace attrToMemSpace(Attribute attr) {
@@ -374,18 +374,18 @@ void init_tle_dsa_ir(py::module &&m) {
            });
 
   // ============================================================================
-  // TileIR builder methods — create tile.* dialect ops
+  // CommonIR builder methods — create tile.* dialect ops
   // ============================================================================
 
-  // Helper: load TileIR dialect into context
+  // Helper: load CommonIR dialect into context
   m.def("load_tile_dialects", [](MLIRContext &context) {
     DialectRegistry registry;
-    registry.insert<mlir::triton::tile::TileIRDialect>();
+    registry.insert<mlir::triton::tile::CommonIRDialect>();
     context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
   });
 
-  // TileIR buffer / tensor type construction
+  // CommonIR buffer / tensor type construction
   tle_cls
       ->def("tile_get_buffer_type",
             [](TritonOpBuilder &self, std::vector<int64_t> &shape,
@@ -523,8 +523,8 @@ void init_tle_dsa_ir(py::module &&m) {
                  base.getType(), base, indexValues, strideValues);
              return op.getResult();
            })
-      // tile.cube_launch — async Cube matmul hook. The current TileIR op has no
-      // token result, so the matching wait is emitted as a standalone op.
+      // tile.cube_launch — async Cube matmul hook. The current CommonIR op has
+      // no token result, so the matching wait is emitted as a standalone op.
       .def("create_tile_cube_launch",
            [](TritonOpBuilder &self, Value &a, Value &b, Value &acc,
               Value &stageA, Value &stageB, Value &dst, bool transposeA,

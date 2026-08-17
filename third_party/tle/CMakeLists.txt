@@ -11,9 +11,9 @@ if(FLAGTREE_BACKEND STREQUAL "ascend")
   set(TLE_DSA_PLUGIN_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/dsa/tle_ir.cc)
   set(TLE_DSA_PLUGIN_DEPENDS
     TleDSATableGen
-    TileIRTableGen
-    TileIRAttrDefsIncGen
-    TileIRTypesIncGen)
+    CommonIRTableGen
+    CommonIRAttrDefsIncGen
+    CommonIRTypesIncGen)
   set(TLE_DSA_IR_DEPENDS TleDSATableGen)
   set(TLE_DSA_IR_LINK_LIBS TleDSAIR)
 endif()
@@ -38,7 +38,7 @@ if(TRITON_BUILD_PYTHON_MODULE)
     LINK_LIBS
     MLIRTargetLLVMIRImport
     TleIR
-    TileIRIR
+    CommonIRIR
     BiShengIRHIVMDialect
     # MLIRMeshDialect
     TritonTLETransforms

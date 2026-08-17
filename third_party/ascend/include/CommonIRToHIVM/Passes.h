@@ -31,11 +31,11 @@ class ModuleOp;
 
 namespace triton {
 
-/// Creates a pass to convert TileIR dialect to HIVM dialect.
-std::unique_ptr<OperationPass<ModuleOp>> createTileIRToHIVMPass();
+/// Creates a pass to convert CommonIR dialect to HIVM dialect.
+std::unique_ptr<OperationPass<ModuleOp>> createCommonIRToHIVMPass();
 
 #define GEN_PASS_REGISTRATION
-#include "ascend/include/TileIRToHIVM/Passes.h.inc"
+#include "ascend/include/CommonIRToHIVM/Passes.h.inc"
 
 } // namespace triton
 } // namespace mlir

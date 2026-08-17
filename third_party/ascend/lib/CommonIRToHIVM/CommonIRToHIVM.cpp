@@ -21,7 +21,8 @@
  */
 
 //===----------------------------------------------------------------------===//
-// TileIRToHIVM — Lowers TileIR dialect ops to HIVM (Ascend NPU) dialect ops.
+// CommonIRToHIVM — Lowers CommonIR dialect ops to HIVM (Ascend NPU) dialect
+// ops.
 //
 // Strategy: greedy rewrite runs patterns iteratively to fixed point.
 //   Step 1: tile.alloc → memref.alloc (produces memref with
@@ -37,10 +38,10 @@
 //   Step 5: sync ops → hivm sync ops
 //===----------------------------------------------------------------------===//
 
-#include "ascend/include/TileIRToHIVM/Passes.h"
+#include "ascend/include/CommonIRToHIVM/Passes.h"
 
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
-#include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
+#include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -64,8 +65,8 @@ namespace hivm = mlir::hivm;
 
 namespace mlir {
 namespace triton {
-#define GEN_PASS_DEF_TILEIRTOHIVM
-#include "ascend/include/TileIRToHIVM/Passes.h.inc"
+#define GEN_PASS_DEF_COMMONIRTOHIVM
+#include "ascend/include/CommonIRToHIVM/Passes.h.inc"
 } // namespace triton
 } // namespace mlir
 
@@ -116,9 +117,9 @@ static hivm::AddressSpace mapMemSpaceToHIVM(tile::MemorySpace tileSpace) {
   case tile::MemorySpace::Local:
   case tile::MemorySpace::Register:
     llvm_unreachable(
-        "unsupported generic memory space in TileIR-to-HIVM lowering");
+        "unsupported generic memory space in CommonIR-to-HIVM lowering");
   }
-  llvm_unreachable("unknown TileIR memory space");
+  llvm_unreachable("unknown CommonIR memory space");
 }
 
 static MemRefType convertBufToMemRef(tile::BufType bufTy) {
@@ -256,7 +257,7 @@ static hivm::PIPE mapPipe(int64_t tilePipe) {
   case tile::Pipe::PIPE_S:
     return hivm::PIPE::PIPE_S;
   }
-  llvm_unreachable("unknown TileIR pipe");
+  llvm_unreachable("unknown CommonIR pipe");
 }
 
 static hivm::EVENT mapEvent(int64_t tileEvent) {
@@ -767,13 +768,13 @@ struct FoldStagingCopyPattern : public OpRewritePattern<memref::CopyOp> {
 // Pass
 // =============================================================================
 namespace {
-struct TileIRToHIVMPass
-    : public mlir::triton::impl::TileIRToHIVMBase<TileIRToHIVMPass> {
+struct CommonIRToHIVMPass
+    : public mlir::triton::impl::CommonIRToHIVMBase<CommonIRToHIVMPass> {
   void runOnOperation() override;
 };
 } // namespace
 
-void TileIRToHIVMPass::runOnOperation() {
+void CommonIRToHIVMPass::runOnOperation() {
   auto module = getOperation();
 
   // Use greedy rewrite to iteratively apply patterns to fixed point.
@@ -877,6 +878,6 @@ void TileIRToHIVMPass::runOnOperation() {
 }
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::triton::createTileIRToHIVMPass() {
-  return std::make_unique<TileIRToHIVMPass>();
+mlir::triton::createCommonIRToHIVMPass() {
+  return std::make_unique<CommonIRToHIVMPass>();
 }

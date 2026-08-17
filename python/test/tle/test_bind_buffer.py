@@ -197,33 +197,33 @@ def assert_no_legacy_dsa_memory_ir(mlir):
     assert "#hivm.address_space" not in mlir
 
 
-def assert_public_dsa_uses_tileir(mlir):
+def assert_public_dsa_uses_commonir(mlir):
     assert "tile.alloc" in mlir
     assert "tile.to_tensor" in mlir
     assert_no_legacy_dsa_memory_ir(mlir)
 
 
-def test_bind_buffer_tileir():
+def test_bind_buffer_commonir():
     mlir = compile_kernel(bind_buffer, {}, {})
-    assert_public_dsa_uses_tileir(mlir)
+    assert_public_dsa_uses_commonir(mlir)
 
 
-def test_copy_buffer_tileir():
+def test_copy_buffer_commonir():
     mlir = compile_kernel(copy_buffer, {"x": "*fp32"}, {})
-    assert_public_dsa_uses_tileir(mlir)
+    assert_public_dsa_uses_commonir(mlir)
     assert "tile.copy" in mlir
     assert "!tile.buf" in mlir
     assert "tle.dsa_copy" not in mlir
 
 
-def test_subview_buffer_tileir():
+def test_subview_buffer_commonir():
     mlir = compile_kernel(subview_buffer, {}, {})
-    assert_public_dsa_uses_tileir(mlir)
+    assert_public_dsa_uses_commonir(mlir)
     assert "tile.subview" in mlir
     assert "tle.dsa_subview" not in mlir
 
 
-def test_to_buffer_tileir():
+def test_to_buffer_commonir():
     mlir = compile_kernel(to_buffer_tensor, {"x": "*fp32"}, {})
     assert "tile.alloc" in mlir
     assert "tile.store_tensor" in mlir
@@ -233,15 +233,15 @@ def test_to_buffer_tileir():
     assert "tle.dsa_to_buffer" not in mlir
 
 
-def test_add_buffer_tileir():
+def test_add_buffer_commonir():
     mlir = compile_kernel(add_buffer, {"x": "*fp32", "y": "*fp32", "out": "*fp32"}, {})
-    assert_public_dsa_uses_tileir(mlir)
+    assert_public_dsa_uses_commonir(mlir)
     assert "tile.store_tensor" in mlir
     assert "arith.addf" in mlir
     assert "tle.dsa_add" not in mlir
 
 
-def test_binary_buffer_tileir_ops():
+def test_binary_buffer_commonir_ops():
     op_cases = [
         (0, "add", "arith.addf"),
         (1, "sub", "arith.subf"),
@@ -253,7 +253,7 @@ def test_binary_buffer_tileir_ops():
     signature = {"x": "*fp32", "y": "*fp32", "out": "*fp32"}
     for op_id, op_name, arith_op in op_cases:
         mlir = compile_kernel(binary_buffer, signature, {"OP_ID": op_id})
-        assert_public_dsa_uses_tileir(mlir)
+        assert_public_dsa_uses_commonir(mlir)
         assert "tile.store_tensor" in mlir
         assert arith_op in mlir
         assert f"tle.dsa_{op_name}" not in mlir
@@ -274,7 +274,7 @@ def test_tensor_slice_ops_verify():
 
 def test_top_level_tile_dsl_exports():
     mlir = compile_kernel(top_level_tile_dsl, {"x": "*fp32"}, {})
-    assert_public_dsa_uses_tileir(mlir)
+    assert_public_dsa_uses_commonir(mlir)
     assert "tile.copy" in mlir
     assert "tile.pipe_barrier" in mlir
     assert "tle.dsa_copy" not in mlir
@@ -282,7 +282,7 @@ def test_top_level_tile_dsl_exports():
 
 def test_tle_scope_emits_scope_op():
     mlir = compile_kernel(tle_scope_region, {"x": "*fp32"}, {})
-    assert_public_dsa_uses_tileir(mlir)
+    assert_public_dsa_uses_commonir(mlir)
     assert "tile.copy" in mlir
     assert "scope.scope" in mlir
     assert "tcore_type = #hivm.tcore_type<CUBE>" in mlir
@@ -290,7 +290,7 @@ def test_tle_scope_emits_scope_op():
 
 def test_subview_constexpr_sizes_stay_ranked():
     mlir = compile_kernel(subview_constexpr_buffer, {}, {"SIZE": 32})
-    assert_public_dsa_uses_tileir(mlir)
+    assert_public_dsa_uses_commonir(mlir)
     assert "tile.subview" in mlir
     assert "[[32, 32]]" in mlir
     assert "tensor<32x32xf32>" in mlir
@@ -300,7 +300,7 @@ def test_subview_constexpr_sizes_stay_ranked():
 def test_buffer_method_subview_multibuffer_preserves_slot_dim():
     mlir = compile_kernel(method_subview_multibuffer, {}, {})
     compact_mlir = mlir.replace(" ", "")
-    assert_public_dsa_uses_tileir(mlir)
+    assert_public_dsa_uses_commonir(mlir)
     assert "tile.subview" in mlir
     assert "[[1, 64, 128]]" in mlir
     assert "<[1,64,128],f32,ub>" in compact_mlir
@@ -356,9 +356,9 @@ if __name__ == "__main__":
     cube_launch_mlir = compile_kernel(cube_launch_wait, {"out": "*fp32"}, {})
     sync_flags_mlir = compile_kernel(tile_sync_flags, {}, {})
     gm_offset_mlir = compile_kernel(gm_offset_copy, {"x": "*fp32", "out": "*fp32"}, {"BLOCK": 32})
-    assert_public_dsa_uses_tileir(bind_mlir)
-    assert_public_dsa_uses_tileir(copy_mlir)
-    assert_public_dsa_uses_tileir(subview_mlir)
+    assert_public_dsa_uses_commonir(bind_mlir)
+    assert_public_dsa_uses_commonir(copy_mlir)
+    assert_public_dsa_uses_commonir(subview_mlir)
     assert "tile.copy" in copy_mlir
     assert "!tile.buf" in copy_mlir
     assert "tle.dsa_copy" not in copy_mlir

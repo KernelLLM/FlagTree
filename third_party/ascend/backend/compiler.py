@@ -144,7 +144,7 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
             passes.common.add_cse(pm)
             passes.common.add_canonicalizer(pm)
 
-        ascend.passes.ttir.add_tileir_to_hivm(pm)
+        ascend.passes.ttir.add_commonir_to_hivm(pm)
         # some function signature contains !tile.buf which we did not resolve
         # we just uses an inline pass instead
         passes.common.add_inliner(pm)
@@ -164,7 +164,7 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
         ascend.passes.ttir.add_triton_to_linalg(pm, False, named_ops, enable_nd2nz_on_vector, enable_select_analysis,
                                                 compile_on_910_95)
 
-        ascend.passes.ttir.add_tileir_to_hivm(pm)
+        ascend.passes.ttir.add_commonir_to_hivm(pm)
         passes.common.add_canonicalizer(pm)
         passes.common.add_cse(pm)
         passes.common.add_symbol_dce(pm)

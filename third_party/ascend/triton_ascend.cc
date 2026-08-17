@@ -10,8 +10,8 @@
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
 #include "ascend/include/AutoBlockify/Passes.h"
+#include "ascend/include/CommonIRToHIVM/Passes.h"
 #include "ascend/include/Dialect/TritonAscend/IR/TritonAscendDialect.h"
-#include "ascend/include/TileIRToHIVM/Passes.h"
 #include "ascend/include/TritonToAnnotation/Passes.h"
 #include "ascend/include/TritonToHFusion/Passes.h"
 #include "ascend/include/TritonToHIVM/Passes.h"
@@ -393,8 +393,8 @@ void init_triton_ascend_passes_ttir(py::module &&m) {
     pm.addPass(mlir::triton::createTritonToHIVMPass());
   });
 
-  m.def("add_tileir_to_hivm", [](mlir::PassManager &pm) {
-    pm.addPass(mlir::triton::createTileIRToHIVMPass());
+  m.def("add_commonir_to_hivm", [](mlir::PassManager &pm) {
+    pm.addPass(mlir::triton::createCommonIRToHIVMPass());
   });
 
   m.def("add_triton_to_llvm", [](mlir::PassManager &pm) {
