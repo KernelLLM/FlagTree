@@ -640,6 +640,8 @@ def _compile_linalg_to_npu_bin(linalg: str, metadata, opt):
         metadata["disable_auto_inject_block_sync"] = True
         metadata["disable_auto_cv_work_space_manage"] = True
 
+    # commonir: disable several passes of bisheng compiler
+    # as we want to lift cv pipeline to kernel level
     if _USE_CUSTOM_COMPILE_OPT is not None:
         metadata["num_stages"] = 1
         metadata["multibuffer"] = False
