@@ -133,11 +133,11 @@ def _mm1_qkt(
     # satisfying the SSA phi-node type constraint.
     q_l1 = tl.zeros((BLOCK_M, DIM), Q.dtype.element_ty)
     # reload Q at the first task of each output tile
-    if idx_in_conbine == 0:
-        q_row_offs = global_head_idx * BLOCK_M + tl.arange(0, BLOCK_M)
-        q_col_offs = tl.arange(0, DIM)
-        q_ptr = (Q + batch_idx * sQb + head_idx * sQh + q_row_offs[:, None] * sQs + q_col_offs[None, :] * sQd)
-        q_l1 = tl.load(q_ptr)
+    #if idx_in_conbine == 0:
+    q_row_offs = global_head_idx * BLOCK_M + tl.arange(0, BLOCK_M)
+    q_col_offs = tl.arange(0, DIM)
+    q_ptr = (Q + batch_idx * sQb + head_idx * sQh + q_row_offs[:, None] * sQs + q_col_offs[None, :] * sQd)
+    q_l1 = tl.load(q_ptr)
 
     for cb_idx in range(CB):
         kv_idx = idx_in_conbine * CB + cb_idx
