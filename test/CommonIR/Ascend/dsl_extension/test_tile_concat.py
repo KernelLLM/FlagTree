@@ -5,6 +5,7 @@ These tests demonstrate the usage of tle.tile_concat for sinkhorn optimization,
 showing how to combine small tensors into larger ones for better SIMD utilization.
 """
 
+import torch
 import triton
 import triton.language as tl
 import triton.experimental.tle.language.dsa as tle
@@ -160,6 +161,94 @@ def concat_with_compute(
     tl.store(out_ptr + tl.arange(0, 2*N), result, mask=tl.arange(0, 2*N) < 2*N)
 
 
+# ---------------------------------------------------------------------------
+# 精度测试: 运行上面定义的 kernel, 与 torch 参考结果对比
+# 运行: python test_tile_concat.py
+# ---------------------------------------------------------------------------
+DEVICE = "npu"
+
+
+def _check(name, actual, ref, rtol=1e-3, atol=1e-3):
+    """对比 kernel 输出与参考结果, 通过打印 ✅, 失败打印 ❌ 但不中断。"""
+    try:
+        torch.testing.assert_close(actual.cpu(), ref.cpu(), rtol=rtol, atol=atol)
+        print(f"✅ {name}")
+        return True
+    except Exception as e:
+        print(f"❌ {name}: {type(e).__name__}: {e}")
+        return False
+
+
+def run_precision_tests():
+    torch.manual_seed(0)
+    grid = (1,)
+    results = []
+
+    # 1D concat: <N> + <N> -> <2N>
+    N = 128
+    x = torch.randn(N, dtype=torch.float32, device=DEVICE)
+    y = torch.randn(N, dtype=torch.float32, device=DEVICE)
+    z = torch.zeros(2 * N, dtype=torch.float32, device=DEVICE)
+    concat_kernel_1d[grid](x, y, z, N=N)
+    results.append(_check("concat_kernel_1d", z, torch.cat([x, y], dim=0)))
+
+    # 2D concat dim=0: <1xN> + <1xN> -> <2xN>
+    x2 = torch.randn(1, N, dtype=torch.float32, device=DEVICE)
+    y2 = torch.randn(1, N, dtype=torch.float32, device=DEVICE)
+    z2 = torch.zeros(2, N, dtype=torch.float32, device=DEVICE)
+    concat_kernel_2d[grid](x2, y2, z2, N=N)
+    results.append(_check("concat_kernel_2d", z2, torch.cat([x2, y2], dim=0)))
+
+    # sinkhorn: cat([row_0, row_1], 0) * rcp_sum
+    BLK = 4
+    row = torch.randn(2 * BLK, dtype=torch.float32, device=DEVICE)
+    rcp = torch.randn(1, dtype=torch.float32, device=DEVICE)
+    out_s = torch.zeros(2, BLK, dtype=torch.float32, device=DEVICE)
+    sinkhorn_concat_pattern[grid](row, out_s, rcp, BLOCK_SIZE=BLK)
+    ref_s = torch.cat([row[:BLK].reshape(1, BLK), row[BLK:].reshape(1, BLK)], dim=0) * rcp
+    results.append(_check("sinkhorn_concat_pattern", out_s, ref_s))
+
+    # chain: cat([a, b, c, d], 0)
+    Nc = 64
+    a = torch.randn(Nc, dtype=torch.float32, device=DEVICE)
+    b = torch.randn(Nc, dtype=torch.float32, device=DEVICE)
+    c = torch.randn(Nc, dtype=torch.float32, device=DEVICE)
+    d = torch.randn(Nc, dtype=torch.float32, device=DEVICE)
+    out_c = torch.zeros(4 * Nc, dtype=torch.float32, device=DEVICE)
+    concat_chain_pattern[grid](a, b, c, d, out_c, N=Nc)
+    results.append(_check("concat_chain_pattern", out_c, torch.cat([a, b, c, d], dim=0)))
+
+    # compute: exp(cat([x, y], 0) * scale)
+    xw = torch.randn(N, dtype=torch.float32, device=DEVICE)
+    yw = torch.randn(N, dtype=torch.float32, device=DEVICE)
+    scale = torch.randn(2 * N, dtype=torch.float32, device=DEVICE)
+    out_w = torch.zeros(2 * N, dtype=torch.float32, device=DEVICE)
+    concat_with_compute[grid](xw, yw, scale, out_w, N=N)
+    ref_w = torch.exp(torch.cat([xw, yw], dim=0) * scale)
+    results.append(_check("concat_with_compute", out_w, ref_w))
+
+    # f16: cat([x, y], 0), 半精度放宽容差
+    xf = torch.randn(N, dtype=torch.float32, device=DEVICE)
+    yf = torch.randn(N, dtype=torch.float32, device=DEVICE)
+    out_f = torch.zeros(2 * N, dtype=torch.float16, device=DEVICE)
+    concat_f16_pattern[grid](xf, yf, out_f, N=N)
+    ref_f = torch.cat([xf.half(), yf.half()], dim=0)
+    results.append(_check("concat_f16_pattern", out_f, ref_f, rtol=1e-2, atol=1e-2))
+
+    # dim=1: <MxN> + <MxN> -> <Mx2N>
+    M, Nd = 32, 64
+    xd = torch.randn(M, Nd, dtype=torch.float32, device=DEVICE)
+    yd = torch.randn(M, Nd, dtype=torch.float32, device=DEVICE)
+    out_d = torch.zeros(M, 2 * Nd, dtype=torch.float32, device=DEVICE)
+    concat_dim1_pattern[grid](xd, yd, out_d, M=M, N=Nd)
+    results.append(_check("concat_dim1_pattern", out_d, torch.cat([xd, yd], dim=1)))
+
+    passed = sum(results)
+    print("-" * 60)
+    print(f"精度测试: {passed}/{len(results)} 通过")
+    return passed == len(results)
+
+
 @triton.jit
 def concat_f16_pattern(
     x_ptr, y_ptr,
@@ -204,3 +293,8 @@ def concat_dim1_pattern(
     # Store result
     out_offs = tl.arange(0, M)[:, None] * (2*N) + tl.arange(0, 2*N)[None, :]
     tl.store(out_ptr + out_offs, z, mask=out_offs < M*2*N)
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(0 if run_precision_tests() else 1)
