@@ -58,10 +58,10 @@ SEM_PV_FREE: tl.constexpr = tl.constexpr(5)  # V -> C : workspace_pv slot free
 # =============================================================================
 #  Compile-time configuration
 # =============================================================================
-NUM_CORES = 24
+NUM_CORES = 20
 BLOCK_M = 32
 BLOCK_N = 32
-DIM = 32
+DIM = 64
 
 # constexpr shape literals for tile.copy (semantic.copy runs scalar_constant on
 # each extent, which requires tl.constexpr rather than a plain int).
