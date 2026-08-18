@@ -66,7 +66,7 @@ from triton.runtime import driver
 from triton.runtime.cache import get_dump_manager
 from triton.tools.get_ascend_devices import is_compile_on_910_95
 
-# Environment variable to override compile options with a fixed custom set.
+# commonir: Environment variable to override compile options with a fixed custom set.
 # When set to "1", metadata compile options are replaced with predefined values
 # that disable most automatic optimizations (useful for debugging/validation).
 _USE_CUSTOM_COMPILE_OPT = os.environ.get("USE_CUSTOM_COMPILE_OPT", None) or os.environ.get(
@@ -89,10 +89,11 @@ def make_ttir(mod, metadata, opt):
     passes.common.add_canonicalizer(pm)
     passes.ttir.add_reorder_broadcast(pm)
     passes.common.add_cse(pm)
-    # NOTE: LICM is intentionally omitted — it hoists tile.to_tensor above
+    # commonir: NOTE: LICM is intentionally omitted — it hoists tile.to_tensor above
     # tile.copy in loops, breaking the read-after-write ordering required by
     # Ascend's buffer semantics. This causes "operand does not dominate this use"
     # errors in bishengir downstream.
+    # passes.common.add_licm(pm)
     passes.common.add_symbol_dce(pm)
     passes.ttir.add_loop_unroll(pm)
     pm.run(mod)
