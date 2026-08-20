@@ -4,9 +4,6 @@
 #include "triton/Dialect/Triton/IR/Types.h"
 #include "triton/Dialect/Triton/IR/Utility.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
-#ifdef __FLIR_TILEIR__
-#include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
-#endif
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include <cctype>
@@ -274,24 +271,12 @@ static LogicalResult verifyPipeAttrs(Operation *op, OperandRange fields) {
   if (fields.empty())
     return op->emitOpError("expects at least one pipe field");
   for (Value field : fields) {
-    ArrayRef<int64_t> shape;
-    if (auto type = dyn_cast<triton::gpu::MemDescType>(field.getType())) {
-      if (!isa<triton::gpu::SharedMemorySpaceAttr>(type.getMemorySpace()))
-        return op->emitOpError("expects only shared-memory pipe fields");
-      shape = type.getShape();
-#ifdef __FLIR_TILEIR__
-    } else if (auto type = dyn_cast<triton::tile::BufType>(field.getType())) {
-      if (type.getMemorySpace() != triton::tile::MemorySpace::Shared)
-        return op->emitOpError("expects only shared-memory pipe fields");
-      shape = type.getShape();
-#endif
-    } else {
-      return op->emitOpError(
-          "expects pipe fields to be TileIR buffers or ttg.memdesc values");
-    }
-    if (shape.size() < 2)
+    auto type = cast<triton::gpu::MemDescType>(field.getType());
+    if (!isa<triton::gpu::SharedMemorySpaceAttr>(type.getMemorySpace()))
+      return op->emitOpError("expects only shared-memory pipe fields");
+    if (type.getRank() < 2)
       return op->emitOpError("expects pipe fields to have rank >= 2");
-    if (shape[0] != capacity)
+    if (type.getShape()[0] != capacity)
       return op->emitOpError("expects field leading dimension to equal "
                              "pipe capacity");
   }

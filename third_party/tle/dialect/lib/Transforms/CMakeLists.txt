@@ -1,6 +1,5 @@
 # flagtree tle
 add_triton_library(TritonTLETransforms
-  TleConvertGpuTileToTtgir.cpp
   TleEarlyAssignMemorySpace.cpp
   TleSelectEncodings.cpp
   TleInsertLocalPointerBarriers.cpp
@@ -37,10 +36,6 @@ add_triton_library(TritonTLETransforms
   TritonIR
   NVWSIR
 )
-
-if(TARGET TileIRIR)
-  target_link_libraries(TritonTLETransforms PUBLIC TileIRIR)
-endif()
 
 target_include_directories(TritonTLETransforms PUBLIC
   ${CMAKE_SOURCE_DIR}/third_party/tle/dialect/include

@@ -101,7 +101,7 @@ def dump_tileir(path):
 def dump_ttir(path):
     from triton._C.libtriton import ir
     from triton._C.libtriton import passes
-    from triton._C.libtriton import tle as tle_ir
+    from triton._C.libtriton import nvidia
 
     constants = {
         "BLOCK_M": 16,
@@ -127,7 +127,7 @@ def dump_ttir(path):
     passes.common.add_inliner(pm)
     pm.run(module, "native_matmul_gpu.inliner")
     pm = ir.pass_manager(module.context)
-    tle_ir.passes.add_convert_gpu_tile_to_ttgir(pm)
+    nvidia.passes.commonir.add_to_ttgir(pm)
     pm.run(module, "native_matmul_gpu.tileir_to_ttgir")
     text = str(module)
     for needle in ("tile.alloc", "tile.copy", "tile.to_tensor", "tile.store_tensor"):

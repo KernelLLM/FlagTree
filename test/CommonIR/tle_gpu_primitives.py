@@ -66,6 +66,7 @@ def dump_tileir(path):
             "tile.copy",
             "tile.subview",
             "tile.local_ptr",
+            "tile.get_memdesc",
             "tle.pipe.create",
             "tle.pipe.writer_acquire",
             "tle.pipe.reader_wait",
@@ -79,17 +80,17 @@ def dump_tileir(path):
 def dump_ttir(path):
     from triton._C.libtriton import ir
     from triton._C.libtriton import passes
-    from triton._C.libtriton import tle as tle_ir
+    from triton._C.libtriton import nvidia
 
     module = _frontend_module()
     pm = ir.pass_manager(module.context)
     passes.common.add_inliner(pm)
     pm.run(module, "tle_gpu_primitives.inliner")
     pm = ir.pass_manager(module.context)
-    tle_ir.passes.add_convert_gpu_tile_to_ttgir(pm)
+    nvidia.passes.commonir.add_to_ttgir(pm)
     pm.run(module, "tle_gpu_primitives.tileir_to_ttgir")
     text = str(module)
-    for needle in ("tile.alloc", "tile.copy", "tile.subview", "tile.local_ptr"):
+    for needle in ("tile.alloc", "tile.copy", "tile.subview", "tile.local_ptr", "tile.get_memdesc"):
         if needle in text:
             raise RuntimeError(f"primitive converted TTIR still contains {needle}")
     for needle in ("ttg.local_alloc", "ttg.memdesc_index", "tle.local_pointers", "tle.pipe.create"):
