@@ -2,7 +2,7 @@
 //
 // Copyright (c) 2025 The FlagOS Contributors
 
-#include "tle/dialect/include/Transforms/Passes.h"
+#include "nvidia/include/CommonIRToTTGIR/Passes.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -10,20 +10,17 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
 
-#ifdef __FLIR_TILEIR__
 #include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
-#endif
 
-namespace mlir::triton::tle {
+namespace mlir::triton {
 
-#define GEN_PASS_DEF_TRITONTLECONVERTGPUTILETOTTGIR
-#include "tle/dialect/include/Transforms/Passes.h.inc"
+#define GEN_PASS_DEF_COMMONIRTOTTGIR
+#include "nvidia/include/CommonIRToTTGIR/Passes.h.inc"
 
 namespace {
 
-#ifdef __FLIR_TILEIR__
 namespace tile = mlir::triton::tile;
 namespace ttg = mlir::triton::gpu;
 
@@ -56,6 +53,101 @@ static FailureOr<Value> lookupBuffer(Operation *op, Value buffer,
     return failure();
   }
   return it->second;
+}
+
+static FailureOr<ttg::MemDescType> inferMemDescType(
+    ModuleOp module, triton::FuncOp func, BlockArgument argument,
+    const llvm::DenseMap<Value, Value> &mapped) {
+  ttg::MemDescType inferred;
+  for (Operation *user : argument.getUsers()) {
+    auto bridge = dyn_cast<tile::GetMemDescOp>(user);
+    if (!bridge || bridge.getSource() != argument)
+      continue;
+    auto type = cast<ttg::MemDescType>(bridge.getResult().getType());
+    if (inferred && inferred != type) {
+      bridge.emitError("conflicting descriptor types for the same TileIR buffer");
+      return failure();
+    }
+    inferred = type;
+  }
+  if (!inferred) {
+    unsigned argumentNumber = argument.getArgNumber();
+    module.walk([&](triton::CallOp call) {
+      if (inferred || module.lookupSymbol<triton::FuncOp>(call.getCallee()) != func ||
+          argumentNumber >= call.getNumOperands())
+        return;
+      Value operand = call.getOperand(argumentNumber);
+      auto it = mapped.find(operand);
+      if (it != mapped.end())
+        operand = it->second;
+      inferred = dyn_cast<ttg::MemDescType>(operand.getType());
+    });
+  }
+  if (!inferred) {
+    emitError(argument.getLoc())
+        << "cannot infer a TritonGPU descriptor type for TileIR block argument";
+    return failure();
+  }
+  return inferred;
+}
+
+static LogicalResult convertFunctionArguments(
+    ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
+    llvm::DenseMap<Value, Type> &convertedArgumentTypes,
+    SmallVectorImpl<UnrealizedConversionCastOp> &argumentCasts) {
+  for (auto func : module.getOps<triton::FuncOp>()) {
+    if (func.getBody().empty())
+      continue;
+    Block &entry = func.getBody().front();
+    for (BlockArgument argument : entry.getArguments()) {
+      if (!isa<tile::BufType>(argument.getType()))
+        continue;
+      auto type = inferMemDescType(module, func, argument, mapped);
+      if (failed(type))
+        return failure();
+      OpBuilder builder(func.getContext());
+      builder.setInsertionPointToStart(&entry);
+      auto cast = builder.create<UnrealizedConversionCastOp>(
+          argument.getLoc(), TypeRange{*type}, ValueRange{argument});
+      mapped[argument] = cast.getResult(0);
+      convertedArgumentTypes[argument] = *type;
+      argumentCasts.push_back(cast);
+    }
+  }
+  return success();
+}
+
+static LogicalResult convertWarpSpecializeCaptures(
+    ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
+    llvm::DenseMap<Value, Type> &convertedArgumentTypes,
+    SmallVectorImpl<UnrealizedConversionCastOp> &argumentCasts) {
+  bool failedConversion = false;
+  module.walk([&](ttg::WarpSpecializeOp op) {
+    if (failedConversion)
+      return;
+    auto captures = op.getExplicitCaptures();
+    for (Region *region : op.getPartitionRegions()) {
+      for (auto [index, capture] : llvm::enumerate(captures)) {
+        BlockArgument argument = region->getArgument(index);
+        if (!isa<tile::BufType>(argument.getType()))
+          continue;
+        auto converted = lookupBuffer(op, capture, mapped);
+        if (failed(converted)) {
+          failedConversion = true;
+          return;
+        }
+        OpBuilder builder(op.getContext());
+        builder.setInsertionPointToStart(&region->front());
+        auto cast = builder.create<UnrealizedConversionCastOp>(
+            argument.getLoc(), TypeRange{(*converted).getType()},
+            ValueRange{argument});
+        mapped[argument] = cast.getResult(0);
+        convertedArgumentTypes[argument] = (*converted).getType();
+        argumentCasts.push_back(cast);
+      }
+    }
+  });
+  return failure(failedConversion);
 }
 
 static bool isPointerLike(Type type) {
@@ -166,6 +258,42 @@ static LogicalResult convertAllocations(
   return failure(result.wasInterrupted());
 }
 
+static void rewriteConvertedOperands(
+    ModuleOp module, const llvm::DenseMap<Value, Value> &mapped) {
+  module.walk([&](Operation *op) {
+    if (isa<tile::AllocOp, tile::SubViewOp, tile::LocalPtrOp, tile::CopyOp,
+            tile::ToTensorOp, tile::StoreTensorOp, tile::GetMemDescOp,
+            UnrealizedConversionCastOp>(op))
+      return;
+    for (OpOperand &operand : op->getOpOperands()) {
+      auto it = mapped.find(operand.get());
+      if (it != mapped.end())
+        operand.set(it->second);
+    }
+  });
+}
+
+static void finalizeConvertedArguments(
+    ModuleOp module, const llvm::DenseMap<Value, Type> &convertedArgumentTypes,
+    ArrayRef<UnrealizedConversionCastOp> argumentCasts) {
+  for (auto [value, type] : convertedArgumentTypes)
+    cast<BlockArgument>(value).setType(type);
+
+  for (UnrealizedConversionCastOp cast : argumentCasts) {
+    cast.getResult(0).replaceAllUsesWith(cast.getInputs().front());
+    cast.erase();
+  }
+
+  for (auto func : module.getOps<triton::FuncOp>()) {
+    if (func.getBody().empty())
+      continue;
+    SmallVector<Type> inputTypes(func.getBody().front().getArgumentTypes());
+    SmallVector<Type> resultTypes(func.getResultTypes());
+    func.setFunctionType(
+        FunctionType::get(func.getContext(), inputTypes, resultTypes));
+  }
+}
+
 static LogicalResult convertSubviews(
     ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
     SmallVectorImpl<Operation *> &eraseOps) {
@@ -239,6 +367,17 @@ static LogicalResult convertTileUsers(
       return;
     }
 
+    if (auto op = dyn_cast<tile::GetMemDescOp>(operation)) {
+      auto source = lookupBuffer(op, op.getSource(), mapped);
+      if (failed(source)) {
+        failedConversion = true;
+        return;
+      }
+      op.getResult().replaceAllUsesWith(*source);
+      eraseOps.push_back(op);
+      return;
+    }
+
     if (auto op = dyn_cast<tile::ToTensorOp>(operation)) {
       auto source = lookupBuffer(op, op.getSrc(), mapped);
       if (failed(source)) {
@@ -287,18 +426,7 @@ static LogicalResult convertTileUsers(
       }
 
       builder.setInsertionPoint(op);
-      if (!op.getIndices().empty()) {
-        SmallVector<Value> indices;
-        for (Value index : op.getIndices()) {
-          auto converted = castToI32(builder, op.getLoc(), index);
-          if (failed(converted)) {
-            failedConversion = true;
-            return;
-          }
-          indices.push_back(*converted);
-        }
-        builder.create<ttg::TMACopyOp>(op.getLoc(), src, dst, indices);
-      } else if (isa<ttg::MemDescType>(dst.getType())) {
+      if (isa<ttg::MemDescType>(dst.getType())) {
         Value value = src;
         if (isPointerLike(src.getType()))
           value = builder.create<triton::LoadOp>(
@@ -344,43 +472,29 @@ static LogicalResult convertTileUsers(
   return failure(failedConversion);
 }
 
-static LogicalResult rewritePipeOperands(
-    ModuleOp module, const llvm::DenseMap<Value, Value> &mapped) {
-  bool failedConversion = false;
-  module.walk([&](Operation *op) {
-    if (!op->getName().getStringRef().starts_with("tle.pipe."))
-      return;
-    for (OpOperand &operand : op->getOpOperands()) {
-      if (!isa<tile::BufType>(operand.get().getType()))
-        continue;
-      auto converted = lookupBuffer(op, operand.get(), mapped);
-      if (failed(converted)) {
-        failedConversion = true;
-        return;
-      }
-      operand.set(*converted);
-    }
-  });
-  return failure(failedConversion);
-}
-#endif
-
-class ConvertGpuTileToTtgirPass
-    : public impl::TritonTleConvertGpuTileToTtgirBase<
-          ConvertGpuTileToTtgirPass> {
+class CommonIRToTTGIRPass
+    : public impl::CommonIRToTTGIRBase<CommonIRToTTGIRPass> {
   void runOnOperation() override {
-#ifdef __FLIR_TILEIR__
     ModuleOp module = getOperation();
     llvm::DenseMap<Value, Value> mapped;
+    llvm::DenseMap<Value, Type> convertedArgumentTypes;
     SmallVector<Operation *> eraseOps;
+    SmallVector<UnrealizedConversionCastOp> argumentCasts;
 
     if (failed(convertAllocations(module, mapped, eraseOps)) ||
+        failed(convertWarpSpecializeCaptures(module, mapped,
+                                             convertedArgumentTypes,
+                                             argumentCasts)) ||
+        failed(convertFunctionArguments(module, mapped,
+                                        convertedArgumentTypes,
+                                        argumentCasts)) ||
         failed(convertSubviews(module, mapped, eraseOps)) ||
-        failed(convertTileUsers(module, mapped, eraseOps)) ||
-        failed(rewritePipeOperands(module, mapped))) {
+        failed(convertTileUsers(module, mapped, eraseOps))) {
       signalPassFailure();
       return;
     }
+
+    rewriteConvertedOperands(module, mapped);
 
     for (Operation *op : llvm::reverse(eraseOps)) {
       if (llvm::any_of(op->getResults(),
@@ -392,20 +506,22 @@ class ConvertGpuTileToTtgirPass
       op->erase();
     }
 
+    finalizeConvertedArguments(module, convertedArgumentTypes, argumentCasts);
+
     bool hasRemainingGpuTileOps = false;
     module.walk([&](Operation *op) {
       if (isa<tile::AllocOp, tile::SubViewOp, tile::LocalPtrOp,
-              tile::CopyOp, tile::ToTensorOp, tile::StoreTensorOp>(op)) {
+              tile::CopyOp, tile::ToTensorOp, tile::StoreTensorOp,
+              tile::GetMemDescOp>(op)) {
         op->emitError("was not eliminated by GPU TileIR conversion");
         hasRemainingGpuTileOps = true;
       }
     });
     if (hasRemainingGpuTileOps)
       signalPassFailure();
-#endif
   }
 };
 
 } // namespace
 
-} // namespace mlir::triton::tle
+} // namespace mlir::triton

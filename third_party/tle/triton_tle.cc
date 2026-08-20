@@ -111,7 +111,6 @@ static tile::MemorySpace attrToTileMemSpace(Attribute attr) {
 #endif
 
 void init_triton_tle_ir(py::module &&m) {
-
   // Get the existing builder class from the main ir module (TLX style)
   auto &builder_cls = *ir::getBuilderClass();
 
@@ -256,9 +255,9 @@ void init_triton_tle_ir(py::module &&m) {
            })
       .def("create_tile_copy",
            [](TritonOpBuilder &self, Value &src, Value &dst,
-              std::vector<Value> &indices, bool interNoAlias) -> void {
+              bool interNoAlias) -> void {
              auto op = self.create<tile::CopyOp>(
-                 src, dst, indices, /*engine=*/tile::EngineAttr(),
+                 src, dst, /*engine=*/tile::EngineAttr(),
                  /*src_layout=*/tile::LayoutAttr::get(
                      self.getBuilder().getContext(), tile::Layout::ND),
                  /*dst_nz_layout=*/tile::NZLayoutAttr(),
@@ -266,6 +265,10 @@ void init_triton_tle_ir(py::module &&m) {
                  /*comment=*/mlir::StringAttr());
              if (interNoAlias)
                op->setAttr("inter_no_alias", self.getBuilder().getBoolAttr(true));
+           })
+      .def("create_tile_get_memdesc",
+           [](TritonOpBuilder &self, Type resultTy, Value source) -> Value {
+             return self.create<tile::GetMemDescOp>(resultTy, source);
            })
       .def("create_tile_subview",
            [](TritonOpBuilder &self, Value source, std::vector<Value> &offsets,
@@ -612,8 +615,6 @@ void init_triton_tle_ir(py::module &&m) {
 }
 
 void init_triton_tle_passes(py::module &&m) {
-  ADD_PASS_WRAPPER_0("add_convert_gpu_tile_to_ttgir",
-                     tle::createTritonTleConvertGpuTileToTtgir);
   ADD_PASS_WRAPPER_0("add_early_assign_memory_space",
                      tle::createTritonTleEarlyAssignMemorySpace);
   ADD_PASS_WRAPPER_0("add_select_encodings",
@@ -712,6 +713,14 @@ void init_llvm(py::module &&m) {
 }
 
 void init_triton_tle(py::module &&m) {
+  m.def("is_common_ir_enabled", []() {
+#ifdef FLAGTREE_COMMON_IR
+    return true;
+#else
+    return false;
+#endif
+  });
+
   // load dialects
   m.def("load_dialects", [](mlir::MLIRContext &context) {
     mlir::DialectRegistry registry;

@@ -101,7 +101,7 @@ def Tle_MemDescWGMMAViewOp : Tle_Op<"memdesc_wgmma_view", [Pure,
 def Tle_PipeCreateOp : Tle_Op<"pipe.create"> {
   let summary = "create a typed TLE GPU pipe";
   let arguments = (ins
-    Variadic<AnyType>:$fields,
+    Variadic<TTG_MemDescType>:$fields,
     I32Attr:$capacity,
     StrAttr:$scope,
     OptionalAttr<StrAttr>:$pipe_name,
@@ -115,7 +115,7 @@ def Tle_PipeCreateOp : Tle_Op<"pipe.create"> {
 
 def Tle_PipeWriterAcquireOp : Tle_Op<"pipe.writer_acquire"> {
   let arguments = (ins
-    Variadic<AnyType>:$fields,
+    Variadic<TTG_MemDescType>:$fields,
     I32:$stage,
     I1:$phase,
     I32Attr:$capacity,
@@ -129,7 +129,7 @@ def Tle_PipeWriterAcquireOp : Tle_Op<"pipe.writer_acquire"> {
 
 def Tle_PipeWriterCommitOp : Tle_Op<"pipe.writer_commit"> {
   let arguments = (ins
-    Variadic<AnyType>:$fields,
+    Variadic<TTG_MemDescType>:$fields,
     I32:$stage,
     I32Attr:$capacity,
     StrAttr:$scope,
@@ -142,7 +142,7 @@ def Tle_PipeWriterCommitOp : Tle_Op<"pipe.writer_commit"> {
 
 def Tle_PipeWriterCloseOp : Tle_Op<"pipe.writer_close"> {
   let arguments = (ins
-    Variadic<AnyType>:$fields,
+    Variadic<TTG_MemDescType>:$fields,
     I32:$stage,
     I1:$phase,
     I32Attr:$capacity,
@@ -156,7 +156,7 @@ def Tle_PipeWriterCloseOp : Tle_Op<"pipe.writer_close"> {
 
 def Tle_PipeReaderWaitOp : Tle_Op<"pipe.reader_wait"> {
   let arguments = (ins
-    Variadic<AnyType>:$fields,
+    Variadic<TTG_MemDescType>:$fields,
     I32:$stage,
     I1:$phase,
     I32Attr:$capacity,
@@ -174,7 +174,7 @@ def Tle_PipeReaderReleaseOp : Tle_Op<"pipe.reader_release", [
   DeclareOpInterfaceMethods<MemoryEffectsOpInterface>
 ]> {
   let arguments = (ins
-    Variadic<AnyType>:$fields,
+    Variadic<TTG_MemDescType>:$fields,
     I32:$stage,
     I32Attr:$capacity,
     StrAttr:$scope,
