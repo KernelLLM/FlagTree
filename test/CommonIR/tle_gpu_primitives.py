@@ -1,13 +1,9 @@
 import argparse
-import os
 from pathlib import Path
 
 import triton
 import triton.language as tl
 import triton.experimental.tle.language as tle
-
-
-os.environ.setdefault("TLE_GPU_TILEIR_MODE", "1")
 
 
 @triton.jit
@@ -24,7 +20,7 @@ def _gpu_primitives_kernel(src, out, BLOCK: tl.constexpr):
     writer.commit(0)
     wait_result = reader.wait(0)
     read_slot = wait_result.slot.payload
-    value = tle.gpu.local_ptr(write_slot)
+    value = tl.load(tle.gpu.local_ptr(read_slot))
     reader.release(0)
     writer.close(0)
     tl.store(out + idx, value)
@@ -69,15 +65,14 @@ def dump_tileir(path):
             "tile.alloc",
             "tile.copy",
             "tile.subview",
-            "tile.to_tensor",
-            "tile.set_flag",
-            "tile.wait_flag",
-            "tile.pipe_barrier",
+            "tile.local_ptr",
+            "tile.get_memdesc",
+            "tle.pipe.create",
+            "tle.pipe.writer_acquire",
+            "tle.pipe.reader_wait",
     ):
         if needle not in text:
             raise RuntimeError(f"expected {needle} in primitive TileIR dump")
-    if "tle.pipe" in text:
-        raise RuntimeError("primitive TileIR dump still contains raw tle.pipe ops")
     Path(path).write_text(text, encoding="utf-8")
     print(f"[dump-tileir] wrote {path}")
 
@@ -85,18 +80,22 @@ def dump_tileir(path):
 def dump_ttir(path):
     from triton._C.libtriton import ir
     from triton._C.libtriton import passes
-    from triton._C.libtriton import tle as tle_ir
+    from triton._C.libtriton import nvidia
 
     module = _frontend_module()
     pm = ir.pass_manager(module.context)
     passes.common.add_inliner(pm)
     pm.run(module, "tle_gpu_primitives.inliner")
-    tle_ir.lower_gpu_tileir_to_ttir(module)
+    pm = ir.pass_manager(module.context)
+    nvidia.passes.commonir.add_to_ttgir(pm)
+    pm.run(module, "tle_gpu_primitives.tileir_to_ttgir")
     text = str(module)
-    if "tile." in text:
-        raise RuntimeError("primitive TTIR dump still contains TileIR ops")
-    if "ttg.local_barrier" not in text:
-        raise RuntimeError("primitive TTIR dump expected ttg.local_barrier")
+    for needle in ("tile.alloc", "tile.copy", "tile.subview", "tile.local_ptr", "tile.get_memdesc"):
+        if needle in text:
+            raise RuntimeError(f"primitive converted TTIR still contains {needle}")
+    for needle in ("ttg.local_alloc", "ttg.memdesc_index", "tle.local_pointers", "tle.pipe.create"):
+        if needle not in text:
+            raise RuntimeError(f"primitive converted TTIR expected {needle}")
     Path(path).write_text(text, encoding="utf-8")
     print(f"[dump-ttir] wrote {path}")
 
