@@ -34,9 +34,9 @@ from triton.experimental.tle.language.dsa.ascend import PIPE, sync_block_set, sy
 #  Compile-time configuration
 # =============================================================================
 NUM_CORES = 20
-BLOCK_M = 32
-BLOCK_N = 32
-DIM = 64
+BLOCK_M = 64
+BLOCK_N = 128
+DIM = 128
 RING: tl.constexpr = tl.constexpr(3)  # task-ring depth (the "3-task" of the schedule)
 
 # ---- Cross-core semaphores -------------------------------------------------
@@ -774,6 +774,15 @@ def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, 
     return mlir
 
 
+def _dump_pass_stage(module, path, tag):
+    """Append current module IR to `path` with a stage separator comment."""
+    with open(path, "a") as f:
+        f.write(f"\n// ===== stage: {tag} =====\n")
+        f.write(str(module))
+        f.write("\n")
+    print(f"[dump] appended stage '{tag}' to {path}", flush=True)
+
+
 def dump_hivm(path=None, combine_batch=32, is_causal=False):
     """Compile the kernel to TTIR, then lower through CommonIR→HIVM pipeline to HIVM IR.
 
@@ -798,6 +807,9 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
 
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_hivm.mlir")
+
+    # Truncate the output file so all stages are appended fresh this run.
+    open(path, "w").close()
 
     # Step 2: parse the CommonIR module and run the pass pipeline
     context = ir.context()
@@ -829,6 +841,7 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_commonir_to_hivm(pm1)
     pm1.run(module)
     print(f"[dump_hivm] after commonir (pass 1): verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "01_commonir_to_hivm")
 
     # Phase 2: Triton CustomOp → HIVM SyncOp
     pm2 = ir.pass_manager(context)
@@ -836,6 +849,7 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_triton_to_hivm(pm2)
     pm2.run(module)
     print(f"[dump_hivm] after triton_to_hivm: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "02_triton_to_hivm")
 
     # Phase 3: Inline + canonicalize to clean up the IR.
     pm3 = ir.pass_manager(context)
@@ -844,14 +858,17 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
     passes.common.add_canonicalizer(pm3)
     pm3.run(module)
     print(f"[dump_hivm] after canonicalize: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "03_canonicalize")
 
     ok = module.verify()
     if not ok:
         raise RuntimeError("dump_hivm: module.verify() failed after pipeline — IR is not legal")
 
     mlir = str(module)
-    with open(path, "w") as f:
+    with open(path, "a") as f:
+        f.write("\n// ===== stage: final =====\n")
         f.write(mlir)
+        f.write("\n")
     print(f"[dump_hivm] module.verify() = {ok}; wrote HIVM IR to {path}")
     return mlir
 
@@ -895,6 +912,9 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_linalg.mlir")
 
+    # Truncate the output file so all stages are appended fresh this run.
+    open(path, "w").close()
+
     # Step 2: parse the CommonIR module into a fresh context
     context = ir.context()
     ir.load_dialects(context)
@@ -920,6 +940,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_commonir_to_hivm(pm)
     pm.run(module)
     print(f"[dump_linalg] ① commonir_to_hivm: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "01_commonir_to_hivm")
 
     # ── ①b Erase the unrealized_conversion_cast ops produced by CommonIRToHIVM
     #     before any structured/linalg lowering runs.  This turns:
@@ -941,6 +962,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_discrete_mask_access_conversion(pm, False, False, False)
     pm.run(module)
     print(f"[dump_linalg] ② structure(r1)+discrete_mask: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "02_discrete_mask")
 
     # ── ③ Unstructured + HIVM + HFusion + LLVM ──────────────────────────
     pm = ir.pass_manager(context)
@@ -951,6 +973,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_triton_to_llvm(pm)
     pm.run(module)
     print(f"[dump_linalg] ③ unstructure+hivm+hfusion+llvm: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "03_unstructure_hivm_hfusion_llvm")
 
     # ── ④ Bubble-up + structured (r2) ────────────────────────────────────
     pm = ir.pass_manager(context)
@@ -959,6 +982,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     # ascend.passes.ttir.add_triton_to_structure_incubated(pm, False, False, False)
     pm.run(module)
     print(f"[dump_linalg] ④ bubble_up+structure(r2): verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "04_bubble_up")
 
     # ── ④b Inline + canonicalize ← REQUIRED to avoid C++ assertion ─────
     # Without this, the linalg incubator crashes with cast<RankedTensorType>
@@ -969,6 +993,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     passes.common.add_canonicalizer(pm)
     pm.run(module)
     print(f"[dump_linalg] ④b inline+canonicalize: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "04b_inline_canonicalize")
 
     # ── ⑤ Triton → Linalg ───────────────────────────────────────────────
     # This pass does the heavy lifting: tt.ptr→memref, triton ops→linalg,
@@ -987,6 +1012,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
             "[dump_linalg] ⑤ triton_to_linalg_incubated: partial conversion "
             "(this is expected — the pass creates cast chains that need "
             "post-processing)", flush=True)
+    _dump_pass_stage(module, path, "05_triton_to_linalg")
 
     # ── ⑤c Fold staging memref.alloc + memref.copy pairs ─────────────────
     #     TritonToLinalgIncubated creates staging allocs (default address
@@ -1022,8 +1048,10 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
         raise RuntimeError("dump_linalg: module.verify() failed after pipeline")
 
     mlir = str(module)
-    with open(path, "w") as f:
+    with open(path, "a") as f:
+        f.write("\n// ===== stage: final =====\n")
         f.write(mlir)
+        f.write("\n")
     print(f"[dump_linalg] verify={ok}; wrote Linalg IR ({len(mlir)} chars) to {path}")
     return mlir
 
