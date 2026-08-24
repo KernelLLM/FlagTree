@@ -143,6 +143,9 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
         passes.common.add_inliner(pm)
         passes.common.add_canonicalizer(pm)
 
+        # Lower supported discrete pointer accesses before native load/store lowering.
+        ascend.passes.ttir.add_triton_to_tensor_view(pm)
+
         ascend.passes.ttir.add_triton_to_structure(pm, enable_mask_fallback_conversion, optimize_dynamic_offset)
         ascend.passes.ttir.add_discrete_mask_access_conversion(pm, compile_on_910_95, force_simt_template,
                                                                enable_sync_block_lock)
@@ -153,6 +156,13 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
         ascend.passes.ttir.add_triton_to_llvm(pm)
         ascend.passes.ttir.add_bubble_up_operation(pm)
         ascend.passes.ttir.add_triton_to_structure(pm, enable_mask_fallback_conversion, optimize_dynamic_offset)
+
+        # Lower TensorView operations at the native bufferization boundary.
+        ascend.passes.ttir.add_tensor_view_lowering(pm)
+
+        # Eliminate helper calls before single-function linalg conversion.
+        passes.common.add_inliner(pm)
+        passes.common.add_canonicalizer(pm)
 
         ascend.passes.ttir.add_triton_to_linalg(pm, False, named_ops, enable_nd2nz_on_vector, enable_select_analysis,
                                                 compile_on_910_95)
