@@ -1133,6 +1133,17 @@ class TritonSemantic(Generic[TensorTy]):
             # Load by de-referencing the pointer of scalar
             dst_ty = elt_ty
 
+        # Emit tv.ptr_load for supported discrete accesses.
+        tv_handle = self.builder.try_tv_load(ptr.handle, mask.handle if mask is not None else None,
+                                             dst_ty.to_ir(self.builder))
+        if tv_handle is not None:
+            if is_bool:
+                tv_handle.set_attr("was_bool_to_int8", self.builder.get_bool_attr(True))
+            ret = self.tensor(tv_handle, dst_ty)
+            if is_bool:
+                ret.was_bool_to_int8 = True
+            return ret
+
         # Build IR
         if mask is None:
             load_handle = self.builder.create_load(ptr.handle, cache, eviction, is_volatile)
@@ -1349,6 +1360,10 @@ class TritonSemantic(Generic[TensorTy]):
 
         # Cast to target data type
         val = self.cast(val, elt_ty)
+
+        # Emit tv.ptr_store for supported discrete accesses.
+        if self.builder.try_tv_store(ptr.handle, val.handle, mask.handle if mask is not None else None):
+            return self.tensor(None, tl.void)
 
         # Build IR
         if mask is None:
@@ -1974,6 +1989,74 @@ class TritonSemantic(Generic[TensorTy]):
 
         # Advanced block pointer type is the same as before
         return self.tensor(self.builder.create_advance(base.handle, offsets), base.type)
+
+    def make_tensor_view(self, base: TensorTy, shape, strides) -> "tl.tensor_view":
+        # Shape and strides describe the complete logical tensor; access
+        # positions are supplied by tensor_view_load/store.
+        if not base.type.is_ptr() or base.type.element_ty.is_block():
+            raise ValueError("Expected `base` to be a pointer type (but not a block pointer type or others)")
+        if base.type.element_ty == tl.int1:
+            base = self.cast(base, tl.pointer_type(tl.int8, base.type.address_space))
+        shape = self._convert_to_ir_values(shape)
+        strides = self._convert_to_ir_values(strides)
+        assert len(shape) == len(strides), "Expected `shape` and `strides` to have the same length"
+        handle = self.builder.create_tensor_view(base.handle, shape, strides)
+        return tl.tensor_view(handle, base.type.element_ty, len(shape))
+
+    def _tensor_view_index_and_encoding(self, view: "tl.tensor_view", index, tile, traversal_strides, sparse_dim):
+        rank = view.type.rank
+
+        def as_list(x):
+            x = tl._unwrap_if_constexpr(x)
+            return list(x) if hasattr(x, "__iter__") else [x]
+
+        tile = [tl._unwrap_if_constexpr(t) for t in as_list(tile)]
+        assert len(tile) == rank, f"Expected {rank} entries in `tile`, but got {len(tile)}"
+        assert all(isinstance(t, int) for t in tile), "Expected a list of constant integers in `tile`"
+
+        traversal = [] if traversal_strides is None else [tl._unwrap_if_constexpr(t) for t in as_list(traversal_strides)]
+        if traversal:
+            assert len(traversal) == rank, \
+                f"Expected {rank} entries in `traversal_strides`, but got {len(traversal)}"
+
+        sparse_dims = [] if sparse_dim is None else [tl._unwrap_if_constexpr(d) for d in as_list(sparse_dim)]
+
+        assert len(index) == rank, f"Expected {rank} entries in `index`, but got {len(index)}"
+        index_handles = []
+        for d, idx in enumerate(index):
+            if d in sparse_dims:
+                index_handles.append(self.to_tensor(idx).handle)
+            else:
+                index_handles.append(self._convert_elem_to_ir_value(tl._unwrap_if_constexpr(idx), require_i64=False))
+        return index_handles, tile, traversal, sparse_dims
+
+    def tensor_view_load(self, view: "tl.tensor_view", index, tile, traversal_strides, sparse_dim,
+                         mask: Optional[TensorTy] = None) -> TensorTy:
+        index_handles, tile, traversal, sparse_dims = self._tensor_view_index_and_encoding(
+            view, index, tile, traversal_strides, sparse_dim)
+        result_ty = tl.block_type(view.dtype, tile)
+        mask_handle = None
+        if mask is not None:
+            assert sparse_dims, "`mask` is only meaningful when loading a `sparse_dim` (gather) tile of a " \
+                "`tl.tensor_view`; a regular partition/strided tile's boundary comes from the view's own shape"
+            mask_handle = self.broadcast_impl_shape(mask, tile).handle
+        handle = self.builder.tensor_view_load(view.handle, index_handles, tile, traversal, sparse_dims,
+                                               result_ty.to_ir(self.builder), mask_handle)
+        return self.tensor(handle, result_ty)
+
+    def tensor_view_store(self, view: "tl.tensor_view", value: TensorTy, index, tile, traversal_strides,
+                          sparse_dim, mask: Optional[TensorTy] = None) -> TensorTy:
+        index_handles, tile, traversal, sparse_dims = self._tensor_view_index_and_encoding(
+            view, index, tile, traversal_strides, sparse_dim)
+        value = self.cast(value, view.dtype)
+        mask_handle = None
+        if mask is not None:
+            assert sparse_dims, "`mask` is only meaningful when storing a `sparse_dim` (scatter) tile of a " \
+                "`tl.tensor_view`; a regular partition/strided tile's boundary comes from the view's own shape"
+            mask_handle = self.broadcast_impl_shape(mask, tile).handle
+        self.builder.tensor_view_store(view.handle, value.handle, index_handles, tile, traversal, sparse_dims,
+                                       mask_handle)
+        return self.tensor(None, tl.void)
 
     def make_tensor_descriptor(self, base: TensorTy, shape: List[TensorTy], strides: List[TensorTy],
                                block_shape: List[tl.constexpr], padding_option: str = "zero") -> tl.tensor_descriptor:
