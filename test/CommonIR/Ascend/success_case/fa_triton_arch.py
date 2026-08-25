@@ -260,8 +260,8 @@ def _vec1_softmax(
 
     # reset running max at the first task of each output tile
     if idx_in_conbine == 0:
-        neg_max_even = tl.full((BLOCK_M, 1), 2**30, tl.float32)
-        neg_max_odd = tl.full((BLOCK_M, 1), 2**30, tl.float32)
+        neg_max_even = tl.full((BLOCK_M, ), 2**30, tl.float32)
+        neg_max_odd = tl.full((BLOCK_M, ), 2**30, tl.float32)
 
     for cb_idx in range(CB):
         kv_idx = idx_in_conbine * CB + cb_idx
@@ -283,27 +283,27 @@ def _vec1_softmax(
             attn_score_block = tl.where(causal_mask, attn_score_block, float("-inf"))
 
         # online softmax: compute new running -max*scale (ping-pong)
-        block_row_max = tl.max(attn_score_block, axis=-1, keep_dims=True)
+        block_row_max = tl.max(attn_score_block, axis=-1, keep_dims=False)
         neg_max_new = tl.minimum(-block_row_max * sm_scale, tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
         neg_max_prv = tl.where(cur_parity == 0, neg_max_odd, neg_max_even)
 
         # softmax_p = exp(sm_scale * score + neg_max_new)
-        softmax_p = tl.exp(sm_scale * attn_score_block + neg_max_new)
+        softmax_p = tl.exp(sm_scale * attn_score_block + neg_max_new[:, None])
 
         # rescale = exp(neg_max_new - neg_max_prv): correction factor for Vec2
         rescale = tl.exp(neg_max_new - neg_max_prv)
         # block_expsum: partial row-sum contributed by this KV block
-        block_expsum = tl.sum(softmax_p, axis=-1, keep_dims=True)
+        block_expsum = tl.sum(softmax_p, axis=-1, keep_dims=False)
 
         # store rescale and block_expsum into GM ring-buffers for Vec2
         # layout: [NUM_CORES, RING, CB, BLOCK_M]
         rescale_offset = (cid * RING * CB * BLOCK_M + ring_slot * CB * BLOCK_M + cb_idx * BLOCK_M)
         rescale_store_bp = tl.make_block_ptr(workspace_rescale + rescale_offset, (BLOCK_M, 1), (1, 1), (0, 0),
                                              (BLOCK_M, 1), (1, 0))
-        tl.store(rescale_store_bp, rescale)
+        tl.store(rescale_store_bp, rescale[:, None])
         expsum_store_bp = tl.make_block_ptr(workspace_expsum + rescale_offset, (BLOCK_M, 1), (1, 1), (0, 0),
                                             (BLOCK_M, 1), (1, 0))
-        tl.store(expsum_store_bp, block_expsum)
+        tl.store(expsum_store_bp, block_expsum[:, None])
 
         # update running max ping-pong
         if cur_parity == 0:
@@ -372,10 +372,10 @@ def _vec2_accumulate(
         prev_rescale_offset = (cid * RING * CB * BLOCK_M + prev_ring_slot * CB * BLOCK_M + cb_idx * BLOCK_M)
         rescale_load_bp = tl.make_block_ptr(workspace_rescale + prev_rescale_offset, (BLOCK_M, 1), (1, 1), (0, 0),
                                             (BLOCK_M, 1), (1, 0))
-        rescale = tl.load(rescale_load_bp).to(tl.float32)
+        rescale = tl.reshape(tl.load(rescale_load_bp).to(tl.float32), (BLOCK_M, ))
         expsum_load_bp = tl.make_block_ptr(workspace_expsum + prev_rescale_offset, (BLOCK_M, 1), (1, 1), (0, 0),
                                            (BLOCK_M, 1), (1, 0))
-        block_expsum = tl.load(expsum_load_bp).to(tl.float32)
+        block_expsum = tl.reshape(tl.load(expsum_load_bp).to(tl.float32), (BLOCK_M, ))
 
         if prev_kv_idx == 0:
             # first KV block: init acc_o and softmax_denom directly
@@ -383,13 +383,13 @@ def _vec2_accumulate(
             softmax_denom = block_expsum
         else:
             # rescale acc_o and accumulate
-            rescale_bc = tl.broadcast_to(rescale, (BLOCK_M, DIM))
+            rescale_bc = tl.broadcast_to(rescale[:, None], (BLOCK_M, DIM))
             acc_o = acc_o * rescale_bc + pv_acc
             softmax_denom = softmax_denom * rescale + block_expsum
 
         if prev_kv_idx == NUM_KV_BLOCKS - 1:
             # last KV block: divide by softmax denominator and write output
-            denom_bc = tl.broadcast_to(softmax_denom, (BLOCK_M, DIM))
+            denom_bc = tl.broadcast_to(softmax_denom[:, None], (BLOCK_M, DIM))
             output_block = (acc_o / denom_bc).to(Out.dtype.element_ty)
             o_bp = tl.make_block_ptr(Out + prev_batch_idx * sOb + prev_head_idx * sOh, (S, DIM), (sOs, sOd),
                                      ((prev_global_head_idx * BLOCK_M).to(tl.int32), 0), (BLOCK_M, DIM), (1, 0))
@@ -464,10 +464,10 @@ def flash_attention_fwd_3task_kernel(
     # stored as flat GM-backed workspaces; running max uses a ping-pong register
     # pair (one per kv parity).
     acc_o = tl.zeros((BLOCK_M, DIM), tl.float32)
-    softmax_denom = tl.zeros((BLOCK_M, 1), tl.float32)  # running denominator l
+    softmax_denom = tl.zeros((BLOCK_M, ), tl.float32)  # running denominator l
     # neg_max_even/odd: running -max*scale for even/odd kv index, reset each tile
-    neg_max_even = tl.full((BLOCK_M, 1), 2**30, tl.float32)
-    neg_max_odd = tl.full((BLOCK_M, 1), 2**30, tl.float32)
+    neg_max_even = tl.full((BLOCK_M, ), 2**30, tl.float32)
+    neg_max_odd = tl.full((BLOCK_M, ), 2**30, tl.float32)
 
     # =========================================================================
     #  3-task pipeline: Cube (MM1/MM2) and Vector (Vec1/Vec2) scopes
