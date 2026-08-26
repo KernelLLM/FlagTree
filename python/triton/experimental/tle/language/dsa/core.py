@@ -394,3 +394,40 @@ def tile_cube_launch(a: buffer, b: buffer, acc: buffer, stage_a: buffer, stage_b
 def tile_cube_wait(_semantic=None, _generator=None):
     """Wait for TileIR Cube work using tile.cube_wait."""
     tle_semantic.tile_cube_wait(_semantic.builder)
+
+
+@builtin
+def tile_concat(lhs: tensor, rhs: tensor, dim: int, _semantic=None, _generator=None) -> tensor:
+    """Concatenate two tensors along a dimension using TileIR tile.concat.
+
+    Combines two tensors along the specified dimension. Used in sinkhorn
+    optimization to merge small vectors into larger ones for better SIMD
+    utilization on Ascend Vector Core.
+
+    This operation lowers differently based on tensor dimensionality:
+    - 1D tensors: lowers to tensor.insert_slice sequence in Linalg IR
+    - 2D tensors: lowers to tensor.concat in Linalg IR
+    Both paths eventually lower to hivm.hir.vconcat in HIVM IR.
+
+    Args:
+        lhs: First tensor to concatenate
+        rhs: Second tensor to concatenate
+        dim: Dimension along which to concatenate (0-indexed)
+
+    Returns:
+        Concatenated tensor
+
+    Example:
+        # 1D: <128> + <128> -> <256>
+        x = tl.load(x_ptr + tl.arange(0, 128))
+        y = tl.load(y_ptr + tl.arange(0, 128))
+        z = tle.tile_concat(x, y, dim=0)  # tensor<256xf32>
+
+        # 2D: <1x128> + <1x128> -> <2x128>
+        x = tl.load(x_ptr + tl.arange(0, 128)[None, :])
+        y = tl.load(y_ptr + tl.arange(0, 128)[None, :])
+        z = tle.tile_concat(x, y, dim=0)  # tensor<2x128xf32>
+    """
+    dim = _unwrap_if_constexpr(dim)
+    return tle_semantic.tile_concat(lhs, rhs, dim, _semantic.builder)
+

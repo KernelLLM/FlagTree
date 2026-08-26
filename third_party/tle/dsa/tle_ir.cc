@@ -542,5 +542,35 @@ void init_tle_dsa_ir(py::module &&m) {
       // tile.cube_wait
       .def("create_tile_cube_wait", [](TritonOpBuilder &self) -> void {
         self.create<mlir::triton::tile::CubeWaitOp>();
-      });
+      })
+      // tile.concat
+      .def("create_tile_concat",
+           [](TritonOpBuilder &self, Value &lhs, Value &rhs,
+              int64_t dim) -> Value {
+             auto &builder = self.getBuilder();
+             auto lhsType = mlir::dyn_cast<RankedTensorType>(lhs.getType());
+             auto rhsType = mlir::dyn_cast<RankedTensorType>(rhs.getType());
+
+             if (!lhsType || !rhsType) {
+               llvm::errs() << "tile.concat requires ranked tensor types\n";
+               throw std::runtime_error(
+                   "tile.concat requires ranked tensor types");
+             }
+
+             // Compute result shape
+             auto lhsShape = lhsType.getShape();
+             auto rhsShape = rhsType.getShape();
+             SmallVector<int64_t> resultShape(lhsShape.begin(), lhsShape.end());
+             resultShape[dim] = lhsShape[dim] + rhsShape[dim];
+
+             // Create result type
+             auto resultType = RankedTensorType::get(
+                 resultShape, lhsType.getElementType());
+
+             // Create tile.concat operation
+             auto dimAttr = builder.getI64IntegerAttr(dim);
+             auto concatOp = builder.create<mlir::triton::tile::ConcatOp>(
+                 self.getLastLoc(), resultType, lhs, rhs, dimAttr);
+             return concatOp.getResult();
+           });
 }

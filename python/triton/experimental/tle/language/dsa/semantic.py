@@ -339,3 +339,47 @@ def tile_cube_launch(a: buffer, b: buffer, acc: buffer, stage_a: buffer, stage_b
 def tile_cube_wait(builder: ir.builder):
     """Wait for Cube work using tile.cube_wait."""
     builder.create_tile_cube_wait()
+
+
+def tile_concat(lhs: tl.tensor, rhs: tl.tensor, dim: int, builder: ir.builder) -> tl.tensor:
+    """Concatenate two tensors along a dimension using tile.concat.
+
+    Args:
+        lhs: First tensor to concatenate
+        rhs: Second tensor to concatenate
+        dim: Dimension along which to concatenate
+        builder: IR builder instance
+
+    Returns:
+        Concatenated tensor
+    """
+    if not isinstance(lhs, tl.tensor):
+        raise TypeError("lhs must be a tensor")
+    if not isinstance(rhs, tl.tensor):
+        raise TypeError("rhs must be a tensor")
+
+    # Unwrap shapes first to handle constexpr correctly
+    lhs_shape = list(tl._unwrap_shape(lhs.shape))
+    rhs_shape = list(tl._unwrap_shape(rhs.shape))
+
+    if len(lhs_shape) != len(rhs_shape):
+        raise ValueError(f"Cannot concat tensors with different ranks: {len(lhs_shape)} vs {len(rhs_shape)}")
+
+    if dim < 0 or dim >= len(lhs_shape):
+        raise ValueError(f"dim {dim} out of range for tensor with {len(lhs_shape)} dimensions")
+
+    for i in range(len(lhs_shape)):
+        if i != dim and lhs_shape[i] != rhs_shape[i]:
+            raise ValueError(f"Shape mismatch at dimension {i}: {lhs_shape[i]} vs {rhs_shape[i]}")
+
+    # Compute output shape
+    out_shape = lhs_shape.copy()
+    out_shape[dim] = lhs_shape[dim] + rhs_shape[dim]
+
+    # Create tile.concat op
+    result_handle = builder.create_tile_concat(lhs.handle, rhs.handle, dim)
+
+    # Wrap result
+    result_ty = tl.block_type(lhs.dtype, out_shape)
+    return tl.tensor(result_handle, result_ty)
+
