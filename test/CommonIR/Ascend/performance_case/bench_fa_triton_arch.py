@@ -263,7 +263,7 @@ def _parse_args():
                    help="combine_batch passed to flash_attention_fwd")
     p.add_argument("--warmup", type=int, default=_DEFAULT_WARMUP, help="warmup iterations")
     p.add_argument("--rep", type=int, default=_DEFAULT_REP, help="measurement iterations (active runs for kernel mode)")
-    p.add_argument("--mode", choices=["wall", "kernel"], default="wall",
+    p.add_argument("--mode", choices=["wall", "kernel"], default="kernel",
                    help="wall: perf_counter+sync; kernel: do_bench_npu (mspti/profiler)")
     p.add_argument("--no-check", action="store_true", help="skip correctness verification")
     p.add_argument("--sweep", action="store_true",
