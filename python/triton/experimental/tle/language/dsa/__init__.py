@@ -28,7 +28,6 @@ from .core import (
     tile_gm_offset,
     tile_cube_launch,
     tile_cube_wait,
-    tile_concat,
 )
 
 from . import ascend
@@ -61,6 +60,5 @@ __all__ = [
     "tile_gm_offset",
     "tile_cube_launch",
     "tile_cube_wait",
-    "tile_concat",
     "ascend",
 ]
