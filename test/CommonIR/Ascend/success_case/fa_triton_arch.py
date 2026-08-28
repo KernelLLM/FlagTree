@@ -284,8 +284,9 @@ def _vec1_softmax(
 
         # online softmax: compute new running -max*scale (ping-pong)
         block_row_max = tl.max(attn_score_block, axis=-1, keep_dims=False)
-        neg_max_new = tl.minimum(-block_row_max * sm_scale, tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
-        neg_max_prv = tl.where(cur_parity == 0, neg_max_odd, neg_max_even)
+        n_cand = -block_row_max * sm_scale
+        neg_max_prv = tl.minimum(neg_max_even, neg_max_odd)
+        neg_max_new = tl.minimum(n_cand, neg_max_prv)
 
         # softmax_p = exp(sm_scale * score + neg_max_new)
         softmax_p = tl.exp(sm_scale * attn_score_block + neg_max_new[:, None])
@@ -306,6 +307,7 @@ def _vec1_softmax(
         tl.store(expsum_store_bp, block_expsum[:, None])
 
         # update running max ping-pong
+        neg_max_new = tl.minimum(n_cand, tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
         if cur_parity == 0:
             neg_max_even = neg_max_new
         else:
@@ -377,7 +379,7 @@ def _vec2_accumulate(
                                            (BLOCK_M, 1), (1, 0))
         block_expsum = tl.reshape(tl.load(expsum_load_bp).to(tl.float32), (BLOCK_M, ))
 
-        if prev_kv_idx == 0:
+        if prev_idx_in_conbine == 0 and cb_idx == 0:
             # first KV block: init acc_o and softmax_denom directly
             acc_o = pv_acc
             softmax_denom = block_expsum
