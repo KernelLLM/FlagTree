@@ -22,33 +22,8 @@ import triton.language as tl
 #  `import triton.experimental.tle as tle` also patches triton.compiler so the
 #  tile/tle dialects are registered in the MLIR context during compilation.
 # =============================================================================
-import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
-from triton.experimental.tle.language.dsa.ascend import (  # noqa: F401
-    L1, L0C, UB, PIPE, sync_block_set, sync_block_wait, sync_block_all,
-)
-from triton.experimental.tle.language.dsa import tile_copy, tile_alloc, tile_to_tensor  # noqa: F401
-# from triton.experimental.tle.language.dsa import tle.dsa.copy  # noqa: F401
-
-# ---- cross-engine sync_block events -----------------------------------------
-# (sender, receiver, event_id, sender_pipe, receiver_pipe). Replaces the old
-# tile.set_flag/wait_flag pipe pairs with core-to-core (cube<->vector) sync via
-# tle.dsa.ascend.sync_block_set / sync_block_wait (hivm.hir.sync_block_*).
-# Constraint: sender != receiver; event_id in [0,15].
-EVT_MTE3_MTE2 = ("vector", "cube", 0, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)  # Vec1 wrote P -> Bmm2 reads
-EVT_MTE2_V = ("cube", "vector", 1, PIPE.PIPE_MTE2, PIPE.PIPE_V)  # data loaded -> Vector computes
-EVT_V_MTE3 = ("vector", "cube", 2, PIPE.PIPE_V, PIPE.PIPE_MTE3)  # Vector done -> store / next
-# ---- Cross-core semaphores (one id per signal, ids 0-5) --------------------
-# Each id may be set at most once before being waited.  The pipeline is
-# single-slot: init pre-arms exactly one "free" token per workspace so the
-# first iteration's wait passes; every subsequent set is preceded by the
-# matching wait in the same slot, keeping each id in strictly alternating
-# set→wait→set→... state.
-SEM_S_READY: tl.constexpr = tl.constexpr(0)  # C -> V : workspace_s has data
-SEM_S_FREE: tl.constexpr = tl.constexpr(1)  # V -> C : workspace_s slot free
-SEM_P_READY: tl.constexpr = tl.constexpr(2)  # V -> C : workspace_p has data
-SEM_P_FREE: tl.constexpr = tl.constexpr(3)  # C -> V : workspace_p slot free
-SEM_PV_READY: tl.constexpr = tl.constexpr(4)  # C -> V : workspace_pv has data
-SEM_PV_FREE: tl.constexpr = tl.constexpr(5)  # V -> C : workspace_pv slot free
+import triton.experimental.tle as tle  # registers tile/tle dialects; tle.scope
+from triton.experimental.tle.language.dsa.ascend import PIPE, sync_block_set, sync_block_wait
 
 # NOTE: The tle tile-DSA layer now has minimal tile.cube_launch / tile.cube_wait
 # builder bindings. This architecture dump still keeps Cube matmul as
@@ -62,23 +37,29 @@ NUM_CORES = 20
 BLOCK_M = 32
 BLOCK_N = 32
 DIM = 64
+RING: tl.constexpr = tl.constexpr(3)  # task-ring depth (the "3-task" of the schedule)
 
-# constexpr shape literals for tile.copy (semantic.copy runs scalar_constant on
-# each extent, which requires tl.constexpr rather than a plain int).
-CBM = tl.constexpr(BLOCK_M)
-CBN = tl.constexpr(BLOCK_N)
-CD = tl.constexpr(DIM)
-
-# ---- arch22 "3-task" schedule constants -----------------------------------
-RING: tl.constexpr = tl.constexpr(3)  # depth of the task ring  (the "3-task" of the schedule)
-
-# ---- cross-core semaphore IDs ----------------------------------------------
-SEM_S_READY: tl.constexpr = tl.constexpr(0)  # C->V : workspace_s (S)   has data
-SEM_S_FREE: tl.constexpr = tl.constexpr(1)  # V->C : workspace_s slot  free
-SEM_P_READY: tl.constexpr = tl.constexpr(2)  # V->C : workspace_p (P)   has data
-SEM_P_FREE: tl.constexpr = tl.constexpr(3)  # C->V : workspace_p slot  free
-SEM_PV_READY: tl.constexpr = tl.constexpr(4)  # C->V : workspace_pv (PV) has data
-SEM_PV_FREE: tl.constexpr = tl.constexpr(5)  # V->C : workspace_pv slot  free
+# ---- Cross-core semaphores -------------------------------------------------
+# Hardware keys a channel by (event_id, sender_pipe, receiver_pipe), event_id
+# in [0,15].  Same id can be reused when the pipe pair differs.
+# Per slot: id = BANK + slot, slot in [0, RING).
+#   SEM_BANK_SP + slot  (S/P: four distinct pipe pairs)
+#     S_READY  cube->vector  FIX,  MTE2
+#     S_FREE   vector->cube  MTE2, FIX
+#     P_READY  vector->cube  MTE3, MTE2
+#     P_FREE   cube->vector  MTE2, MTE3
+#   SEM_BANK_PV + slot  (PV collides with S on the same pipes)
+#     PV_READY cube->vector  FIX,  MTE2
+#     PV_FREE  vector->cube  MTE2, FIX
+assert 2 * RING <= 16, f"two event-id banks * RING={RING} exceed event_id [0,15]"
+SEM_BANK_SP: tl.constexpr = tl.constexpr(0)
+SEM_BANK_PV: tl.constexpr = RING
+SEM_S_READY = SEM_BANK_SP
+SEM_S_FREE = SEM_BANK_SP
+SEM_P_READY = SEM_BANK_SP
+SEM_P_FREE = SEM_BANK_SP
+SEM_PV_READY = SEM_BANK_PV
+SEM_PV_FREE = SEM_BANK_PV
 
 # =============================================================================
 #  Step sub-functions (each called from the main kernel; decorated @triton.jit
@@ -126,7 +107,7 @@ def _mm1_qkt(
     constraint (matching the fa_4func.py pattern).
     """
     # wait workspace_s[ring_slot] task slot free (Vector released after Vec1)
-    sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+    sync_block_wait("vector", "cube", SEM_S_FREE + ring_slot, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
     # q_l1 is a plain register tensor; initialise to zeros so that both
     # branches of the if below have the same type (fp16[BLOCK_M, DIM]),
@@ -156,8 +137,8 @@ def _mm1_qkt(
             (BLOCK_M, BLOCK_N), (BLOCK_N, 1), (0, 0), (BLOCK_M, BLOCK_N), (1, 0))
         tl.store(score_store_bp, attn_score_l0c.to(workspace_s.dtype.element_ty))
 
-    # all CB S-blocks written -> notify Vec1
-    sync_block_set("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
+    # all CB S-blocks written -> notify Vec1 on this ring slot
+    sync_block_set("cube", "vector", SEM_S_READY + ring_slot, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
 
 
 @triton.jit
@@ -191,9 +172,9 @@ def _mm2_pv(
     func.call, which the matmul intrinsic rejects (expects 2D).
     """
     # wait workspace_p[prev_ring_slot] (P from Vec1) ready
-    sync_block_wait("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
+    sync_block_wait("vector", "cube", SEM_P_READY + prev_ring_slot, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
     # wait workspace_pv[prev_ring_slot] slot free (Vec2 released after accumulating)
-    sync_block_wait("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+    sync_block_wait("vector", "cube", SEM_PV_FREE + prev_ring_slot, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
     for cb_idx in range(CB):
         prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
@@ -219,8 +200,8 @@ def _mm2_pv(
         tl.store(pv_store_bp, pv_part_l0c.to(workspace_pv.dtype.element_ty))
 
     # all CB P*V blocks done -> notify Vec2; release workspace_p[prev_ring_slot]
-    sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
-    sync_block_set("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
+    sync_block_set("cube", "vector", SEM_P_FREE + prev_ring_slot, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+    sync_block_set("cube", "vector", SEM_PV_READY + prev_ring_slot, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
 
 
 @triton.jit
@@ -254,9 +235,9 @@ def _vec1_softmax(
     Returns updated (neg_max_even, neg_max_odd).
     """
     # wait workspace_s[ring_slot] (all CB score blocks) ready from MM1
-    sync_block_wait("cube", "vector", SEM_S_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
+    sync_block_wait("cube", "vector", SEM_S_READY + ring_slot, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
     # wait workspace_p[ring_slot] slot free (MM2 released after reading P)
-    sync_block_wait("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+    sync_block_wait("cube", "vector", SEM_P_FREE + ring_slot, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
 
     # reset running max at the first task of each output tile
     if idx_in_conbine == 0:
@@ -318,8 +299,8 @@ def _vec1_softmax(
         tl.store(prob_store_bp, softmax_p.to(workspace_p.dtype.element_ty))
 
     # all CB P-blocks written -> release workspace_s[ring_slot]; notify MM2
-    sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-    sync_block_set("vector", "cube", SEM_P_READY, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
+    sync_block_set("vector", "cube", SEM_S_FREE + ring_slot, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+    sync_block_set("vector", "cube", SEM_P_READY + ring_slot, PIPE.PIPE_MTE3, PIPE.PIPE_MTE2)
 
     return neg_max_even, neg_max_odd
 
@@ -357,7 +338,7 @@ def _vec2_accumulate(
     Returns updated (acc_o, softmax_denom).
     """
     # wait workspace_pv[prev_ring_slot] (all CB P*V blocks) ready from MM2
-    sync_block_wait("cube", "vector", SEM_PV_READY, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
+    sync_block_wait("cube", "vector", SEM_PV_READY + prev_ring_slot, PIPE.PIPE_FIX, PIPE.PIPE_MTE2)
 
     for cb_idx in range(CB):
         prev_kv_idx = prev_idx_in_conbine * CB + cb_idx
@@ -396,7 +377,7 @@ def _vec2_accumulate(
             tl.store(o_bp, output_block)
 
     # all CB blocks consumed -> release workspace_pv[prev_ring_slot]
-    sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+    sync_block_set("vector", "cube", SEM_PV_FREE + prev_ring_slot, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
     return acc_o, softmax_denom
 
@@ -478,13 +459,15 @@ def flash_attention_fwd_3task_kernel(
     #  PROLOGUE: initialize semaphores (outside the main loop to avoid races)
     # =========================================================================
     with tle.scope(core_mode="cube"):
-        # init: pre-arm P_FREE so Vec1 can proceed on first tick
-        sync_block_set("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+        # init: pre-arm P_FREE for every ring slot so Vec1 can proceed on first RING ticks
+        for s in tl.static_range(RING):
+            sync_block_set("cube", "vector", SEM_P_FREE + s, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
 
     with tle.scope(core_mode="vector"):
-        # init: pre-arm S_FREE and PV_FREE so MM1/MM2 can proceed on first tick
-        sync_block_set("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-        sync_block_set("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+        # init: pre-arm S_FREE and PV_FREE for every ring slot
+        for s in tl.static_range(RING):
+            sync_block_set("vector", "cube", SEM_S_FREE + s, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+            sync_block_set("vector", "cube", SEM_PV_FREE + s, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
     for g in range(num_global_tasks + 1):
 
@@ -628,13 +611,15 @@ def flash_attention_fwd_3task_kernel(
     #  EPILOGUE: drain outstanding semaphore tokens (after the main loop)
     # =========================================================================
     with tle.scope(core_mode="cube"):
-        # drain outstanding P_FREE token
-        sync_block_wait("cube", "vector", SEM_P_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
+        # drain outstanding P_FREE token in every ring slot
+        for s in tl.static_range(RING):
+            sync_block_wait("cube", "vector", SEM_P_FREE + s, PIPE.PIPE_MTE2, PIPE.PIPE_MTE3)
 
     with tle.scope(core_mode="vector"):
         # drain outstanding S_FREE and PV_FREE tokens
-        sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
-        sync_block_wait("vector", "cube", SEM_PV_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+        for s in tl.static_range(RING):
+            sync_block_wait("vector", "cube", SEM_S_FREE + s, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
+            sync_block_wait("vector", "cube", SEM_PV_FREE + s, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
 
 # =============================================================================
@@ -1041,9 +1026,6 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
         f.write(mlir)
     print(f"[dump_linalg] verify={ok}; wrote Linalg IR ({len(mlir)} chars) to {path}")
     return mlir
-
-
-# def gen_bin():
 
 
 # =============================================================================
