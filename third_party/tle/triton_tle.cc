@@ -52,14 +52,14 @@
 #include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #endif
-#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -247,8 +247,9 @@ void init_triton_tle_ir(py::module &&m) {
                  tileBufType, bufType.getMemorySpace(),
                  /*shape=*/mlir::ArrayAttr(), /*dtype=*/mlir::TypeAttr(),
                  /*policy=*/tile::PolicyAttr(),
-                 /*layout=*/tile::LayoutAttr::get(self.getBuilder().getContext(),
-                                                  tile::Layout::ND),
+                 /*layout=*/
+                 tile::LayoutAttr::get(self.getBuilder().getContext(),
+                                       tile::Layout::ND),
                  /*lifetime=*/tile::LifetimeAttr(),
                  /*comment=*/mlir::StringAttr());
              op->setAttr("tle.gpu_layout", targetLayout);
@@ -259,13 +260,15 @@ void init_triton_tle_ir(py::module &&m) {
               bool interNoAlias) -> void {
              auto op = self.create<tile::CopyOp>(
                  src, dst, /*engine=*/tile::EngineAttr(),
-                 /*src_layout=*/tile::LayoutAttr::get(
-                     self.getBuilder().getContext(), tile::Layout::ND),
+                 /*src_layout=*/
+                 tile::LayoutAttr::get(self.getBuilder().getContext(),
+                                       tile::Layout::ND),
                  /*dst_nz_layout=*/tile::NZLayoutAttr(),
                  /*transpose=*/mlir::UnitAttr(),
                  /*comment=*/mlir::StringAttr());
              if (interNoAlias)
-               op->setAttr("inter_no_alias", self.getBuilder().getBoolAttr(true));
+               op->setAttr("inter_no_alias",
+                           self.getBuilder().getBoolAttr(true));
            })
       .def("create_tile_get_memdesc",
            [](TritonOpBuilder &self, Type resultTy, Value source) -> Value {
@@ -289,8 +292,8 @@ void init_triton_tle_ir(py::module &&m) {
              }
              auto *ctx = builder.getContext();
              auto srcBuf = mlir::cast<tile::BufType>(source.getType());
-             auto resTy = tile::BufType::get(ctx, sizes, srcBuf.getElementType(),
-                                             srcBuf.getMemorySpace());
+             auto resTy = tile::BufType::get(
+                 ctx, sizes, srcBuf.getElementType(), srcBuf.getMemorySpace());
              auto op = self.create<tile::SubViewOp>(
                  resTy, source, indexOffsets, builder.getI64ArrayAttr(sizes),
                  builder.getI64ArrayAttr(strides));
@@ -300,8 +303,8 @@ void init_triton_tle_ir(py::module &&m) {
       .def("create_tile_to_tensor",
            [](TritonOpBuilder &self, Value &src, bool /*writable*/) -> Value {
              auto srcBuf = mlir::cast<tile::BufType>(src.getType());
-             auto resTy =
-                 RankedTensorType::get(srcBuf.getShape(), srcBuf.getElementType());
+             auto resTy = RankedTensorType::get(srcBuf.getShape(),
+                                                srcBuf.getElementType());
              auto op = self.create<tile::ToTensorOp>(resTy, src);
              return op.getResult();
            })

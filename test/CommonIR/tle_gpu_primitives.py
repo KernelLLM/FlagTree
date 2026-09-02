@@ -9,8 +9,7 @@ import triton.experimental.tle.language as tle
 @triton.jit
 def _gpu_primitives_kernel(src, out, BLOCK: tl.constexpr):
     idx = tl.arange(0, BLOCK)
-    storage = tle.gpu.alloc([2, BLOCK], dtype=tl.float32, layout=None, scope=tle.gpu.smem,
-                            nv_mma_shared_layout=False)
+    storage = tle.gpu.alloc([2, BLOCK], dtype=tl.float32, layout=None, scope=tle.gpu.smem, nv_mma_shared_layout=False)
     pipe = tle.pipe(capacity=2, scope="cta", name="p", payload=storage)
     writer = pipe.writer()
     reader = pipe.reader()

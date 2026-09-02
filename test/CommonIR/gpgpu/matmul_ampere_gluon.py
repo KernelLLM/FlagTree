@@ -353,13 +353,26 @@ def matmul(a, b, BLOCK_M=None, BLOCK_N=None, BLOCK_K=None, GROUP_M=8, NUM_BUFFER
         b_work = b_t
 
     c = torch.empty((M, N), device=a.device, dtype=a.dtype)
-    grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N),)
+    grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N), )
     matmul_kernel[grid](
-        a_work, b_work, c, M, N, K_padded,
-        a_work.stride(0), a_work.stride(1),
-        b_work.stride(1), b_work.stride(0),
-        c.stride(0), c.stride(1),
-        BLOCK_M, BLOCK_N, BLOCK_K, GROUP_M, NUM_BUFFERS, dtype_str,
+        a_work,
+        b_work,
+        c,
+        M,
+        N,
+        K_padded,
+        a_work.stride(0),
+        a_work.stride(1),
+        b_work.stride(1),
+        b_work.stride(0),
+        c.stride(0),
+        c.stride(1),
+        BLOCK_M,
+        BLOCK_N,
+        BLOCK_K,
+        GROUP_M,
+        NUM_BUFFERS,
+        dtype_str,
         num_warps=num_warps,
     )
     return c
@@ -368,6 +381,7 @@ def matmul(a, b, BLOCK_M=None, BLOCK_N=None, BLOCK_K=None, GROUP_M=8, NUM_BUFFER
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def run_check(M, N, K, dtype=torch.float16, atol=2e-2, rtol=2e-2):
     """Run a single matmul check: compare Gluon kernel output against torch.matmul."""
@@ -434,7 +448,10 @@ def run_perf(M, N, K, dtype=torch.float16, warmup=100, rep=100):
     tflops_gluon = _calc_tflops(M, N, K, latency_gluon)
 
     return {
-        "M": M, "N": N, "K": K, "dtype": str(dtype),
+        "M": M,
+        "N": N,
+        "K": K,
+        "dtype": str(dtype),
         "latency_base_ms": latency_base,
         "latency_gluon_ms": latency_gluon,
         "speedup": speedup,
@@ -449,12 +466,10 @@ def run_perf(M, N, K, dtype=torch.float16, warmup=100, rep=100):
 def test_perf_matmul_ampere_gluon(M, N, K, dtype):
     """Performance test: compare Gluon matmul kernel against torch.Tensor.mm."""
     result = run_perf(M, N, K, dtype=dtype)
-    print(
-        f"[perf] ({M:>5}, {N:>5}, {K:>5}) dtype={str(dtype):<14} | "
-        f"torch.mm: {result['latency_base_ms']:.4f} ms ({result['tflops_base']:.3f} TFLOPS) | "
-        f"gluon:    {result['latency_gluon_ms']:.4f} ms ({result['tflops_gluon']:.3f} TFLOPS) | "
-        f"speedup: {result['speedup']:.3f}x"
-    )
+    print(f"[perf] ({M:>5}, {N:>5}, {K:>5}) dtype={str(dtype):<14} | "
+          f"torch.mm: {result['latency_base_ms']:.4f} ms ({result['tflops_base']:.3f} TFLOPS) | "
+          f"gluon:    {result['latency_gluon_ms']:.4f} ms ({result['tflops_gluon']:.3f} TFLOPS) | "
+          f"speedup: {result['speedup']:.3f}x")
 
 
 if __name__ == "__main__":
@@ -476,18 +491,14 @@ if __name__ == "__main__":
         print("\n" + "=" * 90)
         print(f"{'Performance Benchmark: Gluon matmul_ampere vs torch.Tensor.mm':^90}")
         print("=" * 90)
-        print(
-            f"{'(M, N, K)':<22} {'dtype':<12} "
-            f"{'torch.mm (ms)':>14} {'gluon (ms)':>12} "
-            f"{'speedup':>9} {'torch TFLOPS':>13} {'gluon TFLOPS':>13}"
-        )
+        print(f"{'(M, N, K)':<22} {'dtype':<12} "
+              f"{'torch.mm (ms)':>14} {'gluon (ms)':>12} "
+              f"{'speedup':>9} {'torch TFLOPS':>13} {'gluon TFLOPS':>13}")
         print("-" * 90)
         for dtype in [torch.float16, torch.bfloat16]:
             for M, N, K in _PERF_SHAPES:
                 r = run_perf(M, N, K, dtype=dtype)
-                print(
-                    f"({M:>5},{N:>5},{K:>5})  {str(dtype):<12} "
-                    f"{r['latency_base_ms']:>14.4f} {r['latency_gluon_ms']:>12.4f} "
-                    f"{r['speedup']:>8.3f}x {r['tflops_base']:>12.3f} {r['tflops_gluon']:>12.3f}"
-                )
+                print(f"({M:>5},{N:>5},{K:>5})  {str(dtype):<12} "
+                      f"{r['latency_base_ms']:>14.4f} {r['latency_gluon_ms']:>12.4f} "
+                      f"{r['speedup']:>8.3f}x {r['tflops_base']:>12.3f} {r['tflops_gluon']:>12.3f}")
         print("=" * 90)

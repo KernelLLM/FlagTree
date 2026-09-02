@@ -786,8 +786,8 @@ class pipe_writer(_pipe_endpoint):
     def commit(self, iter, _semantic=None):
         stage, _ = self.pipe._stage_phase(iter, _semantic=_semantic)
         _semantic.builder.create_pipe_writer_commit(self.pipe._field_handles(_semantic), stage.handle,
-                                                    self.pipe.capacity,
-                                                    self.pipe.scope, self.pipe._ir_name(), self.pipe._field_names())
+                                                    self.pipe.capacity, self.pipe.scope, self.pipe._ir_name(),
+                                                    self.pipe._field_names())
 
     @tl.builtin
     def close(self, iter, _semantic=None):
@@ -812,10 +812,9 @@ class pipe_reader(_pipe_endpoint):
     def wait(self, iter, _semantic=None):
         stage, phase = self.pipe._stage_phase(iter, _semantic=_semantic)
         is_closed = _semantic.builder.create_pipe_reader_wait(self.pipe._field_handles(_semantic), stage.handle,
-                                                              phase.handle,
-                                                              self.pipe.capacity, self.pipe.scope, self.pipe._ir_name(),
-                                                              self.pipe._field_names(), self.reader_name or "",
-                                                              self._reader_field_names())
+                                                              phase.handle, self.pipe.capacity, self.pipe.scope,
+                                                              self.pipe._ir_name(), self.pipe._field_names(),
+                                                              self.reader_name or "", self._reader_field_names())
         slot = self.pipe._make_slot(stage, _semantic=_semantic, field_names=self.field_names)
         return pipe_wait_result(slot, tl.tensor(is_closed, tl.int1))
 

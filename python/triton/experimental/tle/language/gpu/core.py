@@ -372,14 +372,11 @@ def copy(
             f"Destination parameter must be tl.tensor or tle.buffered_tensor  tl.tensor_descriptor, but got {type(dst).__name__}"
         )
 
-    local_to_global = isinstance(src, tle.buffered_tensor) and isinstance(
-        dst, (tl.tensor, tl.tensor_descriptor))
-    global_to_local = isinstance(dst, tle.buffered_tensor) and isinstance(
-        src, (tl.tensor, tl.tensor_descriptor))
+    local_to_global = isinstance(src, tle.buffered_tensor) and isinstance(dst, (tl.tensor, tl.tensor_descriptor))
+    global_to_local = isinstance(dst, tle.buffered_tensor) and isinstance(src, (tl.tensor, tl.tensor_descriptor))
     if not (local_to_global or global_to_local):
-        raise ValueError(
-            f"Invalid copy combination: src={type(src).__name__}, dst={type(dst).__name__}. "
-            "One operand must be a global tensor/descriptor and the other must be tle.buffered_tensor")
+        raise ValueError(f"Invalid copy combination: src={type(src).__name__}, dst={type(dst).__name__}. "
+                         "One operand must be a global tensor/descriptor and the other must be tle.buffered_tensor")
     direction = CopyDirection.LOCAL_TO_GM if local_to_global else CopyDirection.GM_TO_LOCAL
 
     if not isinstance(shape, (tuple, list)):
@@ -389,8 +386,8 @@ def copy(
         else:
             raise ValueError(f"Shape parameter must be tuple or list, but got {type(shape)}")
 
-    descriptor = src if isinstance(src, tl.tensor_descriptor) else dst if isinstance(
-        dst, tl.tensor_descriptor) else None
+    descriptor = src if isinstance(src,
+                                   tl.tensor_descriptor) else dst if isinstance(dst, tl.tensor_descriptor) else None
     if descriptor is not None:
         if offsets is None:
             raise ValueError("TMA copy requires offsets")

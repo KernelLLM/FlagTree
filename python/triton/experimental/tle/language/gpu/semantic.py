@@ -30,8 +30,7 @@ def _make_full_indices(buffer, _semantic):
     shape = tuple(int(tl._unwrap_if_constexpr(dim)) for dim in buffer.type.shape)
     return tuple(
         _expand_index_to_shape(tl.arange(0, dim, _semantic=_semantic), shape, axis, _semantic)
-        for axis, dim in enumerate(shape)
-    )
+        for axis, dim in enumerate(shape))
 
 
 def alloc(shape, dtype, storage, layout, layout_handle, init_value, _semantic):
@@ -58,8 +57,8 @@ def alloc(shape, dtype, storage, layout, layout_handle, init_value, _semantic):
 
 
 def copy(src, dst, shape, offsets, direction, _semantic):
-    descriptor = src if isinstance(src, tl.tensor_descriptor) else dst if isinstance(
-        dst, tl.tensor_descriptor) else None
+    descriptor = src if isinstance(src,
+                                   tl.tensor_descriptor) else dst if isinstance(dst, tl.tensor_descriptor) else None
 
     if COMMON_IR_ENABLED:
         if descriptor is None:
@@ -92,8 +91,8 @@ def copy(src, dst, shape, offsets, direction, _semantic):
     eviction_policy = ""
     if direction.name == "GM_TO_LOCAL":
         load_extra_args = () if mthreads_copy.enabled() else (None, )
-        value = _semantic.load(src, mask, None, boundary_check, "", cache_modifier,
-                               eviction_policy, False, *load_extra_args)
+        value = _semantic.load(src, mask, None, boundary_check, "", cache_modifier, eviction_policy, False,
+                               *load_extra_args)
         from .core import local_ptr
         ptrs = local_ptr(dst, _make_full_indices(dst, _semantic), _semantic=_semantic)
         _semantic.store(ptrs, value, mask, boundary_check, cache_modifier, eviction_policy)
@@ -107,8 +106,8 @@ def copy(src, dst, shape, offsets, direction, _semantic):
 def subview(src, offsets, shape, strides, layout, _semantic):
     builder = _semantic.builder
     if not COMMON_IR_ENABLED:
-        result_type = tle.buffered_tensor_type(
-            src.dtype, shape, src.type.storage, layout, _semantic, alloc_shape=shape).to_ir(builder)
+        result_type = tle.buffered_tensor_type(src.dtype, shape, src.type.storage, layout, _semantic,
+                                               alloc_shape=shape).to_ir(builder)
         return builder.create_memdesc_index(result_type, src.handle, offsets[0].handle)
     return builder.create_tile_subview(
         src.handle,

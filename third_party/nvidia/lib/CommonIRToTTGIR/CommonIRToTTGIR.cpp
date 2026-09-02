@@ -27,7 +27,7 @@ namespace ttg = mlir::triton::gpu;
 constexpr int kSharedMemoryAddressSpace = 3;
 
 static FailureOr<ttg::MemDescType> getMemDescType(Operation *op,
-                                                   tile::BufType bufferType) {
+                                                  tile::BufType bufferType) {
   if (bufferType.getMemorySpace() != tile::MemorySpace::Shared) {
     op->emitError("GPU TileIR conversion currently requires #tile.shared");
     return failure();
@@ -41,12 +41,13 @@ static FailureOr<ttg::MemDescType> getMemDescType(Operation *op,
 
   auto memorySpace = ttg::SharedMemorySpaceAttr::get(op->getContext());
   return ttg::MemDescType::get(bufferType.getShape(),
-                               bufferType.getElementType(), layout,
-                               memorySpace, /*mutableMemory=*/true);
+                               bufferType.getElementType(), layout, memorySpace,
+                               /*mutableMemory=*/true);
 }
 
-static FailureOr<Value> lookupBuffer(Operation *op, Value buffer,
-                                     const llvm::DenseMap<Value, Value> &mapped) {
+static FailureOr<Value>
+lookupBuffer(Operation *op, Value buffer,
+             const llvm::DenseMap<Value, Value> &mapped) {
   auto it = mapped.find(buffer);
   if (it == mapped.end()) {
     op->emitError("uses a TileIR buffer without a converted allocation");
@@ -55,9 +56,9 @@ static FailureOr<Value> lookupBuffer(Operation *op, Value buffer,
   return it->second;
 }
 
-static FailureOr<ttg::MemDescType> inferMemDescType(
-    ModuleOp module, triton::FuncOp func, BlockArgument argument,
-    const llvm::DenseMap<Value, Value> &mapped) {
+static FailureOr<ttg::MemDescType>
+inferMemDescType(ModuleOp module, triton::FuncOp func, BlockArgument argument,
+                 const llvm::DenseMap<Value, Value> &mapped) {
   ttg::MemDescType inferred;
   for (Operation *user : argument.getUsers()) {
     auto bridge = dyn_cast<UnrealizedConversionCastOp>(user);
@@ -68,7 +69,8 @@ static FailureOr<ttg::MemDescType> inferMemDescType(
     if (!type)
       continue;
     if (inferred && inferred != type) {
-      bridge.emitError("conflicting descriptor types for the same TileIR buffer");
+      bridge.emitError(
+          "conflicting descriptor types for the same TileIR buffer");
       return failure();
     }
     inferred = type;
@@ -76,7 +78,8 @@ static FailureOr<ttg::MemDescType> inferMemDescType(
   if (!inferred) {
     unsigned argumentNumber = argument.getArgNumber();
     module.walk([&](triton::CallOp call) {
-      if (inferred || module.lookupSymbol<triton::FuncOp>(call.getCallee()) != func ||
+      if (inferred ||
+          module.lookupSymbol<triton::FuncOp>(call.getCallee()) != func ||
           argumentNumber >= call.getNumOperands())
         return;
       Value operand = call.getOperand(argumentNumber);
@@ -161,8 +164,8 @@ static bool isPointerLike(Type type) {
 }
 
 static Type getLocalPointerType(Type valueType, Type elementType) {
-  Type ptrType = triton::PointerType::get(elementType,
-                                          kSharedMemoryAddressSpace);
+  Type ptrType =
+      triton::PointerType::get(elementType, kSharedMemoryAddressSpace);
   if (auto tensorType = dyn_cast<RankedTensorType>(valueType))
     return RankedTensorType::get(tensorType.getShape(), ptrType,
                                  tensorType.getEncoding());
@@ -188,7 +191,7 @@ static SmallVector<Value> createFullIndices(OpBuilder &builder, Location loc,
       expandedShape.push_back(1);
       auto expandedType = RankedTensorType::get(expandedShape, i32);
       index = builder.create<triton::ExpandDimsOp>(loc, expandedType, index,
-                                                    expandAxis);
+                                                   expandAxis);
     }
 
     auto resultType = RankedTensorType::get(shape, i32);
@@ -201,8 +204,7 @@ static SmallVector<Value> createFullIndices(OpBuilder &builder, Location loc,
 static Value createFullLocalPointers(OpBuilder &builder, Location loc,
                                      Value memDesc, Type valueType) {
   auto memDescType = cast<ttg::MemDescType>(memDesc.getType());
-  Type ptrType =
-      getLocalPointerType(valueType, memDescType.getElementType());
+  Type ptrType = getLocalPointerType(valueType, memDescType.getElementType());
   SmallVector<Value> indices =
       createFullIndices(builder, loc, memDescType.getShape());
   return builder.create<tle::LocalPointersOp>(loc, ptrType, memDesc, indices);
@@ -244,9 +246,9 @@ static FailureOr<int32_t> getConstantOffset(Value value) {
   return static_cast<int32_t>(integer.getInt());
 }
 
-static LogicalResult convertAllocations(
-    ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
-    SmallVectorImpl<Operation *> &eraseOps) {
+static LogicalResult
+convertAllocations(ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
+                   SmallVectorImpl<Operation *> &eraseOps) {
   WalkResult result = module.walk([&](tile::AllocOp op) {
     auto memDescType =
         getMemDescType(op, cast<tile::BufType>(op.getResult().getType()));
@@ -261,8 +263,9 @@ static LogicalResult convertAllocations(
   return failure(result.wasInterrupted());
 }
 
-static void rewriteConvertedOperands(
-    ModuleOp module, const llvm::DenseMap<Value, Value> &mapped) {
+static void
+rewriteConvertedOperands(ModuleOp module,
+                         const llvm::DenseMap<Value, Value> &mapped) {
   module.walk([&](Operation *op) {
     if (isa<tile::AllocOp, tile::SubViewOp, tile::CopyOp, tile::ToTensorOp,
             tile::StoreTensorOp, UnrealizedConversionCastOp>(op))
@@ -275,10 +278,10 @@ static void rewriteConvertedOperands(
   });
 }
 
-static LogicalResult convertBufferBridges(
-    ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
-    ArrayRef<UnrealizedConversionCastOp> argumentCasts,
-    SmallVectorImpl<Operation *> &eraseOps) {
+static LogicalResult
+convertBufferBridges(ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
+                     ArrayRef<UnrealizedConversionCastOp> argumentCasts,
+                     SmallVectorImpl<Operation *> &eraseOps) {
   WalkResult result = module.walk([&](UnrealizedConversionCastOp op) {
     if (llvm::is_contained(argumentCasts, op) || op.getInputs().size() != 1 ||
         op->getNumResults() != 1 ||
@@ -317,9 +320,9 @@ static void finalizeConvertedArguments(
   }
 }
 
-static LogicalResult convertSubviews(
-    ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
-    SmallVectorImpl<Operation *> &eraseOps) {
+static LogicalResult convertSubviews(ModuleOp module,
+                                     llvm::DenseMap<Value, Value> &mapped,
+                                     SmallVectorImpl<Operation *> &eraseOps) {
   WalkResult result = module.walk([&](tile::SubViewOp op) {
     auto source = lookupBuffer(op, op.getSource(), mapped);
     auto resultType =
@@ -338,15 +341,16 @@ static LogicalResult convertSubviews(
       auto index = castToI32(builder, op.getLoc(), op.getOffsets().front());
       if (failed(index))
         return WalkResult::interrupt();
-      converted = builder.create<ttg::MemDescIndexOp>(
-          op.getLoc(), *resultType, *source, *index);
+      converted = builder.create<ttg::MemDescIndexOp>(op.getLoc(), *resultType,
+                                                      *source, *index);
     } else if (sourceType.getRank() == resultType->getRank()) {
       SmallVector<int32_t> offsets;
       offsets.reserve(op.getOffsets().size());
       for (Value offset : op.getOffsets()) {
         auto constant = getConstantOffset(offset);
         if (failed(constant)) {
-          op.emitError("same-rank tile.subview currently requires static offsets");
+          op.emitError(
+              "same-rank tile.subview currently requires static offsets");
           return WalkResult::interrupt();
         }
         offsets.push_back(*constant);
@@ -366,9 +370,9 @@ static LogicalResult convertSubviews(
   return failure(result.wasInterrupted());
 }
 
-static LogicalResult convertTileUsers(
-    ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
-    SmallVectorImpl<Operation *> &eraseOps) {
+static LogicalResult convertTileUsers(ModuleOp module,
+                                      llvm::DenseMap<Value, Value> &mapped,
+                                      SmallVectorImpl<Operation *> &eraseOps) {
   bool failedConversion = false;
   OpBuilder builder(module.getContext());
 
@@ -397,8 +401,7 @@ static LogicalResult convertTileUsers(
         return;
       }
       builder.setInsertionPoint(op);
-      builder.create<ttg::LocalStoreOp>(op.getLoc(), op.getSrc(),
-                                        *destination);
+      builder.create<ttg::LocalStoreOp>(op.getLoc(), op.getSrc(), *destination);
       eraseOps.push_back(op);
       return;
     }
@@ -430,8 +433,8 @@ static LogicalResult convertTileUsers(
           value = builder.create<triton::LoadOp>(
               op.getLoc(), src, triton::CacheModifier::NONE,
               triton::EvictionPolicy::NORMAL, false);
-        Value ptr = createFullLocalPointers(builder, op.getLoc(), dst,
-                                            value.getType());
+        Value ptr =
+            createFullLocalPointers(builder, op.getLoc(), dst, value.getType());
         builder.create<triton::StoreOp>(op.getLoc(), ptr, value,
                                         triton::CacheModifier::NONE,
                                         triton::EvictionPolicy::NORMAL);
@@ -443,8 +446,8 @@ static LogicalResult convertTileUsers(
           failedConversion = true;
           return;
         }
-        Value ptr = createFullLocalPointers(builder, op.getLoc(), src,
-                                            valueType);
+        Value ptr =
+            createFullLocalPointers(builder, op.getLoc(), src, valueType);
         Value value = builder.create<triton::LoadOp>(
             op.getLoc(), ptr, triton::CacheModifier::NONE,
             triton::EvictionPolicy::NORMAL, false);
@@ -460,7 +463,8 @@ static LogicalResult convertTileUsers(
       return;
     }
 
-    if (isa<tile::SetFlagOp, tile::WaitFlagOp, tile::PipeBarrierOp>(operation)) {
+    if (isa<tile::SetFlagOp, tile::WaitFlagOp, tile::PipeBarrierOp>(
+            operation)) {
       builder.setInsertionPoint(operation);
       builder.create<ttg::LocalBarrierOp>(operation->getLoc());
       eraseOps.push_back(operation);
@@ -480,11 +484,9 @@ class CommonIRToTTGIRPass
     SmallVector<UnrealizedConversionCastOp> argumentCasts;
 
     if (failed(convertAllocations(module, mapped, eraseOps)) ||
-        failed(convertWarpSpecializeCaptures(module, mapped,
-                                             convertedArgumentTypes,
-                                             argumentCasts)) ||
-        failed(convertFunctionArguments(module, mapped,
-                                        convertedArgumentTypes,
+        failed(convertWarpSpecializeCaptures(
+            module, mapped, convertedArgumentTypes, argumentCasts)) ||
+        failed(convertFunctionArguments(module, mapped, convertedArgumentTypes,
                                         argumentCasts)) ||
         failed(convertSubviews(module, mapped, eraseOps)) ||
         failed(convertBufferBridges(module, mapped, argumentCasts, eraseOps)) ||
