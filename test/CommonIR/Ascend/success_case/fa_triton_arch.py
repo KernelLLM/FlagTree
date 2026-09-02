@@ -22,7 +22,7 @@ import triton.language as tl
 #  `import triton.experimental.tle as tle` also patches triton.compiler so the
 #  tile/tle dialects are registered in the MLIR context during compilation.
 # =============================================================================
-import triton.experimental.tle as tle  # registers tile/tle dialects; tle.scope
+import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
 from triton.experimental.tle.language.dsa.ascend import PIPE, sync_block_set, sync_block_wait
 
 # NOTE: The tle tile-DSA layer now has minimal tile.cube_launch / tile.cube_wait
