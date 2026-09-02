@@ -36,7 +36,8 @@ from triton.experimental.tle.language.dsa.ascend import PIPE, sync_block_set, sy
 NUM_CORES = 20
 BLOCK_M = 64
 BLOCK_N = 128
-DIM = 128
+# DIM is now a constexpr kernel parameter instead of a module constant
+# to support multiple head dimensions (64, 96, 128, 192, etc.)
 RING: tl.constexpr = tl.constexpr(3)  # task-ring depth (the "3-task" of the schedule)
 
 # ---- Cross-core semaphores -------------------------------------------------
@@ -666,7 +667,7 @@ def _dump_signature():
     return sig
 
 
-def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is_causal=False):
+def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is_causal=False, dim=64):
     """Compile the kernel to TTIR (containing tile.* ops) and write it to `path`.
 
     Also runs the CommonIR→HIVM pass to lower tile.* ops and dumps the resulting
@@ -679,7 +680,7 @@ def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, 
     from triton._C.libtriton import ir
     from triton._C.libtriton import tle as tle_ir
 
-    # The kernel reads module-level shape constants (BLOCK_M, DIM, ...) as plain
+    # The kernel reads module-level shape constants (BLOCK_M, ...) as plain
     # globals; allow that during this front-end-only dump.
     os.environ.setdefault("TRITON_ALLOW_NON_CONSTEXPR_GLOBALS", "1")
 
@@ -695,7 +696,7 @@ def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, 
         "IS_CAUSAL": is_causal,
         "BLOCK_M": BLOCK_M,
         "BLOCK_N": BLOCK_N,
-        "DIM": DIM,
+        "DIM": dim,
     }
 
     src = ASTSource(flash_attention_fwd_3task_kernel, signature, constants)
@@ -785,7 +786,7 @@ def _dump_pass_stage(module, path, tag):
     print(f"[dump] appended stage '{tag}' to {path}", flush=True)
 
 
-def dump_hivm(path=None, combine_batch=32, is_causal=False):
+def dump_hivm(path=None, combine_batch=32, is_causal=False, dim=64):
     """Compile the kernel to TTIR, then lower through CommonIR→HIVM pipeline to HIVM IR.
 
     Pipeline (matches compiler.py ttir_to_linalg):
@@ -805,7 +806,7 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
     from triton._C.libtriton import ir, passes, ascend
 
     # Step 1: compile to TTIR (CommonIR)
-    commonir_mlir = dump_commonir(path=None, combine_batch=combine_batch, is_causal=is_causal)
+    commonir_mlir = dump_commonir(path=None, combine_batch=combine_batch, is_causal=is_causal, dim=dim)
 
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_hivm.mlir")
@@ -875,7 +876,7 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
     return mlir
 
 
-def dump_linalg(path=None, combine_batch=32, is_causal=False):
+def dump_linalg(path=None, combine_batch=32, is_causal=False, dim=64):
     """Compile the kernel through the full CommonIR→Linalg lowering pipeline.
 
     Pipeline:
@@ -909,7 +910,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     from triton._C.libtriton import tle as tle_ir
 
     # Step 1: compile to TTIR (CommonIR)
-    commonir_mlir = dump_commonir(path=None, combine_batch=combine_batch, is_causal=is_causal)
+    commonir_mlir = dump_commonir(path=None, combine_batch=combine_batch, is_causal=is_causal, dim=dim)
 
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_linalg.mlir")
@@ -1064,7 +1065,8 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
 def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
     B, Hq, S, D = q.shape
     Hkv = k.shape[1]
-    assert D == DIM and S % BLOCK_N == 0 and Hq % Hkv == 0
+    assert D % 16 == 0 and D <= 256, f"Head dim D={D} must be multiple of 16 and <= 256"
+    assert S % BLOCK_N == 0 and Hq % Hkv == 0
     num_seq_blocks = S // BLOCK_M
     block_num = num_seq_blocks * Hq * B
     num_kv_blocks = S // BLOCK_N  # KV blocks per output tile
@@ -1079,12 +1081,12 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
     rem_block_num = block_num % NUM_CORES
 
     out = torch.empty_like(q)
-    # GM ping-pong workspaces: [NUM_CORES, RING, CB, BLOCK_M, BLOCK_N/DIM]
+    # GM ping-pong workspaces: [NUM_CORES, RING, CB, BLOCK_M, BLOCK_N/D]
     # Each ring_slot holds CB score/prob/pv blocks so MM1/Vec1/MM2 can process
     # all CB sub-blocks within one task before signalling the next stage.
     workspace_s = torch.empty((NUM_CORES, RING, CB, BLOCK_M, BLOCK_N), dtype=torch.float16, device=q.device)
     workspace_p = torch.empty((NUM_CORES, RING, CB, BLOCK_M, BLOCK_N), dtype=q.dtype, device=q.device)
-    workspace_pv = torch.empty((NUM_CORES, RING, CB, BLOCK_M, DIM), dtype=torch.float16, device=q.device)
+    workspace_pv = torch.empty((NUM_CORES, RING, CB, BLOCK_M, D), dtype=torch.float16, device=q.device)
     workspace_rescale = torch.empty((NUM_CORES, RING, CB, BLOCK_M), dtype=torch.float32, device=q.device)
     workspace_expsum = torch.empty((NUM_CORES, RING, CB, BLOCK_M), dtype=torch.float32, device=q.device)
     sm_scale = (1.0 / D)**0.5
@@ -1129,7 +1131,7 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
         IS_CAUSAL=is_causal,
         BLOCK_M=BLOCK_M,
         BLOCK_N=BLOCK_N,
-        DIM=DIM,
+        DIM=D,
     )
     return out
 
@@ -1141,7 +1143,7 @@ if __name__ == "__main__":
     parser.add_argument("--H", type=int, default=16)
     parser.add_argument("--q-heads", type=int, default=None)
     parser.add_argument("--kv-heads", type=int, default=None)
-    parser.add_argument("--D", type=int, default=DIM)
+    parser.add_argument("--D", type=int, default=64, help="Head dimension (64, 96, 128, 192, etc.)")
     parser.add_argument("--causal", action="store_true")
     parser.add_argument("--no-check", action="store_true")
     parser.add_argument("--combine-batch", type=int, default=8, help="KV blocks per task (arch22 nRatio)")
@@ -1159,17 +1161,17 @@ if __name__ == "__main__":
     combine_batch = args.combine_batch
     # ---- dump intermediate CommonIR and exit (no device required) ----
     if args.dump_mlir is not None:
-        dump_commonir(path=(args.dump_mlir or None), combine_batch=combine_batch, is_causal=args.causal)
+        dump_commonir(path=(args.dump_mlir or None), combine_batch=combine_batch, is_causal=args.causal, dim=D)
         raise SystemExit(0)
 
     # ---- dump HIVM IR after full lowering pipeline (no device required) ----
     if args.dump_ir is not None:
-        dump_hivm(path=(args.dump_ir or None), combine_batch=combine_batch, is_causal=args.causal)
+        dump_hivm(path=(args.dump_ir or None), combine_batch=combine_batch, is_causal=args.causal, dim=D)
         raise SystemExit(0)
 
     # ---- dump Linalg IR after full CommonIR→Linalg lowering (no device required) ----
     if args.dump_linalg is not None:
-        dump_linalg(path=(args.dump_linalg or None), combine_batch=combine_batch, is_causal=args.causal)
+        dump_linalg(path=(args.dump_linalg or None), combine_batch=combine_batch, is_causal=args.causal, dim=D)
         raise SystemExit(0)
 
     Q_H = args.q_heads or H
