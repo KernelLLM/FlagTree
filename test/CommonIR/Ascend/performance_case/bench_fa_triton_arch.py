@@ -22,11 +22,11 @@ Sweep matrix (--sweep)
 ----------------------
   batches      : [1, 4, 8, 16, 32]
   seqlen_pairs : [[32, 8192], [2048, 2048], [4096, 4096], [8192, 8192], [16384, 16384]]
-  head_dims    : [64, 96, 128, [192, 128]]   (last entry = Dq=192 / Dkv=128)
+  head_dims    : [64, 96, 128]   (Dq == Dkv required; split Q/KV dim unsupported)
   head_pairs   : [[16, 16], [16, 8], [16, 4], [16, 1]]
 
   Total configurations: 5 × 5 × 4 × 4 = 400
-  Configs where Dq or Dkv ≠ kernel DIM (128) are reported as SKIP.
+  Note: kernel now supports variable head dimensions via constexpr DIM parameter.
 
 Usage
 -----
@@ -70,7 +70,7 @@ from testing import do_bench_npu  # noqa: E402
 _DEFAULT_B = 4
 _DEFAULT_S = 1024
 _DEFAULT_H = 16
-_DEFAULT_D = _fa.DIM  # must match the kernel's compile-time DIM constant
+_DEFAULT_D = 64  # default head dimension (kernel now supports variable DIM via constexpr)
 _DEFAULT_COMBINE_BATCH = 8
 _DEFAULT_WARMUP = 2
 _DEFAULT_REP = 3
@@ -275,7 +275,7 @@ _SEQLEN_PAIRS = [
 _HEAD_DIMS = [(64, 64),  # uniform 64
               (96, 96),  # uniform 96
               (128, 128),  # uniform 128
-              (192, 128),  # split Q/KV dim (GQA-style)
+              # (192, 128),  # unsupported: Dq != Dkv (kernel requires Dq == Dkv)
               ]
 _HEAD_PAIRS = [(16, 16),  # MHA
                (16, 8),  # GQA 2:1
@@ -309,9 +309,8 @@ def _parse_args():
     p.add_argument("--H", type=int, default=_DEFAULT_H, help="number of heads (shorthand for --q-heads)")
     p.add_argument("--q-heads", type=int, default=None, help="query heads (overrides --H)")
     p.add_argument("--kv-heads", type=int, default=None, help="key/value heads (default: same as q-heads)")
-    p.add_argument(
-        "--D", type=int, default=_DEFAULT_D,
-        help=f"Q head dim (kernel compile-time DIM={_fa.DIM}; other values will fail inside flash_attention_fwd)")
+    p.add_argument("--D", type=int, default=_DEFAULT_D,
+                   help="Q head dim (kernel now supports variable DIM via constexpr parameter)")
     p.add_argument("--kv-dim", dest="Dkv", type=int, default=None,
                    help="KV head dim (default: same as --D).  Use e.g. --D 192 --kv-dim 128 for split Q/KV dims.")
     p.add_argument("--causal", action="store_true", help="causal masking")
@@ -324,6 +323,8 @@ def _parse_args():
     p.add_argument("--no-check", action="store_true", help="skip correctness verification")
     p.add_argument("--sweep", action="store_true",
                    help="run full sweep over batches × seqlen_pairs × head_dims × head_pairs")
+    p.add_argument("--sweep-verify-only", action="store_true",
+                   help="sweep mode: run correctness check only (no benchmarking)")
     return p.parse_args()
 
 
@@ -341,16 +342,27 @@ def main():
     print(f"D      : {args.D}   causal={args.causal}   combine_batch={args.combine_batch}")
     print()
 
-    if args.sweep:
+    if args.sweep or args.sweep_verify_only:
         # ---- sweep mode: table over all (B, Hq, Hkv, Sq, Skv, Dq, Dkv) ----
+        if args.sweep_verify_only:
+            print("=" * 80)
+            print("CORRECTNESS VERIFICATION MODE (no benchmarking)")
+            print("=" * 80)
+            print()
+
         hdr = (f"{'B':>4} {'Hq':>4} {'Hkv':>4} {'Sq':>6} {'Skv':>6} {'Dq':>4} {'Dkv':>4} "
                f"{'FA(ms)':>9} {'SDPA(ms)':>10} {'speedup':>8} "
                f"{'TFLOPS':>8} {'BW(GB/s)':>10}")
         sep = "-" * len(hdr)
-        print(hdr)
-        print(sep)
+
+        if not args.sweep_verify_only:
+            print(hdr)
+            print(sep)
 
         skipped = 0
+        passed = 0
+        failed = 0
+
         for (sB, sHq, sHkv, sSq, sSkv, sDq, sDkv) in _SWEEP_CONFIGS:
             cfg_label = f"B={sB} Hq={sHq} Hkv={sHkv} Sq={sSq} Skv={sSkv} Dq={sDq} Dkv={sDkv}"
             try:
@@ -367,26 +379,44 @@ def main():
                     mode=args.mode,
                     warmup=args.warmup,
                     rep=args.rep,
-                    no_check=True,  # skip check in sweep for speed
+                    no_check=args.sweep_verify_only is False,  # verify in verify-only mode
                     device=device,
                 )
-                direction = "↑" if r["speedup"] > 1 else "↓"
-                print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sSq:>6} {sSkv:>6} {sDq:>4} {sDkv:>4} "
-                      f"{r['fa_ms']:>9.3f} {r['sdpa_ms']:>10.3f} "
-                      f"{r['speedup']:>7.3f}{direction} "
-                      f"{r['tflops_fa']:>8.3f} {r['bw_fa']:>10.1f}")
+                if args.sweep_verify_only:
+                    passed += 1
+                    print(f"✓ {cfg_label}")
+                else:
+                    direction = "↑" if r["speedup"] > 1 else "↓"
+                    print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sSq:>6} {sSkv:>6} {sDq:>4} {sDkv:>4} "
+                          f"{r['fa_ms']:>9.3f} {r['sdpa_ms']:>10.3f} "
+                          f"{r['speedup']:>7.3f}{direction} "
+                          f"{r['tflops_fa']:>8.3f} {r['bw_fa']:>10.1f}")
             except AssertionError as exc:
                 skipped += 1
-                print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sSq:>6} {sSkv:>6} {sDq:>4} {sDkv:>4} "
-                      f"  SKIP (unsupported config: {exc})")
+                if args.sweep_verify_only:
+                    print(f"⊘ {cfg_label}  SKIP: {exc}")
+                else:
+                    print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sSq:>6} {sSkv:>6} {sDq:>4} {sDkv:>4} "
+                          f"  SKIP (unsupported config: {exc})")
             except Exception as exc:
-                print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sSq:>6} {sSkv:>6} {sDq:>4} {sDkv:>4} "
-                      f"  ERROR: {exc}")
+                failed += 1
+                if args.sweep_verify_only:
+                    print(f"✗ {cfg_label}  ERROR: {exc}")
+                else:
+                    print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sSq:>6} {sSkv:>6} {sDq:>4} {sDkv:>4} "
+                          f"  ERROR: {exc}")
 
-        print(sep)
+        if not args.sweep_verify_only:
+            print(sep)
+        else:
+            print()
+            print("=" * 80)
+
         total = len(_SWEEP_CONFIGS)
         print(f"Total configs: {total}  |  Skipped (unsupported): {skipped}  |  "
               f"Ran: {total - skipped}")
+        if args.sweep_verify_only:
+            print(f"Passed: {passed}  |  Failed: {failed}")
         return
 
     # ---- single-config mode -------------------------------------------------

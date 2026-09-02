@@ -1066,6 +1066,7 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
     B, Hq, S, D = q.shape
     Hkv = k.shape[1]
     assert D % 16 == 0 and D <= 256, f"Head dim D={D} must be multiple of 16 and <= 256"
+    assert D == k.shape[-1], f"Q head dim (D={D}) must equal KV head dim (D={k.shape[-1]})"
     assert S % BLOCK_N == 0 and Hq % Hkv == 0
     num_seq_blocks = S // BLOCK_M
     block_num = num_seq_blocks * Hq * B
