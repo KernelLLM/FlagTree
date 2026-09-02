@@ -15,6 +15,7 @@ import signal
 import os
 import subprocess
 from pathlib import Path
+from triton._common_ir import ENABLED as COMMON_IR_ENABLED
 from .distributed import Distributed
 
 
@@ -264,11 +265,13 @@ class CUDABackend(BaseBackend):
         passes.common.add_inliner(pm)
         pm.run(mod, 'make_ttir.inliner')
 
-        if hasattr(tle, "lower_gpu_tileir_to_ttir"):
-            tle.lower_gpu_tileir_to_ttir(mod)
-
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
+        # Lower TLE GPU CommonIR buffers before TTIR canonicalization.  The
+        # upstream TileIR allocation op is pure, so leaving it until make_ttgir
+        # would allow CSE to merge distinct shared-memory allocations.
+        if COMMON_IR_ENABLED:
+            nvidia.passes.commonir.add_to_ttgir(pm)
         passes.ttir.add_rewrite_tensor_pointer(pm)
         if capability // 10 < 9:
             passes.ttir.add_rewrite_tensor_descriptor_to_pointer(pm)

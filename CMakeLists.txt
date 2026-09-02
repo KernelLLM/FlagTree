@@ -16,6 +16,13 @@ if(FLAGTREE_BACKEND)
     add_definitions(-DFLAGTREE_BACKEND=\"${FLAGTREE_BACKEND}\")
 endif()
 
+# CommonIR is an explicit build-time feature. Keep the public contract as the
+# C/C++ FLAGTREE_COMMON_IR macro rather than adding a CMake cache option.
+set(FLAGTREE_COMMON_IR_ENABLED "$ENV{FLAGTREE_COMMON_IR}")
+if(FLAGTREE_COMMON_IR_ENABLED)
+  add_compile_definitions(FLAGTREE_COMMON_IR)
+endif()
+
 set(FLAGTREE_TLE ON)
 if(FLAGTREE_TLE)
   add_definitions(-D__TLE__)
@@ -258,15 +265,19 @@ endif()
 include_directories(${PROJECT_SOURCE_DIR}/third_party)
 include_directories(${PROJECT_BINARY_DIR}/third_party) # Tablegen'd files
 
-# TileIR dialect from FLIR is used by the TLE GPU -> Common IR POC path.
-# Keep it optional at configure time so non-POC builds without FLIR are not
-# forced to download the dependency.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/flir/CMakeLists.txt" AND NOT TARGET TileIRIR)
+# CommonIR is only part of builds that explicitly enable CommonIR.
+if(FLAGTREE_COMMON_IR_ENABLED AND NOT TARGET CommonIRIR)
+  if(FLAGTREE_BACKEND)
+    message(FATAL_ERROR "FLAGTREE_COMMON_IR on triton_v3.6.x requires the default NVIDIA backend")
+  endif()
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/flir/CMakeLists.txt")
+    message(FATAL_ERROR "FLAGTREE_COMMON_IR requires FLIR at third_party/flir")
+  endif()
   add_definitions(-D__FLIR_TILEIR__)
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/flir/include)
   include_directories(${CMAKE_CURRENT_BINARY_DIR}/third_party/flir/include)
-  add_subdirectory(third_party/flir/include/mlir-ext/Dialect/TileIR)
-  add_subdirectory(third_party/flir/lib/Dialect/TileIR)
+  add_subdirectory(third_party/flir/include/mlir-ext/Dialect/CommonIR)
+  add_subdirectory(third_party/flir/lib/Dialect/CommonIR)
 endif()
 
 # link_directories(${LLVM_LIBRARY_DIR})

@@ -15,7 +15,10 @@
 #include "tle/dialect/include/Transforms/Passes.h"
 #endif
 #ifdef __FLIR_TILEIR__
-#include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
+#include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
+#endif
+#ifdef FLAGTREE_COMMON_IR
+#include "nvidia/include/CommonIRToTTGIR/Passes.h"
 #endif
 #include "triton/Dialect/Gluon/Transforms/Passes.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
@@ -77,6 +80,9 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
   mlir::triton::gluon::registerGluonPasses();
 #ifdef __TLE__
   mlir::triton::tle::registerPasses(); // flagtree tle
+#endif
+#ifdef FLAGTREE_COMMON_IR
+  mlir::triton::registerCommonIRToTTGIRPasses();
 #endif
   mlir::test::registerTestAliasPass();
   mlir::test::registerTestAlignmentPass();
@@ -161,7 +167,7 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
       mlir::triton::tle::TleDialect, // flagtree tle raw
 #endif
 #ifdef __FLIR_TILEIR__
-      mlir::triton::tile::TileIRDialect,
+      mlir::triton::tile::CommonIRDialect,
 #endif
       mlir::triton::gluon::GluonDialect>();
 }

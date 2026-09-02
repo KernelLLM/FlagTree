@@ -1,14 +1,10 @@
 import argparse
-import os
 from pathlib import Path
 
 import torch
 import triton
 import triton.language as tl
 import triton.experimental.tle.language as tle
-
-
-os.environ.setdefault("TLE_GPU_TILEIR_MODE", "1")
 
 
 @triton.jit
@@ -20,12 +16,9 @@ def _flash_gpu_kernel(q_ptr, k_ptr, v_ptr, o_ptr, stride_qm, stride_qd, stride_k
     offs_n = tl.arange(0, BLOCK_N)
     offs_d = tl.arange(0, D)
 
-    q_buf = tle.gpu.alloc([BLOCK_M, D], dtype=tl.float16, layout=None, scope=tle.gpu.smem,
-                          nv_mma_shared_layout=False)
-    k_buf = tle.gpu.alloc([BLOCK_N, D], dtype=tl.float16, layout=None, scope=tle.gpu.smem,
-                          nv_mma_shared_layout=False)
-    v_buf = tle.gpu.alloc([BLOCK_N, D], dtype=tl.float16, layout=None, scope=tle.gpu.smem,
-                          nv_mma_shared_layout=False)
+    q_buf = tle.gpu.alloc([BLOCK_M, D], dtype=tl.float16, layout=None, scope=tle.gpu.smem, nv_mma_shared_layout=False)
+    k_buf = tle.gpu.alloc([BLOCK_N, D], dtype=tl.float16, layout=None, scope=tle.gpu.smem, nv_mma_shared_layout=False)
+    v_buf = tle.gpu.alloc([BLOCK_N, D], dtype=tl.float16, layout=None, scope=tle.gpu.smem, nv_mma_shared_layout=False)
 
     q_tile = q_ptr + offs_m[:, None] * stride_qm + offs_d[None, :] * stride_qd
     tle.gpu.copy(q_tile, q_buf, [BLOCK_M, D])
@@ -52,8 +45,7 @@ def _flash_gpu_kernel(q_ptr, k_ptr, v_ptr, o_ptr, stride_qm, stride_qd, stride_k
         m_i = m_new
 
     out = acc / l_i[:, None]
-    out_buf = tle.gpu.alloc([BLOCK_M, D], dtype=tl.float32, layout=None, scope=tle.gpu.smem,
-                            nv_mma_shared_layout=False)
+    out_buf = tle.gpu.alloc([BLOCK_M, D], dtype=tl.float32, layout=None, scope=tle.gpu.smem, nv_mma_shared_layout=False)
     tle.gpu.store_tensor(out, out_buf)
     out_vals = tle.gpu.to_tensor(out_buf, writable=False)
     o_tile = o_ptr + offs_m[:, None] * stride_om + offs_d[None, :] * stride_od
@@ -123,7 +115,7 @@ def dump_tileir(path):
 def dump_ttir(path):
     from triton._C.libtriton import ir
     from triton._C.libtriton import passes
-    from triton._C.libtriton import tle as tle_ir
+    from triton._C.libtriton import nvidia
 
     constants = {
         "N_CTX": 32,
@@ -150,10 +142,16 @@ def dump_ttir(path):
     pm = ir.pass_manager(module.context)
     passes.common.add_inliner(pm)
     pm.run(module, "native_flash_gpu.inliner")
-    tle_ir.lower_gpu_tileir_to_ttir(module)
+    pm = ir.pass_manager(module.context)
+    nvidia.passes.commonir.add_to_ttgir(pm)
+    pm.run(module, "native_flash_gpu.tileir_to_ttgir")
     text = str(module)
-    if "tile." in text:
-        raise RuntimeError("TTIR dump still contains TileIR ops")
+    for needle in ("tile.alloc", "tile.copy", "tile.to_tensor", "tile.store_tensor"):
+        if needle in text:
+            raise RuntimeError(f"converted TTIR dump still contains {needle}")
+    for needle in ("ttg.local_alloc", "ttg.local_load", "ttg.local_store"):
+        if needle not in text:
+            raise RuntimeError(f"converted TTIR dump expected {needle}")
     Path(path).write_text(text, encoding="utf-8")
     print(f"[dump-ttir] wrote {path}")
 
@@ -166,9 +164,8 @@ def run_check(n_ctx=32, d=32):
     out = torch.empty((n_ctx, d), device="cuda", dtype=torch.float32)
     sm_scale = d**-0.5
     grid = (triton.cdiv(n_ctx, 16), )
-    _flash_gpu_kernel[grid](q, k, v, out, q.stride(0), q.stride(1), k.stride(0), k.stride(1), v.stride(0),
-                            v.stride(1), out.stride(0), out.stride(1), N_CTX=n_ctx, D=d, sm_scale=sm_scale,
-                            BLOCK_M=16, BLOCK_N=16)
+    _flash_gpu_kernel[grid](q, k, v, out, q.stride(0), q.stride(1), k.stride(0), k.stride(1), v.stride(0), v.stride(1),
+                            out.stride(0), out.stride(1), N_CTX=n_ctx, D=d, sm_scale=sm_scale, BLOCK_M=16, BLOCK_N=16)
     ref = torch.softmax(torch.matmul(q.float(), k.float().T) * sm_scale, dim=-1).matmul(v.float())
     torch.testing.assert_close(out, ref, atol=5e-2, rtol=5e-2)
     print("[check] native_flash_gpu precision PASS")
