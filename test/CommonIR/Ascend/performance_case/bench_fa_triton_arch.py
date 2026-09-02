@@ -15,14 +15,25 @@ kernel
 Metrics
 -------
 - Latency    (ms)
-- TFLOPS     (2 * 2 * B * Hq * S * S * D / latency)
+- TFLOPS     (2 * 2 * B * Hq * Sq * Skv * Dq / latency)
 - Bandwidth  (GB/s)  — bytes read (Q+K+V) + bytes written (O)
+
+Sweep matrix (--sweep)
+----------------------
+  batches      : [1, 4, 8, 16, 32]
+  seqlen_pairs : [[32, 8192], [2048, 2048], [4096, 4096], [8192, 8192], [16384, 16384]]
+  head_dims    : [64, 96, 128, [192, 128]]   (last entry = Dq=192 / Dkv=128)
+  head_pairs   : [[16, 16], [16, 8], [16, 4], [16, 1]]
+
+  Total configurations: 5 × 5 × 4 × 4 = 400
+  Configs where Dq or Dkv ≠ kernel DIM (128) are reported as SKIP.
 
 Usage
 -----
     python bench_fa_triton_arch.py [--B 4] [--S 1024] [--H 16]
                                    [--q-heads N] [--kv-heads N]
-                                   [--D 32] [--causal]
+                                   [--D 128] [--kv-dim 128]
+                                   [--causal]
                                    [--combine-batch 8]
                                    [--warmup 5] [--rep 20]
                                    [--mode wall|kernel]
@@ -85,15 +96,28 @@ def _sync(device: str):
 # ---------------------------------------------------------------------------
 
 
-def _tflops(B, Hq, S, D, latency_ms):
-    """Two matmuls (QK^T and PV), each B*Hq*S*S*D multiply-adds = 2 flops."""
-    return 2 * 2.0 * B * Hq * S * S * D / (latency_ms * 1e-3) / 1e12
+def _tflops(B, Hq, Sq, Skv, Dq, latency_ms):
+    """Two matmuls (QK^T and PV).
+    QK^T: B * Hq * Sq * Skv * Dq  (2 flops per multiply-add)
+    PV  : B * Hq * Sq * Dq * Skv  (same shape, same cost)
+    """
+    return 2 * 2.0 * B * Hq * Sq * Skv * Dq / (latency_ms * 1e-3) / 1e12
 
 
-def _bandwidth_gbs(B, Hq, Hkv, S, D, latency_ms):
-    """Read Q+K+V and write O, all fp16 (2 bytes each)."""
-    elem = 2
-    bytes_io = elem * (B * Hq * S * D + B * Hkv * S * D + B * Hkv * S * D + B * Hq * S * D)
+def _bandwidth_gbs(B, Hq, Hkv, Sq, Skv, Dq, Dkv, latency_ms):
+    """Read Q+K+V and write O, all fp16 (2 bytes each).
+    Q : B * Hq  * Sq  * Dq
+    K : B * Hkv * Skv * Dkv
+    V : B * Hkv * Skv * Dkv
+    O : B * Hq  * Sq  * Dq  (same shape as Q)
+    """
+    elem = 2  # fp16 = 2 bytes
+    bytes_io = elem * (
+        B * Hq * Sq * Dq +  # Q
+        B * Hkv * Skv * Dkv +  # K
+        B * Hkv * Skv * Dkv +  # V
+        B * Hq * Sq * Dq  # O
+    )
     return bytes_io / (latency_ms * 1e-3) / 1e9
 
 
@@ -167,19 +191,20 @@ def _ref_sdpa(q, k, v, is_causal):
 # ---------------------------------------------------------------------------
 
 
-def run_benchmark(B, Hq, Hkv, S, D, combine_batch, is_causal, mode, warmup, rep, no_check, device):
-    """Benchmark flash_attention_fwd for a single (B, Hq, Hkv, S, D) config.
+def run_benchmark(B, Hq, Hkv, Sq, Skv, Dq, Dkv, combine_batch, is_causal, mode, warmup, rep, no_check, device):
+    """Benchmark flash_attention_fwd for a single (B, Hq, Hkv, Sq, Skv, Dq, Dkv) config.
 
     Returns a dict with keys: fa_ms, sdpa_ms, speedup, tflops_fa, bw_fa.
-    Note: flash_attention_fwd itself enforces D == fa_triton_arch.DIM (compile-time
-    tile size).  Any mismatch will raise an AssertionError there rather than here.
+    flash_attention_fwd enforces Dq == Dkv == DIM (compile-time constant).
+    Configs that violate this constraint raise AssertionError and are surfaced
+    as errors in sweep mode rather than crashing the entire run.
     """
     assert Hq % Hkv == 0, f"Hq ({Hq}) must be a multiple of Hkv ({Hkv})"
 
     torch.manual_seed(0)
-    q = torch.randn((B, Hq, S, D), dtype=torch.float16, device=device)
-    k = torch.randn((B, Hkv, S, D), dtype=torch.float16, device=device)
-    v = torch.randn((B, Hkv, S, D), dtype=torch.float16, device=device)
+    q = torch.randn((B, Hq, Sq, Dq), dtype=torch.float16, device=device)
+    k = torch.randn((B, Hkv, Skv, Dkv), dtype=torch.float16, device=device)
+    v = torch.randn((B, Hkv, Skv, Dkv), dtype=torch.float16, device=device)
 
     # ---- optional correctness check ----------------------------------------
     if not no_check:
@@ -199,8 +224,8 @@ def run_benchmark(B, Hq, Hkv, S, D, combine_batch, is_causal, mode, warmup, rep,
         fa_median, fa_mean, fa_min, fa_max = _bench_wall(fa_fn, device, warmup, rep)
         sdpa_median, sdpa_mean, sdpa_min, sdpa_max = _bench_wall(sdpa_fn, device, warmup, rep)
 
-    tfl_fa = _tflops(B, Hq, S, D, fa_median)
-    bw_fa = _bandwidth_gbs(B, Hq, Hkv, S, D, fa_median)
+    tfl_fa = _tflops(B, Hq, Sq, Skv, Dq, fa_median)
+    bw_fa = _bandwidth_gbs(B, Hq, Hkv, Sq, Skv, Dq, Dkv, fa_median)
     speedup = sdpa_median / fa_median if fa_median > 0 else float("inf")
 
     return dict(
@@ -236,12 +261,41 @@ def _print_result(cfg_label, r, mode):
 # Sweep configurations
 # ---------------------------------------------------------------------------
 
-_SWEEP_CONFIGS = [
-    # (B, Hq, Hkv, S)
-    (1, 16, 16, 512), (1, 16, 16, 1024), (1, 16, 16, 2048), (4, 16, 16, 512), (4, 16, 16, 1024), (4, 16, 16, 2048),
-    (1, 16, 4, 1024),  # GQA 4:1
-    (4, 16, 4, 1024),  # GQA 4:1
+# Full benchmark matrix.  Each entry is (B, Hq, Hkv, Sq, Skv, Dq, Dkv).
+# When Dq == Dkv, head_dim is uniform; [192, 128] means Q-dim=192, KV-dim=128.
+# seqlen_pairs: [Sq, Skv] — currently Sq == Skv for all cases (square attention).
+_BATCHES = [1, 4, 8, 16, 32]
+_SEQLEN_PAIRS = [
+    (32, 8192),
+    (2048, 2048),
+    (4096, 4096),
+    (8192, 8192),
+    (16384, 16384),
 ]
+_HEAD_DIMS = [(64, 64),  # uniform 64
+              (96, 96),  # uniform 96
+              (128, 128),  # uniform 128
+              (192, 128),  # split Q/KV dim (GQA-style)
+              ]
+_HEAD_PAIRS = [(16, 16),  # MHA
+               (16, 8),  # GQA 2:1
+               (16, 4),  # GQA 4:1
+               (16, 1),  # MQA
+               ]
+
+
+def _build_sweep_configs():
+    """Return list of (B, Hq, Hkv, Sq, Skv, Dq, Dkv) tuples."""
+    configs = []
+    for B in _BATCHES:
+        for (Sq, Skv) in _SEQLEN_PAIRS:
+            for (Dq, Dkv) in _HEAD_DIMS:
+                for (Hq, Hkv) in _HEAD_PAIRS:
+                    configs.append((B, Hq, Hkv, Sq, Skv, Dq, Dkv))
+    return configs
+
+
+_SWEEP_CONFIGS = _build_sweep_configs()
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -251,13 +305,15 @@ _SWEEP_CONFIGS = [
 def _parse_args():
     p = argparse.ArgumentParser(description="Benchmark flash_attention_fwd (fa_triton_arch)")
     p.add_argument("--B", type=int, default=_DEFAULT_B, help="batch size")
-    p.add_argument("--S", type=int, default=_DEFAULT_S, help="sequence length")
+    p.add_argument("--S", type=int, default=_DEFAULT_S, help="sequence length (used for both Sq and Skv)")
     p.add_argument("--H", type=int, default=_DEFAULT_H, help="number of heads (shorthand for --q-heads)")
     p.add_argument("--q-heads", type=int, default=None, help="query heads (overrides --H)")
     p.add_argument("--kv-heads", type=int, default=None, help="key/value heads (default: same as q-heads)")
     p.add_argument(
         "--D", type=int, default=_DEFAULT_D,
-        help=f"head dim (kernel compile-time DIM={_fa.DIM}; other values will fail inside flash_attention_fwd)")
+        help=f"Q head dim (kernel compile-time DIM={_fa.DIM}; other values will fail inside flash_attention_fwd)")
+    p.add_argument("--kv-dim", dest="Dkv", type=int, default=None,
+                   help="KV head dim (default: same as --D).  Use e.g. --D 192 --kv-dim 128 for split Q/KV dims.")
     p.add_argument("--causal", action="store_true", help="causal masking")
     p.add_argument("--combine-batch", type=int, default=_DEFAULT_COMBINE_BATCH,
                    help="combine_batch passed to flash_attention_fwd")
@@ -267,7 +323,7 @@ def _parse_args():
                    help="wall: perf_counter+sync; kernel: do_bench_npu (mspti/profiler)")
     p.add_argument("--no-check", action="store_true", help="skip correctness verification")
     p.add_argument("--sweep", action="store_true",
-                   help="run a sweep of (B, Hq, Hkv, S) configurations and print a summary table")
+                   help="run full sweep over batches × seqlen_pairs × head_dims × head_pairs")
     return p.parse_args()
 
 
@@ -286,23 +342,26 @@ def main():
     print()
 
     if args.sweep:
-        # ---- sweep mode: table over multiple (B, Hq, Hkv, S) configs -------
-        hdr = (f"{'B':>4} {'Hq':>4} {'Hkv':>4} {'S':>6} "
+        # ---- sweep mode: table over all (B, Hq, Hkv, Sq, Skv, Dq, Dkv) ----
+        hdr = (f"{'B':>4} {'Hq':>4} {'Hkv':>4} {'Sq':>6} {'Skv':>6} {'Dq':>4} {'Dkv':>4} "
                f"{'FA(ms)':>9} {'SDPA(ms)':>10} {'speedup':>8} "
                f"{'TFLOPS':>8} {'BW(GB/s)':>10}")
         sep = "-" * len(hdr)
         print(hdr)
         print(sep)
 
-        for (sB, sHq, sHkv, sS) in _SWEEP_CONFIGS:
-            cfg_label = f"B={sB} Hq={sHq} Hkv={sHkv} S={sS}"
+        skipped = 0
+        for (sB, sHq, sHkv, sSq, sSkv, sDq, sDkv) in _SWEEP_CONFIGS:
+            cfg_label = f"B={sB} Hq={sHq} Hkv={sHkv} Sq={sSq} Skv={sSkv} Dq={sDq} Dkv={sDkv}"
             try:
                 r = run_benchmark(
                     B=sB,
                     Hq=sHq,
                     Hkv=sHkv,
-                    S=sS,
-                    D=args.D,
+                    Sq=sSq,
+                    Skv=sSkv,
+                    Dq=sDq,
+                    Dkv=sDkv,
                     combine_batch=args.combine_batch,
                     is_causal=args.causal,
                     mode=args.mode,
@@ -312,18 +371,26 @@ def main():
                     device=device,
                 )
                 direction = "↑" if r["speedup"] > 1 else "↓"
-                print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sS:>6} "
+                print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sSq:>6} {sSkv:>6} {sDq:>4} {sDkv:>4} "
                       f"{r['fa_ms']:>9.3f} {r['sdpa_ms']:>10.3f} "
                       f"{r['speedup']:>7.3f}{direction} "
                       f"{r['tflops_fa']:>8.3f} {r['bw_fa']:>10.1f}")
+            except AssertionError as exc:
+                skipped += 1
+                print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sSq:>6} {sSkv:>6} {sDq:>4} {sDkv:>4} "
+                      f"  SKIP (unsupported config: {exc})")
             except Exception as exc:
-                print(f"{cfg_label}  ERROR: {exc}")
+                print(f"{sB:>4} {sHq:>4} {sHkv:>4} {sSq:>6} {sSkv:>6} {sDq:>4} {sDkv:>4} "
+                      f"  ERROR: {exc}")
 
         print(sep)
+        total = len(_SWEEP_CONFIGS)
+        print(f"Total configs: {total}  |  Skipped (unsupported): {skipped}  |  "
+              f"Ran: {total - skipped}")
         return
 
     # ---- single-config mode -------------------------------------------------
-    cfg_label = f"B={args.B} Hq={Hq} Hkv={Hkv} S={args.S} D={args.D}"
+    cfg_label = f"B={args.B} Hq={Hq} Hkv={Hkv} Sq={args.S} Skv={args.S} Dq={args.D} Dkv={args.Dkv or args.D}"
     print(f"Config : {cfg_label}")
     print()
 
@@ -331,8 +398,10 @@ def main():
         B=args.B,
         Hq=Hq,
         Hkv=Hkv,
-        S=args.S,
-        D=args.D,
+        Sq=args.S,
+        Skv=args.S,
+        Dq=args.D,
+        Dkv=args.Dkv if args.Dkv is not None else args.D,
         combine_batch=args.combine_batch,
         is_causal=args.causal,
         mode=args.mode,
