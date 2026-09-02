@@ -31,6 +31,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Value.h"
@@ -48,7 +49,7 @@
 #include "triton/Dialect/TritonGPU/Transforms/Utility.h"
 #include "triton/Dialect/TritonNvidiaGPU/IR/Dialect.h"
 #ifdef __FLIR_TILEIR__
-#include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
+#include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #endif
 #include "llvm/ADT/SmallVectorExtras.h"
@@ -268,7 +269,10 @@ void init_triton_tle_ir(py::module &&m) {
            })
       .def("create_tile_get_memdesc",
            [](TritonOpBuilder &self, Type resultTy, Value source) -> Value {
-             return self.create<tile::GetMemDescOp>(resultTy, source);
+             return self
+                 .create<UnrealizedConversionCastOp>(TypeRange{resultTy},
+                                                     ValueRange{source})
+                 .getResult(0);
            })
       .def("create_tile_subview",
            [](TritonOpBuilder &self, Value source, std::vector<Value> &offsets,
@@ -292,15 +296,6 @@ void init_triton_tle_ir(py::module &&m) {
                  builder.getI64ArrayAttr(strides));
              op->setAttr("tle.gpu_layout", targetLayout);
              return op.getResult();
-           })
-      .def("create_tile_local_ptr",
-           [](TritonOpBuilder &self, Type resultTy, Value source,
-              py::args args) -> OpState {
-             llvm::SmallVector<Value> indices;
-             indices.reserve(args.size());
-             for (const auto &arg : args)
-               indices.push_back(py::cast<Value>(arg));
-             return self.create<tile::LocalPtrOp>(resultTy, source, indices);
            })
       .def("create_tile_to_tensor",
            [](TritonOpBuilder &self, Value &src, bool /*writable*/) -> Value {
@@ -725,7 +720,7 @@ void init_triton_tle(py::module &&m) {
   m.def("load_dialects", [](mlir::MLIRContext &context) {
     mlir::DialectRegistry registry;
 #ifdef __FLIR_TILEIR__
-    registry.insert<mlir::triton::tile::TileIRDialect>();
+    registry.insert<mlir::triton::tile::CommonIRDialect>();
     context.appendDialectRegistry(registry);
 #endif
     context.loadAllAvailableDialects();
@@ -733,7 +728,7 @@ void init_triton_tle(py::module &&m) {
 #ifdef __FLIR_TILEIR__
   m.def("load_tile_dialects", [](mlir::MLIRContext &context) {
     mlir::DialectRegistry registry;
-    registry.insert<mlir::triton::tile::TileIRDialect>();
+    registry.insert<mlir::triton::tile::CommonIRDialect>();
     context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
   });

@@ -65,8 +65,8 @@ def dump_tileir(path):
             "tile.alloc",
             "tile.copy",
             "tile.subview",
-            "tile.local_ptr",
-            "tile.get_memdesc",
+            "builtin.unrealized_conversion_cast",
+            "tle.local_pointers",
             "tle.pipe.create",
             "tle.pipe.writer_acquire",
             "tle.pipe.reader_wait",
@@ -90,7 +90,7 @@ def dump_ttir(path):
     nvidia.passes.commonir.add_to_ttgir(pm)
     pm.run(module, "tle_gpu_primitives.tileir_to_ttgir")
     text = str(module)
-    for needle in ("tile.alloc", "tile.copy", "tile.subview", "tile.local_ptr", "tile.get_memdesc"):
+    for needle in ("tile.alloc", "tile.copy", "tile.subview", "builtin.unrealized_conversion_cast"):
         if needle in text:
             raise RuntimeError(f"primitive converted TTIR still contains {needle}")
     for needle in ("ttg.local_alloc", "ttg.memdesc_index", "tle.local_pointers", "tle.pipe.create"):

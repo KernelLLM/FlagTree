@@ -6,7 +6,7 @@ add_triton_library(CommonIRToTTGIR
 
   LINK_LIBS PUBLIC
   MLIRArithDialect
-  TileIRIR
+  CommonIRIR
   TleIR
   TritonIR
   TritonGPUIR

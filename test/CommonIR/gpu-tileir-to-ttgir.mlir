@@ -9,8 +9,8 @@ module {
   tt.func public @gpu_tileir_to_ttgir(%src: tensor<16x!tt.ptr<f32>>) {
     %buf = tile.alloc {layout = 0 : i64, space = 7 : i64, tle.gpu_layout = #shared}
       : <[2, 16], f32, shared>
-    %desc = tile.get_memdesc %buf
-      : !tile.buf<[2, 16], f32, shared> -> !ttg.memdesc<2x16xf32, #shared, #smem, mutable>
+    %desc = builtin.unrealized_conversion_cast %buf
+      : !tile.buf<[2, 16], f32, shared> to !ttg.memdesc<2x16xf32, #shared, #smem, mutable>
     tle.pipe.create %desc {capacity = 2 : i32, field_names = ["payload"], pipe_name = "p", scope = "cta"}
       : !ttg.memdesc<2x16xf32, #shared, #smem, mutable>
     %c0 = arith.constant 0 : index
@@ -18,8 +18,10 @@ module {
       : <[2, 16], f32, shared> -> <[16], f32, shared>
     tile.copy %src -> %slot {src_layout = 0 : i64}
       : tensor<16x!tt.ptr<f32>>, !tile.buf<[16], f32, shared>
-    %ptr = "tile.local_ptr"(%slot)
-      : (!tile.buf<[16], f32, shared>) -> tensor<16x!tt.ptr<f32, 3>>
+    %slot_desc = builtin.unrealized_conversion_cast %slot
+      : !tile.buf<[16], f32, shared> to !ttg.memdesc<16xf32, #shared1, #smem, mutable>
+    %ptr = "tle.local_pointers"(%slot_desc)
+      : (!ttg.memdesc<16xf32, #shared1, #smem, mutable>) -> tensor<16x!tt.ptr<f32, 3>>
     tt.return
   }
 }
@@ -31,3 +33,4 @@ module {
 // CHECK: "tle.local_pointers"(%[[SLOT]],
 // CHECK: "tle.local_pointers"(%[[SLOT]])
 // CHECK-NOT: tile.
+// CHECK-NOT: builtin.unrealized_conversion_cast

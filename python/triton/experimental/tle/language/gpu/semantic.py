@@ -141,15 +141,12 @@ def local_ptr(result_ir, buffer, indices, _semantic):
     handles = [index.handle for index in indices]
     if not COMMON_IR_ENABLED:
         return _semantic.builder.create_local_pointers(result_ir, buffer.handle, *handles)
-    return _semantic.builder.create_tile_local_ptr(
-        result_ir,
-        buffer.handle,
-        *handles,
-    )
+    memdesc = get_memdesc(buffer, _semantic)
+    return _semantic.builder.create_local_pointers(result_ir, memdesc, *handles)
 
 
 def get_memdesc(buffer, _semantic):
-    """Bridge a TileIR buffer to the descriptor type consumed by TLE pipe ops."""
+    """Bridge a CommonIR buffer to the descriptor type consumed by TLE pipe ops."""
     if not COMMON_IR_ENABLED:
         return buffer.handle
     result_type = buffer.type.to_memdesc_ir(_semantic.builder)

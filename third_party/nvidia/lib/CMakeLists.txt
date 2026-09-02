@@ -1,6 +1,6 @@
 add_subdirectory(Dialect)
 add_subdirectory(TritonNVIDIAGPUToLLVM)
 add_subdirectory(NVGPUToLLVM)
-if(FLAGTREE_COMMON_IR_ENABLED AND TARGET TileIRIR)
+if(FLAGTREE_COMMON_IR_ENABLED AND TARGET CommonIRIR)
   add_subdirectory(CommonIRToTTGIR)
 endif()

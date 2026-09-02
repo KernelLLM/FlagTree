@@ -10,7 +10,7 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
 
-#include "mlir-ext/Dialect/TileIR/IR/TileIRDialect.h"
+#include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -60,10 +60,13 @@ static FailureOr<ttg::MemDescType> inferMemDescType(
     const llvm::DenseMap<Value, Value> &mapped) {
   ttg::MemDescType inferred;
   for (Operation *user : argument.getUsers()) {
-    auto bridge = dyn_cast<tile::GetMemDescOp>(user);
-    if (!bridge || bridge.getSource() != argument)
+    auto bridge = dyn_cast<UnrealizedConversionCastOp>(user);
+    if (!bridge || bridge.getInputs().size() != 1 ||
+        bridge.getInputs().front() != argument || bridge->getNumResults() != 1)
       continue;
-    auto type = cast<ttg::MemDescType>(bridge.getResult().getType());
+    auto type = dyn_cast<ttg::MemDescType>(bridge.getResult(0).getType());
+    if (!type)
+      continue;
     if (inferred && inferred != type) {
       bridge.emitError("conflicting descriptor types for the same TileIR buffer");
       return failure();
@@ -261,9 +264,8 @@ static LogicalResult convertAllocations(
 static void rewriteConvertedOperands(
     ModuleOp module, const llvm::DenseMap<Value, Value> &mapped) {
   module.walk([&](Operation *op) {
-    if (isa<tile::AllocOp, tile::SubViewOp, tile::LocalPtrOp, tile::CopyOp,
-            tile::ToTensorOp, tile::StoreTensorOp, tile::GetMemDescOp,
-            UnrealizedConversionCastOp>(op))
+    if (isa<tile::AllocOp, tile::SubViewOp, tile::CopyOp, tile::ToTensorOp,
+            tile::StoreTensorOp, UnrealizedConversionCastOp>(op))
       return;
     for (OpOperand &operand : op->getOpOperands()) {
       auto it = mapped.find(operand.get());
@@ -271,6 +273,27 @@ static void rewriteConvertedOperands(
         operand.set(it->second);
     }
   });
+}
+
+static LogicalResult convertBufferBridges(
+    ModuleOp module, llvm::DenseMap<Value, Value> &mapped,
+    ArrayRef<UnrealizedConversionCastOp> argumentCasts,
+    SmallVectorImpl<Operation *> &eraseOps) {
+  WalkResult result = module.walk([&](UnrealizedConversionCastOp op) {
+    if (llvm::is_contained(argumentCasts, op) || op.getInputs().size() != 1 ||
+        op->getNumResults() != 1 ||
+        !isa<tile::BufType>(op.getInputs().front().getType()) ||
+        !isa<ttg::MemDescType>(op.getResult(0).getType()))
+      return WalkResult::advance();
+
+    auto source = lookupBuffer(op, op.getInputs().front(), mapped);
+    if (failed(source))
+      return WalkResult::interrupt();
+    mapped[op.getResult(0)] = *source;
+    eraseOps.push_back(op);
+    return WalkResult::advance();
+  });
+  return failure(result.wasInterrupted());
 }
 
 static void finalizeConvertedArguments(
@@ -352,31 +375,6 @@ static LogicalResult convertTileUsers(
   module.walk([&](Operation *operation) {
     if (failedConversion)
       return;
-
-    if (auto op = dyn_cast<tile::LocalPtrOp>(operation)) {
-      auto source = lookupBuffer(op, op.getSource(), mapped);
-      if (failed(source)) {
-        failedConversion = true;
-        return;
-      }
-      builder.setInsertionPoint(op);
-      Value replacement = builder.create<tle::LocalPointersOp>(
-          op.getLoc(), op.getResult().getType(), *source, op.getIndices());
-      op.getResult().replaceAllUsesWith(replacement);
-      eraseOps.push_back(op);
-      return;
-    }
-
-    if (auto op = dyn_cast<tile::GetMemDescOp>(operation)) {
-      auto source = lookupBuffer(op, op.getSource(), mapped);
-      if (failed(source)) {
-        failedConversion = true;
-        return;
-      }
-      op.getResult().replaceAllUsesWith(*source);
-      eraseOps.push_back(op);
-      return;
-    }
 
     if (auto op = dyn_cast<tile::ToTensorOp>(operation)) {
       auto source = lookupBuffer(op, op.getSrc(), mapped);
@@ -489,6 +487,7 @@ class CommonIRToTTGIRPass
                                         convertedArgumentTypes,
                                         argumentCasts)) ||
         failed(convertSubviews(module, mapped, eraseOps)) ||
+        failed(convertBufferBridges(module, mapped, argumentCasts, eraseOps)) ||
         failed(convertTileUsers(module, mapped, eraseOps))) {
       signalPassFailure();
       return;
@@ -510,10 +509,16 @@ class CommonIRToTTGIRPass
 
     bool hasRemainingGpuTileOps = false;
     module.walk([&](Operation *op) {
-      if (isa<tile::AllocOp, tile::SubViewOp, tile::LocalPtrOp,
-              tile::CopyOp, tile::ToTensorOp, tile::StoreTensorOp,
-              tile::GetMemDescOp>(op)) {
+      if (isa<tile::AllocOp, tile::SubViewOp, tile::CopyOp, tile::ToTensorOp,
+              tile::StoreTensorOp>(op)) {
         op->emitError("was not eliminated by GPU TileIR conversion");
+        hasRemainingGpuTileOps = true;
+        return;
+      }
+      if (auto cast = dyn_cast<UnrealizedConversionCastOp>(op);
+          cast && cast.getInputs().size() == 1 &&
+          isa<tile::BufType>(cast.getInputs().front().getType())) {
+        cast.emitError("CommonIR buffer bridge was not eliminated");
         hasRemainingGpuTileOps = true;
       }
     });
