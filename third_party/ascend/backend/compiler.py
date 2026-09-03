@@ -818,8 +818,8 @@ def linalg_to_bin_enable_npu_compile_A2_A3(linalg: str, metadata, opt):
         if opt.debug:
             print(f"[DEBUG] cmd_list: {' '.join(cmd_list)}")
 
-        import shutil
-        shutil.copy2(ttadapter_path, "/tmp/debug_kernel_input.mlir")
+            import shutil
+            shutil.copy2(ttadapter_path, "/tmp/debug_kernel_input.mlir")
 
         try:
             ret = subprocess.run(cmd_list, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
