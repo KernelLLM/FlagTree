@@ -24,8 +24,8 @@ from fused_moe.moe_gluon import fused_moe
 # ---------------------------------------------------------------------------
 # Import Gluon fused MoE (as a package, to support relative imports)
 # ---------------------------------------------------------------------------
-_this_dir = Path(__file__).resolve().parent          # .../metax/fused_moe/
-_metax_dir = _this_dir.parent                        # .../metax/
+_this_dir = Path(__file__).resolve().parent  # .../metax/fused_moe/
+_metax_dir = _this_dir.parent  # .../metax/
 if str(_metax_dir) not in sys.path:
     sys.path.insert(0, str(_metax_dir))
 
@@ -40,37 +40,36 @@ if str(_metax_dir) not in sys.path:
 # ---------------------------------------------------------------------------
 MOE_SIZES = [
     # ── Decode (small M, memory-bound) ──
-    (1,    8, 2, 1024, 512),      # single-token decode
-    (8,    8, 2, 1024, 512),
-    (16,   8, 2, 1024, 512),
-    (32,   8, 2, 1024, 512),
-    (64,   8, 2, 1024, 512),
+    (1, 8, 2, 1024, 512),  # single-token decode
+    (8, 8, 2, 1024, 512),
+    (16, 8, 2, 1024, 512),
+    (32, 8, 2, 1024, 512),
+    (64, 8, 2, 1024, 512),
     # ── Prefill (large M, compute-bound) ──
-    (128,  8, 2, 1024, 512),
-    (256,  8, 2, 1024, 512),
-    (512,  8, 2, 1024, 512),
+    (128, 8, 2, 1024, 512),
+    (256, 8, 2, 1024, 512),
+    (512, 8, 2, 1024, 512),
     (1024, 8, 2, 1024, 512),
     (2048, 8, 2, 1024, 512),
     # ── Larger hidden dim (medium model) ──
-    (64,   8, 2, 2048, 1024),
-    (128,  8, 2, 2048, 1024),
-    (512,  8, 2, 2048, 1024),
+    (64, 8, 2, 2048, 1024),
+    (128, 8, 2, 2048, 1024),
+    (512, 8, 2, 2048, 1024),
     # ── Larger hidden dim (large model, half-Mixtral) ──
-    (64,   8, 2, 4096, 2048),
-    (128,  8, 2, 4096, 2048),
-    (256,  8, 2, 4096, 2048),
+    (64, 8, 2, 4096, 2048),
+    (128, 8, 2, 4096, 2048),
+    (256, 8, 2, 4096, 2048),
     # ── More experts / higher topk ──
-    (128,  4, 2, 1024, 512),     # fewer experts
-    (128, 16, 4, 1024, 512),     # more experts, higher topk
-    (128, 64, 6, 1024, 512),     # DeepSeek-like many experts
-    (128, 32, 4, 2048, 1024),    # medium, many experts
+    (128, 4, 2, 1024, 512),  # fewer experts
+    (128, 16, 4, 1024, 512),  # more experts, higher topk
+    (128, 64, 6, 1024, 512),  # DeepSeek-like many experts
+    (128, 32, 4, 2048, 1024),  # medium, many experts
     # ── Non-power-of-2 M (padding stress) ──
-    (48,   8, 2, 1024, 512),
-    (192,  8, 2, 1024, 512),
-    (768,  8, 2, 1024, 512),
+    (48, 8, 2, 1024, 512),
+    (192, 8, 2, 1024, 512),
+    (768, 8, 2, 1024, 512),
     (1536, 8, 2, 1024, 512),
 ]
-
 
 # ---------------------------------------------------------------------------
 # PyTorch per-expert batched reference
@@ -106,14 +105,13 @@ def fused_moe_pytorch(
             if len(token_indices) == 0:
                 continue
 
-            x = hidden_states[token_indices]          # [n, K]
-
+            x = hidden_states[token_indices]  # [n, K]
+     
             # GEMM1: x @ w1[e]^T
-            gate_up = x @ w1[e].t()                    # [n, N]
-
+            gate_up = x @ w1[e].t()  # [n, N]
+     
             if apply_router_weight_on_input:
                 w = topk_weights[token_indices, k].unsqueeze(1)
-                gate_up = w * gate_up
 
             # Activation: silu(gate) * up
             gate = gate_up[:, :intermediate]
@@ -121,7 +119,7 @@ def fused_moe_pytorch(
             act = torch.nn.functional.silu(gate) * up  # [n, intermediate]
 
             # GEMM2: act @ w2[e]^T
-            y = act @ w2[e].t()                        # [n, K]
+            y = act @ w2[e].t()  # [n, K]
 
             if not apply_router_weight_on_input:
                 w = topk_weights[token_indices, k].unsqueeze(1)
@@ -174,9 +172,7 @@ def _make_inputs(M, E, topk, K, intermediate, dtype, device="cuda"):
 # Gluon Fused MoE benchmark
 # ---------------------------------------------------------------------------
 
-def benchmark_gluon(M, E, topk, K, intermediate, dtype,
-                    apply_router_weight_on_input=False,
-                    warmup=25, rep=100):
+def benchmark_gluon(M, E, topk, K, intermediate, dtype, apply_router_weight_on_input=False, warmup=25, rep=100):
     hidden_states, w1, w2, topk_ids, topk_weights = \
         _make_inputs(M, E, topk, K, intermediate, dtype)
 
@@ -224,9 +220,7 @@ def safe_ratio(a, b):
 # ---------------------------------------------------------------------------
 
 def main():
-    p = argparse.ArgumentParser(
-        description="Gluon Fused MoE vs PyTorch per-expert MoE (Metax) benchmark"
-    )
+    p = argparse.ArgumentParser(description="Gluon Fused MoE vs PyTorch per-expert MoE (Metax) benchmark")
     p.add_argument(
         "--dtype",
         choices=["float16", "bfloat16"],
@@ -264,8 +258,15 @@ def main():
         # Gluon
         try:
             gluon_ms, gluon_tf = benchmark_gluon(
-                M, E, topk, K, intermediate, dtype, apply_rw,
-                args.warmup, args.rep,
+                M,
+                E, 
+                topk,
+                K, 
+                intermediate, 
+                dtype, 
+                apply_rw,
+                args.warmup, 
+                args.rep,
             )
             print(f"  Gluon  : {gluon_ms:8.3f} ms  {gluon_tf:8.2f} TFLOPS")
         except Exception as e:
@@ -275,8 +276,15 @@ def main():
         # PyTorch
         try:
             torch_ms, torch_tf = benchmark_pytorch(
-                M, E, topk, K, intermediate, dtype, apply_rw,
-                args.warmup, args.rep,
+                M, 
+                E,
+                topk,
+                K, 
+                intermediate,
+                dtype, 
+                apply_rw,
+                args.warmup, 
+                args.rep,
             )
             print(f"  PyTorch: {torch_ms:8.3f} ms  {torch_tf:8.2f} TFLOPS")
         except Exception as e:
@@ -284,10 +292,16 @@ def main():
             torch_ms, torch_tf = float("nan"), float("nan")
 
         rows.append({
-            "M": M, "E": E, "topk": topk, "K": K, "intermediate": intermediate,
+            "M": M, 
+            "E": E, 
+            "topk": topk,
+            "K": K, 
+            "intermediate": intermediate,
             "dtype": args.dtype,
-            "gluon_ms": gluon_ms, "gluon_tflops": gluon_tf,
-            "torch_ms": torch_ms, "torch_tflops": torch_tf,
+            "gluon_ms": gluon_ms, 
+            "gluon_tflops": gluon_tf,
+            "torch_ms": torch_ms, 
+            "torch_tflops": torch_tf,
             # 加速比 vs PyTorch (Gluon 比 PyTorch 快几倍)
             "speedup_gluon_vs_torch": safe_ratio(gluon_tf, torch_tf),
             # 时间比 (PyTorch 时间 / Gluon 时间，> 1 表示 Gluon 更快)
@@ -308,10 +322,10 @@ def main():
               f"{r['speedup_gluon_vs_torch']:>6.3f} {r['time_ratio_torch_vs_gluon']:>7.3f}")
 
     # Legend
-    print(f"\n  G = Gluon Fused MoE  |  T = PyTorch per-expert")
-    print(f"  G/T = Gluon TFLOPS / PyTorch TFLOPS  (加速比, >1 表示 Gluon 更快)")
-    print(f"  T/G ms = PyTorch ms / Gluon ms  (时间倍数, >1 表示 Gluon 更快)")
-
+    print("\n  G = Gluon Fused MoE  |  T = PyTorch per-expert")
+    print("  G/T = Gluon TFLOPS / PyTorch TFLOPS  (加速比, >1 表示 Gluon 更快)")
+    print("  T/G ms = PyTorch ms / Gluon ms  (时间倍数, >1 表示 Gluon 更快)")
+    
     # Averages
     ratio_keys = [
         ("speedup_gluon_vs_torch", "G/T (TFLOPS)"),

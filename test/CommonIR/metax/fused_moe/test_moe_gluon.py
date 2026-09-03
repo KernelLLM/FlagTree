@@ -98,8 +98,8 @@ class TestMoeAlignBlockSize:
         block_size = 16
 
         sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
-            topk_ids, 
-            block_size, 
+            topk_ids,
+            block_size,
             E,
         )
 
@@ -165,8 +165,8 @@ class TestFusedMoe:
         # Fused
         fused_output = fused_moe(
             hidden_states,
-            w1, 
-            w2, 
+            w1,
+            w2,
             topk_ids,
             topk_weights,
         )

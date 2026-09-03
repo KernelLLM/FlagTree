@@ -130,24 +130,17 @@ def _select_config(M, N, K, E, topk):
 @gluon.jit
 def moe_gemm_kernel(
     # Pointers
-    a_ptr, b_ptr, c_ptr,
-    sorted_token_ids_ptr, expert_ids_ptr,
-    topk_weights_ptr,
+    a_ptr, b_ptr, c_ptr, sorted_token_ids_ptr, expert_ids_ptr, topk_weights_ptr,
     # Dimensions
     M, N, K, EM, num_valid_tokens,
     # Strides
-    stride_am, stride_ak,
-    stride_be, stride_bn, stride_bk,
-    stride_cm, stride_cn,
-    stride_wm,               # topk_weights stride
+    stride_am, stride_ak, stride_be, stride_bn, stride_bk, stride_cm, stride_cn, stride_wm,  # topk_weights stride
     # Constexprs
-    topk: gl.constexpr,
-    BLOCK_M: gl.constexpr, BLOCK_N: gl.constexpr, BLOCK_K: gl.constexpr,
-    GROUP_SIZE_M: gl.constexpr, NUM_BUFFERS: gl.constexpr,
-    DTYPE: gl.constexpr,               # 'bfloat16' | 'float16'
+    topk: gl.constexpr, BLOCK_M: gl.constexpr, BLOCK_N: gl.constexpr, BLOCK_K: gl.constexpr, GROUP_SIZE_M: gl.constexpr,
+    NUM_BUFFERS: gl.constexpr, DTYPE: gl.constexpr,  # 'bfloat16' | 'float16'
     MUL_ROUTED_WEIGHT: gl.constexpr,
-    GATHER_BY_TOKEN: gl.constexpr,     # True: A=[M,K], use offs_token//topk; False: A=[M*topk,N], use offs_token
-):
+    GATHER_BY_TOKEN: gl.constexpr,  # True: A=[M,K], use offs_token//topk; False: A=[M*topk,N], use offs_token
+    ):
     """MoE GEMM kernel: gather(A, sorted_token_ids) @ B[expert]^T → C.
 
     Uses mcTriton gl.metax async copy K-direction pipeline:
@@ -201,7 +194,7 @@ def moe_gemm_kernel(
 
     # ---- 7. Load MoE router weights (if needed) ----
     # Plan B: use valid_row_mask (epilogue only) — padding rows read 0 weight
-    moe_weight = gl.zeros((BLOCK_M,), dtype=gl.float32)
+    moe_weight = gl.zeros((BLOCK_M, ), dtype=gl.float32)
     if MUL_ROUTED_WEIGHT:
         moe_weight = gl.load(
             topk_weights_ptr + offs_token,
@@ -328,24 +321,17 @@ def moe_gemm_kernel(
 @gluon.jit
 def moe_gemm_kernel_simple(
     # Pointers
-    a_ptr, b_ptr, c_ptr,
-    sorted_token_ids_ptr, expert_ids_ptr,
-    topk_weights_ptr,
+    a_ptr, b_ptr, c_ptr, sorted_token_ids_ptr, expert_ids_ptr, topk_weights_ptr,
     # Dimensions
     M, N, K, EM, num_valid_tokens,
     # Strides
-    stride_am, stride_ak,
-    stride_be, stride_bn, stride_bk,
-    stride_cm, stride_cn,
-    stride_wm,               # topk_weights stride
+    stride_am, stride_ak, stride_be, stride_bn, stride_bk, stride_cm, stride_cn, stride_wm,  # topk_weights stride
     # Constexprs
-    topk: gl.constexpr,
-    BLOCK_M: gl.constexpr, BLOCK_N: gl.constexpr, BLOCK_K: gl.constexpr,
-    GROUP_SIZE_M: gl.constexpr,
-    DTYPE: gl.constexpr,               # 'bfloat16' | 'float16'
+    topk: gl.constexpr, BLOCK_M: gl.constexpr, BLOCK_N: gl.constexpr, BLOCK_K: gl.constexpr, GROUP_SIZE_M: gl.constexpr,
+    DTYPE: gl.constexpr,  # 'bfloat16' | 'float16'
     MUL_ROUTED_WEIGHT: gl.constexpr,
-    GATHER_BY_TOKEN: gl.constexpr,     # True: A=[M,K], use offs_token//topk; False: A=[M*topk,N], use offs_token
-):
+    GATHER_BY_TOKEN: gl.constexpr,  # True: A=[M,K], use offs_token//topk; False: A=[M*topk,N], use offs_token
+    ):
     """Simplified MoE GEMM: no manual pipeline, compiler-managed async copy.
 
     NOTE: No early-return / return statements are used inside this kernel.
@@ -394,7 +380,7 @@ def moe_gemm_kernel_simple(
 
     # ---- 7. Router weights ----
     # Plan B: use valid_row_mask — padding rows read 0 weight
-    moe_weight = gl.zeros((BLOCK_M,), dtype=gl.float32)
+    moe_weight = gl.zeros((BLOCK_M, ), dtype=gl.float32)
     if MUL_ROUTED_WEIGHT:
         moe_weight = gl.load(
             topk_weights_ptr + offs_token,
@@ -452,7 +438,7 @@ def moe_gemm_kernel_simple(
 # ============================================================================
 
 _DTYPE_STR = {
-    torch.float16:  'float16',
+    torch.float16: 'float16',
     torch.bfloat16: 'bfloat16',
 }
 
@@ -467,7 +453,7 @@ def invoke_moe_gemm(
     num_tokens_post_padded: torch.Tensor,
     topk: int,
     mul_routed_weight: bool,
-    num_tokens: int,           # original M (number of input tokens, before topk expansion)
+    num_tokens: int,  # original M (number of input tokens, before topk expansion)
     BLOCK_M: int,
     BLOCK_N: int,
     BLOCK_K: int,
@@ -497,36 +483,26 @@ def invoke_moe_gemm(
             Default is True.
     """
     K = A.size(1)
-    N = B.size(1)   # B is [E, N, K]
+    N = B.size(1)  # B is [E, N, K]
     EM = sorted_token_ids.size(0)
     num_valid_tokens = num_tokens * topk
 
     dtype_str = _DTYPE_STR[A.dtype]
 
-    grid = (triton.cdiv(EM, BLOCK_M) * triton.cdiv(N, BLOCK_N),)
+    grid = (triton.cdiv(EM, BLOCK_M) * triton.cdiv(N, BLOCK_N), )
 
     if use_manual_pipeline:
         # Manual gl.metax double-buffer pipeline + compiler async copy overlay.
         # If pipeline="cpasync" conflicts with manual gl.metax barriers,
         # set use_manual_pipeline=False to use the simplified kernel.
         moe_gemm_kernel[grid](
-            A, B, C,
-            sorted_token_ids, expert_ids,
-            topk_weights if mul_routed_weight else None,
-            num_tokens, N, K, EM, num_valid_tokens,
-            A.stride(0), A.stride(1),
-            B.stride(0), B.stride(1), B.stride(2),
-            C.stride(0), C.stride(1),
-            topk_weights.stride(0) if topk_weights is not None else 0,
-            topk=topk,
-            BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
-            GROUP_SIZE_M=GROUP_SIZE_M, NUM_BUFFERS=NUM_BUFFERS,
-            DTYPE=dtype_str,
-            MUL_ROUTED_WEIGHT=mul_routed_weight,
-            GATHER_BY_TOKEN=gather_by_token,
-            num_warps=num_warps,
-            num_stages=NUM_BUFFERS,    # pipeline stages = double-buffer count
-            pipeline="cpasync",        # enable async Global→Shared copy
+            A, B, C, sorted_token_ids, expert_ids, topk_weights if mul_routed_weight else None, num_tokens, N, K, EM,
+            num_valid_tokens, A.stride(0), A.stride(1), B.stride(0), B.stride(1), B.stride(2), C.stride(0), C.stride(1),
+            topk_weights.stride(0) if topk_weights is not None else 0, topk=topk, BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N,
+            BLOCK_K=BLOCK_K, GROUP_SIZE_M=GROUP_SIZE_M, NUM_BUFFERS=NUM_BUFFERS, DTYPE=dtype_str,
+            MUL_ROUTED_WEIGHT=mul_routed_weight, GATHER_BY_TOKEN=gather_by_token, num_warps=num_warps,
+            num_stages=NUM_BUFFERS,  # pipeline stages = double-buffer count
+            pipeline="cpasync",  # enable async Global→Shared copy
         )
     else:
         # Compiler-managed pipeline with async Global→Shared copy.
@@ -535,23 +511,12 @@ def invoke_moe_gemm(
         # (no token_mask). This satisfies cpasync's C500 swizzled shared memory
         # layout constraint. Both cpasync and swizzle now work simultaneously.
         moe_gemm_kernel_simple[grid](
-            A, B, C,
-            sorted_token_ids, expert_ids,
-            topk_weights if mul_routed_weight else None,
-            num_tokens, N, K, EM, num_valid_tokens,
-            A.stride(0), A.stride(1),
-            B.stride(0), B.stride(1), B.stride(2),
-            C.stride(0), C.stride(1),
-            topk_weights.stride(0) if topk_weights is not None else 0,
-            topk=topk,
-            BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
-            GROUP_SIZE_M=GROUP_SIZE_M,
-            DTYPE=dtype_str,
-            MUL_ROUTED_WEIGHT=mul_routed_weight,
-            GATHER_BY_TOKEN=gather_by_token,
-            num_warps=num_warps,
-            num_stages=NUM_BUFFERS,    # pipeline stages
-            pipeline="cpasync",        # async Global→Shared copy (Plan B: uniform masks → C500 OK)
+            A, B, C, sorted_token_ids, expert_ids, topk_weights if mul_routed_weight else None, num_tokens, N, K, EM,
+            num_valid_tokens, A.stride(0), A.stride(1), B.stride(0), B.stride(1), B.stride(2), C.stride(0), C.stride(1),
+            topk_weights.stride(0) if topk_weights is not None else 0, topk=topk, BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N,
+            BLOCK_K=BLOCK_K, GROUP_SIZE_M=GROUP_SIZE_M, DTYPE=dtype_str, MUL_ROUTED_WEIGHT=mul_routed_weight,
+            GATHER_BY_TOKEN=gather_by_token, num_warps=num_warps, num_stages=NUM_BUFFERS,  # pipeline stages
+            pipeline="cpasync",  # async Global→Shared copy (Plan B: uniform masks → C500 OK)
         )
 
 

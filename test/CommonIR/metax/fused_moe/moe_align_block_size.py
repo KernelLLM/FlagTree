@@ -9,7 +9,6 @@ which is more efficient than a host-side Python loop for large M.
 """
 
 import torch
-import triton
 from triton.experimental import gluon
 from triton.experimental.gluon import language as gl
 
@@ -23,7 +22,7 @@ from triton.experimental.gluon import language as gl
 def _moe_hist_kernel(
     topk_ids_ptr,
     histogram_ptr,
-    num_tokens_topk,      # M * topk
+    num_tokens_topk,  # M * topk
     num_experts,
 ):
     """One element per CTA: atomically increment histogram[expert_id]."""
@@ -40,8 +39,8 @@ def _moe_hist_kernel(
 @gluon.jit
 def _moe_scatter_kernel(
     topk_ids_ptr,
-    cumsum_counter_ptr,   # mutable counter (atomic_add claims slots)
-    padded_cumsum_ptr,    # prefix-sum after padding (read-only offsets)
+    cumsum_counter_ptr,  # mutable counter (atomic_add claims slots)
+    padded_cumsum_ptr,  # prefix-sum after padding (read-only offsets)
     sorted_token_ids_ptr,
     num_tokens_topk,
 ):
@@ -94,7 +93,10 @@ def moe_align_block_size(
     # Step 1: histogram — count tokens per expert
     histogram = torch.zeros(num_experts, dtype=torch.int32, device=topk_ids.device)
     _moe_hist_kernel[(M_topk,)](
-        topk_ids_flat, histogram, M_topk, num_experts,
+        topk_ids_flat,
+        histogram, 
+        M_topk, 
+        num_experts,
     )
 
     # Step 2: host-side prefix sum + padding
@@ -119,13 +121,16 @@ def moe_align_block_size(
     cumsum_counter = torch.zeros(num_experts, dtype=torch.int32, device=topk_ids.device)
 
     _moe_scatter_kernel[(M_topk,)](
-        topk_ids_flat, cumsum_counter, padded_cumsum,
-        sorted_token_ids, M_topk,
+        topk_ids_flat, 
+        cumsum_counter, 
+        padded_cumsum,
+        sorted_token_ids, 
+        M_topk,
     )
 
     # Step 4: build expert_ids on host (simple, reliable)
     num_m_blocks = total_padded // block_size
-    expert_ids = torch.full((num_m_blocks,), -1, dtype=torch.int32, device=topk_ids.device)
+    expert_ids = torch.full((num_m_blocks, ), -1, dtype=torch.int32, device=topk_ids.device)
     expert_ids_host = expert_ids.cpu()
     block_idx = 0
     for e in range(num_experts):
@@ -139,7 +144,9 @@ def moe_align_block_size(
     expert_ids.copy_(expert_ids_host.to(topk_ids.device))
 
     num_tokens_post_padded = torch.tensor(
-        [total_padded], dtype=torch.int32, device=topk_ids.device,
+        [total_padded], 
+        dtype=torch.int32, 
+        device=topk_ids.device,
     )
 
     return sorted_token_ids, expert_ids, num_tokens_post_padded
