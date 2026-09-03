@@ -75,12 +75,11 @@ def fused_moe_ref(
 # Test shapes: (M, E, topk, K, intermediate)
 # ============================================================================
 
-_TEST_SHAPES = [
-    (16,  8, 2, 1024, 512),    # decode small batch
-    (128, 8, 2, 1024, 512),    # medium batch
-    (64,  4, 2,  512, 256),    # small, tile-friendly
-    (48,  4, 2,  512, 256),    # non-tile-aligned
-]
+_TEST_SHAPES = [(16, 8, 2, 1024, 512),  # decode small batch
+                (128, 8, 2, 1024, 512),  # medium batch
+                (64, 4, 2, 512, 256),  # small, tile-friendly
+                (48, 4, 2, 512, 256),  # non-tile-aligned
+                ]
 
 _DTYPES = [torch.bfloat16, torch.float16]
 
@@ -99,7 +98,9 @@ class TestMoeAlignBlockSize:
         block_size = 16
 
         sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
-            topk_ids, block_size, E,
+            topk_ids, 
+            block_size, 
+            E,
         )
 
         # num_tokens_post_padded is a multiple of block_size
@@ -154,12 +155,20 @@ class TestFusedMoe:
 
         # Reference
         ref_output = fused_moe_ref(
-            hidden_states, w1, w2, topk_ids, topk_weights,
+            hidden_states,
+            w1,
+            w2,
+            topk_ids,
+            topk_weights,
         )
 
         # Fused
         fused_output = fused_moe(
-            hidden_states, w1, w2, topk_ids, topk_weights,
+            hidden_states,
+            w1, 
+            w2, 
+            topk_ids,
+            topk_weights,
         )
 
         # Tolerance: bf16 has ~1e-2 precision, fp16 ~1e-3
@@ -197,11 +206,19 @@ class TestFusedMoe:
 
         for apply_rw in (False, True):
             ref = fused_moe_ref(
-                hidden_states, w1, w2, topk_ids, topk_weights,
+                hidden_states, 
+                w1, 
+                w2, 
+                topk_ids,
+                topk_weights,
                 apply_router_weight_on_input=apply_rw,
             )
             fused = fused_moe(
-                hidden_states, w1, w2, topk_ids, topk_weights,
+                hidden_states, 
+                w1,
+                w2, 
+                topk_ids,
+                topk_weights,
                 apply_router_weight_on_input=apply_rw,
             )
             torch.testing.assert_close(fused, ref, atol=atol, rtol=rtol)
@@ -256,9 +273,7 @@ class TestMoeSum:
         cache3 = torch.randn(M, topk, K, device="cuda", dtype=torch.bfloat16)
 
         # Reference: einsum
-        expected = torch.einsum(
-            "mk,mkd->md", topk_weights.float(), cache3.float()
-        ).to(torch.bfloat16)
+        expected = torch.einsum("mk,mkd->md", topk_weights.float(), cache3.float()).to(torch.bfloat16)
 
         result = _moe_sum(topk_weights, cache3)
         torch.testing.assert_close(result, expected, atol=1e-2, rtol=1e-2)
