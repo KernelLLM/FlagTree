@@ -19,6 +19,7 @@ from pathlib import Path
 
 import torch
 import triton
+from fused_moe.moe_gluon import fused_moe
 
 # ---------------------------------------------------------------------------
 # Import Gluon fused MoE (as a package, to support relative imports)
@@ -27,8 +28,6 @@ _this_dir = Path(__file__).resolve().parent          # .../metax/fused_moe/
 _metax_dir = _this_dir.parent                        # .../metax/
 if str(_metax_dir) not in sys.path:
     sys.path.insert(0, str(_metax_dir))
-
-from fused_moe.moe_gluon import fused_moe
 
 # ---------------------------------------------------------------------------
 # MoE shapes: (M, E, topk, K, intermediate)
