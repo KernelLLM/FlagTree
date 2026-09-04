@@ -22,7 +22,7 @@ import triton.language as tl
 #  `import triton.experimental.tle as tle` also patches triton.compiler so the
 #  tile/tle dialects are registered in the MLIR context during compilation.
 # =============================================================================
-import triton.experimental.tle as tle  # registers tile/tle dialects; tle.scope
+import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
 from triton.experimental.tle.language.dsa.ascend import PIPE, sync_block_set, sync_block_wait
 
 # NOTE: The tle tile-DSA layer now has minimal tile.cube_launch / tile.cube_wait
@@ -34,9 +34,10 @@ from triton.experimental.tle.language.dsa.ascend import PIPE, sync_block_set, sy
 #  Compile-time configuration
 # =============================================================================
 NUM_CORES = 20
-BLOCK_M = 32
-BLOCK_N = 32
-DIM = 64
+BLOCK_M = 64
+BLOCK_N = 128
+# DIM is now a constexpr kernel parameter instead of a module constant
+# to support multiple head dimensions (64, 96, 128, 192, etc.)
 RING: tl.constexpr = tl.constexpr(3)  # task-ring depth (the "3-task" of the schedule)
 
 # ---- Cross-core semaphores -------------------------------------------------
@@ -265,8 +266,9 @@ def _vec1_softmax(
 
         # online softmax: compute new running -max*scale (ping-pong)
         block_row_max = tl.max(attn_score_block, axis=-1, keep_dims=False)
-        neg_max_new = tl.minimum(-block_row_max * sm_scale, tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
-        neg_max_prv = tl.where(cur_parity == 0, neg_max_odd, neg_max_even)
+        n_cand = -block_row_max * sm_scale
+        neg_max_prv = tl.minimum(neg_max_even, neg_max_odd)
+        neg_max_new = tl.minimum(n_cand, neg_max_prv)
 
         # softmax_p = exp(sm_scale * score + neg_max_new)
         softmax_p = tl.exp(sm_scale * attn_score_block + neg_max_new[:, None])
@@ -287,6 +289,7 @@ def _vec1_softmax(
         tl.store(expsum_store_bp, block_expsum[:, None])
 
         # update running max ping-pong
+        neg_max_new = tl.minimum(n_cand, tl.where(cur_parity == 0, neg_max_even, neg_max_odd))
         if cur_parity == 0:
             neg_max_even = neg_max_new
         else:
@@ -358,7 +361,7 @@ def _vec2_accumulate(
                                            (BLOCK_M, 1), (1, 0))
         block_expsum = tl.reshape(tl.load(expsum_load_bp).to(tl.float32), (BLOCK_M, ))
 
-        if prev_kv_idx == 0:
+        if prev_idx_in_conbine == 0 and cb_idx == 0:
             # first KV block: init acc_o and softmax_denom directly
             acc_o = pv_acc
             softmax_denom = block_expsum
@@ -664,7 +667,7 @@ def _dump_signature():
     return sig
 
 
-def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is_causal=False):
+def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, is_causal=False, dim=64):
     """Compile the kernel to TTIR (containing tile.* ops) and write it to `path`.
 
     Also runs the CommonIR→HIVM pass to lower tile.* ops and dumps the resulting
@@ -677,7 +680,7 @@ def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, 
     from triton._C.libtriton import ir
     from triton._C.libtriton import tle as tle_ir
 
-    # The kernel reads module-level shape constants (BLOCK_M, DIM, ...) as plain
+    # The kernel reads module-level shape constants (BLOCK_M, ...) as plain
     # globals; allow that during this front-end-only dump.
     os.environ.setdefault("TRITON_ALLOW_NON_CONSTEXPR_GLOBALS", "1")
 
@@ -693,7 +696,7 @@ def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, 
         "IS_CAUSAL": is_causal,
         "BLOCK_M": BLOCK_M,
         "BLOCK_N": BLOCK_N,
-        "DIM": DIM,
+        "DIM": dim,
     }
 
     src = ASTSource(flash_attention_fwd_3task_kernel, signature, constants)
@@ -774,7 +777,16 @@ def dump_commonir(path=None, ttir_path=None, num_kv_blocks=32, combine_batch=8, 
     return mlir
 
 
-def dump_hivm(path=None, combine_batch=32, is_causal=False):
+def _dump_pass_stage(module, path, tag):
+    """Append current module IR to `path` with a stage separator comment."""
+    with open(path, "a") as f:
+        f.write(f"\n// ===== stage: {tag} =====\n")
+        f.write(str(module))
+        f.write("\n")
+    print(f"[dump] appended stage '{tag}' to {path}", flush=True)
+
+
+def dump_hivm(path=None, combine_batch=32, is_causal=False, dim=64):
     """Compile the kernel to TTIR, then lower through CommonIR→HIVM pipeline to HIVM IR.
 
     Pipeline (matches compiler.py ttir_to_linalg):
@@ -794,10 +806,13 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
     from triton._C.libtriton import ir, passes, ascend
 
     # Step 1: compile to TTIR (CommonIR)
-    commonir_mlir = dump_commonir(path=None, combine_batch=combine_batch, is_causal=is_causal)
+    commonir_mlir = dump_commonir(path=None, combine_batch=combine_batch, is_causal=is_causal, dim=dim)
 
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_hivm.mlir")
+
+    # Truncate the output file so all stages are appended fresh this run.
+    open(path, "w").close()
 
     # Step 2: parse the CommonIR module and run the pass pipeline
     context = ir.context()
@@ -829,6 +844,7 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_commonir_to_hivm(pm1)
     pm1.run(module)
     print(f"[dump_hivm] after commonir (pass 1): verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "01_commonir_to_hivm")
 
     # Phase 2: Triton CustomOp → HIVM SyncOp
     pm2 = ir.pass_manager(context)
@@ -836,6 +852,7 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_triton_to_hivm(pm2)
     pm2.run(module)
     print(f"[dump_hivm] after triton_to_hivm: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "02_triton_to_hivm")
 
     # Phase 3: Inline + canonicalize to clean up the IR.
     pm3 = ir.pass_manager(context)
@@ -844,19 +861,22 @@ def dump_hivm(path=None, combine_batch=32, is_causal=False):
     passes.common.add_canonicalizer(pm3)
     pm3.run(module)
     print(f"[dump_hivm] after canonicalize: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "03_canonicalize")
 
     ok = module.verify()
     if not ok:
         raise RuntimeError("dump_hivm: module.verify() failed after pipeline — IR is not legal")
 
     mlir = str(module)
-    with open(path, "w") as f:
+    with open(path, "a") as f:
+        f.write("\n// ===== stage: final =====\n")
         f.write(mlir)
+        f.write("\n")
     print(f"[dump_hivm] module.verify() = {ok}; wrote HIVM IR to {path}")
     return mlir
 
 
-def dump_linalg(path=None, combine_batch=32, is_causal=False):
+def dump_linalg(path=None, combine_batch=32, is_causal=False, dim=64):
     """Compile the kernel through the full CommonIR→Linalg lowering pipeline.
 
     Pipeline:
@@ -890,10 +910,13 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     from triton._C.libtriton import tle as tle_ir
 
     # Step 1: compile to TTIR (CommonIR)
-    commonir_mlir = dump_commonir(path=None, combine_batch=combine_batch, is_causal=is_causal)
+    commonir_mlir = dump_commonir(path=None, combine_batch=combine_batch, is_causal=is_causal, dim=dim)
 
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fa_triton_arch_linalg.mlir")
+
+    # Truncate the output file so all stages are appended fresh this run.
+    open(path, "w").close()
 
     # Step 2: parse the CommonIR module into a fresh context
     context = ir.context()
@@ -920,6 +943,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_commonir_to_hivm(pm)
     pm.run(module)
     print(f"[dump_linalg] ① commonir_to_hivm: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "01_commonir_to_hivm")
 
     # ── ①b Erase the unrealized_conversion_cast ops produced by CommonIRToHIVM
     #     before any structured/linalg lowering runs.  This turns:
@@ -941,6 +965,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_discrete_mask_access_conversion(pm, False, False, False)
     pm.run(module)
     print(f"[dump_linalg] ② structure(r1)+discrete_mask: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "02_discrete_mask")
 
     # ── ③ Unstructured + HIVM + HFusion + LLVM ──────────────────────────
     pm = ir.pass_manager(context)
@@ -951,6 +976,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     ascend.passes.ttir.add_triton_to_llvm(pm)
     pm.run(module)
     print(f"[dump_linalg] ③ unstructure+hivm+hfusion+llvm: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "03_unstructure_hivm_hfusion_llvm")
 
     # ── ④ Bubble-up + structured (r2) ────────────────────────────────────
     pm = ir.pass_manager(context)
@@ -959,6 +985,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     # ascend.passes.ttir.add_triton_to_structure_incubated(pm, False, False, False)
     pm.run(module)
     print(f"[dump_linalg] ④ bubble_up+structure(r2): verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "04_bubble_up")
 
     # ── ④b Inline + canonicalize ← REQUIRED to avoid C++ assertion ─────
     # Without this, the linalg incubator crashes with cast<RankedTensorType>
@@ -969,6 +996,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
     passes.common.add_canonicalizer(pm)
     pm.run(module)
     print(f"[dump_linalg] ④b inline+canonicalize: verify={module.verify()}", flush=True)
+    _dump_pass_stage(module, path, "04b_inline_canonicalize")
 
     # ── ⑤ Triton → Linalg ───────────────────────────────────────────────
     # This pass does the heavy lifting: tt.ptr→memref, triton ops→linalg,
@@ -987,6 +1015,7 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
             "[dump_linalg] ⑤ triton_to_linalg_incubated: partial conversion "
             "(this is expected — the pass creates cast chains that need "
             "post-processing)", flush=True)
+    _dump_pass_stage(module, path, "05_triton_to_linalg")
 
     # ── ⑤c Fold staging memref.alloc + memref.copy pairs ─────────────────
     #     TritonToLinalgIncubated creates staging allocs (default address
@@ -1022,8 +1051,10 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
         raise RuntimeError("dump_linalg: module.verify() failed after pipeline")
 
     mlir = str(module)
-    with open(path, "w") as f:
+    with open(path, "a") as f:
+        f.write("\n// ===== stage: final =====\n")
         f.write(mlir)
+        f.write("\n")
     print(f"[dump_linalg] verify={ok}; wrote Linalg IR ({len(mlir)} chars) to {path}")
     return mlir
 
@@ -1034,7 +1065,9 @@ def dump_linalg(path=None, combine_batch=32, is_causal=False):
 def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
     B, Hq, S, D = q.shape
     Hkv = k.shape[1]
-    assert D == DIM and S % BLOCK_N == 0 and Hq % Hkv == 0
+    assert D % 16 == 0 and D <= 256, f"Head dim D={D} must be multiple of 16 and <= 256"
+    assert D == k.shape[-1], f"Q head dim (D={D}) must equal KV head dim (D={k.shape[-1]})"
+    assert S % BLOCK_N == 0 and Hq % Hkv == 0
     num_seq_blocks = S // BLOCK_M
     block_num = num_seq_blocks * Hq * B
     num_kv_blocks = S // BLOCK_N  # KV blocks per output tile
@@ -1049,12 +1082,12 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
     rem_block_num = block_num % NUM_CORES
 
     out = torch.empty_like(q)
-    # GM ping-pong workspaces: [NUM_CORES, RING, CB, BLOCK_M, BLOCK_N/DIM]
+    # GM ping-pong workspaces: [NUM_CORES, RING, CB, BLOCK_M, BLOCK_N/D]
     # Each ring_slot holds CB score/prob/pv blocks so MM1/Vec1/MM2 can process
     # all CB sub-blocks within one task before signalling the next stage.
     workspace_s = torch.empty((NUM_CORES, RING, CB, BLOCK_M, BLOCK_N), dtype=torch.float16, device=q.device)
     workspace_p = torch.empty((NUM_CORES, RING, CB, BLOCK_M, BLOCK_N), dtype=q.dtype, device=q.device)
-    workspace_pv = torch.empty((NUM_CORES, RING, CB, BLOCK_M, DIM), dtype=torch.float16, device=q.device)
+    workspace_pv = torch.empty((NUM_CORES, RING, CB, BLOCK_M, D), dtype=torch.float16, device=q.device)
     workspace_rescale = torch.empty((NUM_CORES, RING, CB, BLOCK_M), dtype=torch.float32, device=q.device)
     workspace_expsum = torch.empty((NUM_CORES, RING, CB, BLOCK_M), dtype=torch.float32, device=q.device)
     sm_scale = (1.0 / D)**0.5
@@ -1099,7 +1132,7 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
         IS_CAUSAL=is_causal,
         BLOCK_M=BLOCK_M,
         BLOCK_N=BLOCK_N,
-        DIM=DIM,
+        DIM=D,
     )
     return out
 
@@ -1111,7 +1144,7 @@ if __name__ == "__main__":
     parser.add_argument("--H", type=int, default=16)
     parser.add_argument("--q-heads", type=int, default=None)
     parser.add_argument("--kv-heads", type=int, default=None)
-    parser.add_argument("--D", type=int, default=DIM)
+    parser.add_argument("--D", type=int, default=64, help="Head dimension (64, 96, 128, 192, etc.)")
     parser.add_argument("--causal", action="store_true")
     parser.add_argument("--no-check", action="store_true")
     parser.add_argument("--combine-batch", type=int, default=8, help="KV blocks per task (arch22 nRatio)")
@@ -1129,17 +1162,17 @@ if __name__ == "__main__":
     combine_batch = args.combine_batch
     # ---- dump intermediate CommonIR and exit (no device required) ----
     if args.dump_mlir is not None:
-        dump_commonir(path=(args.dump_mlir or None), combine_batch=combine_batch, is_causal=args.causal)
+        dump_commonir(path=(args.dump_mlir or None), combine_batch=combine_batch, is_causal=args.causal, dim=D)
         raise SystemExit(0)
 
     # ---- dump HIVM IR after full lowering pipeline (no device required) ----
     if args.dump_ir is not None:
-        dump_hivm(path=(args.dump_ir or None), combine_batch=combine_batch, is_causal=args.causal)
+        dump_hivm(path=(args.dump_ir or None), combine_batch=combine_batch, is_causal=args.causal, dim=D)
         raise SystemExit(0)
 
     # ---- dump Linalg IR after full CommonIR→Linalg lowering (no device required) ----
     if args.dump_linalg is not None:
-        dump_linalg(path=(args.dump_linalg or None), combine_batch=combine_batch, is_causal=args.causal)
+        dump_linalg(path=(args.dump_linalg or None), combine_batch=combine_batch, is_causal=args.causal, dim=D)
         raise SystemExit(0)
 
     Q_H = args.q_heads or H
