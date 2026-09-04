@@ -370,6 +370,12 @@ def get_common_bishengir_compile_options(metadata):
     bishengir_target_opt = f"--target={bishengir_target}"
     return [bishengir_target_opt]
 
+def _append_custom_pipeline_option(compile_options, metadata):
+    custom_pipeline = metadata.get("custom_pipeline")
+    enable_custom_pipeline = custom_pipeline is not None
+    if enable_custom_pipeline:
+        compile_options.append(f"--custom-compilation-pipeline={custom_pipeline}")
+
 
 def get_auto_bind_sub_block_option(metadata):
     # auto_tile_and_bind_subblock is read from the module.
@@ -569,6 +575,7 @@ def linalg_to_bin_enable_npu_compile_910_95(linalg: str, metadata, opt):
         if opt.debug:
             _compile_option_list += ["--bishengir-print-ir-after=hivm-graph-sync-solver"]
 
+        _append_custom_pipeline_option(_compile_option_list, metadata)
         cmd_list = ([npu_compiler_path, ttadapter_path] + _compile_option_list + ["-o", bin_file])
         vf_merge_level = metadata["vf_merge_level"]
         if vf_merge_level is not None and vf_merge_level != 1:
@@ -579,7 +586,7 @@ def linalg_to_bin_enable_npu_compile_910_95(linalg: str, metadata, opt):
             cmd_list += [f"--hfusion-enable-multiple-consumer-fusion={hfusion_enable_multiple_consumer_fusion}"]
 
         if opt.debug:
-            print(f"[DEBUG] cmd_list: {' '.join(cmd_list)}")
+            print(f"[DEBUG] cmd_list: {shlex.join(cmd_list)}")
 
         try:
             ret = subprocess.run(cmd_list, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
@@ -814,9 +821,10 @@ def linalg_to_bin_enable_npu_compile_A2_A3(linalg: str, metadata, opt):
         if opt.debug:
             _compile_option_list += ["--mlir-print-ir-after-failure"]
             _compile_option_list += ["--bishengir-print-ir-after=hivm-graph-sync-solver"]
+        _append_custom_pipeline_option(_compile_option_list, metadata)
         cmd_list = ([npu_compiler_path, ttadapter_path] + _compile_option_list + ["-o", bin_file])
         if opt.debug:
-            print(f"[DEBUG] cmd_list: {' '.join(cmd_list)}")
+            print(f"[DEBUG] cmd_list: {shlex.join(cmd_list)}")
 
             import shutil
             shutil.copy2(ttadapter_path, "/tmp/debug_kernel_input.mlir")
@@ -903,6 +911,7 @@ class NPUOptions:
     max_num_imprecise_acc_default: int = 0
     extern_libs: dict = None
     bisheng_options: str = "-cce-link-aicore-ll-module " + get_libdevice()
+    custom_pipeline: str = None
 
     multibuffer: bool = not is_compile_on_910_95
     enable_ubuf_saving: bool = None
@@ -1036,6 +1045,7 @@ def ttir_to_npubin(mod, metadata, opt):
                 if enable_auto_blockify:
                     _compile_option_list += ["--enable-auto-blockify-loop"]
 
+        _append_custom_pipeline_option(_compile_option_list, metadata)
         npu_compiler_path, env = _get_npucompiler_path()
         cmd_list = ([npu_compiler_path, src_path] + _compile_option_list + ["-o", bin_file])
         ret = subprocess.run(cmd_list, env=env, capture_output=True, check=True)
