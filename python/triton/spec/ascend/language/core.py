@@ -1448,6 +1448,58 @@ class tensor_descriptor_base(base_value):
         return _semantic.descriptor_scatter(self, value, x_offsets, y_offset)
 
 
+class tensor_view_type(base_type):
+    """Type of an N-dimensional logical TensorView."""
+
+    def __init__(self, element_ty: dtype, rank: int):
+        self.element_ty = element_ty
+        self.rank = rank
+
+    def _unflatten_ir(self, handles: List[ir.value], cursor: int) -> Tuple[tensor_view, int]:
+        return tensor_view(handles[cursor], self.element_ty, self.rank), cursor + 1
+
+    def _flatten_ir_types(self, builder: ir.builder, out: List[ir.type]) -> None:
+        out.append(builder.get_tensor_view_ty(self.element_ty.to_ir(builder), self.rank))
+
+    def __str__(self) -> str:
+        return f"tensor_view<{self.element_ty}>[{self.rank}]"
+
+    def __eq__(self, other) -> bool:
+        if type(other) is not type(self):
+            return False
+        return self.element_ty == other.element_ty and self.rank == other.rank
+
+    def __ne__(self, other) -> bool:
+        return not self.__eq__(other)
+
+    def mangle(self) -> str:
+        return f"TV{self.element_ty.mangle()}R{self.rank}"
+
+
+class tensor_view(base_value):
+    """A logical tensor accessed by tiled `tl.load` and `tl.store` operations."""
+
+    def __init__(self, handle, element_ty: dtype, rank: int):
+        """Internal constructor."""
+        super().__init__()
+        self.handle = handle
+        self.type = tensor_view_type(element_ty, rank)
+
+    def _flatten_ir(self, handles: List[ir.value]) -> None:
+        handles.append(self.handle)
+
+    @property
+    def dtype(self):
+        return self.type.element_ty
+
+    @property
+    def rank(self):
+        return self.type.rank
+
+    def __str__(self) -> str:
+        return str(self.type)
+
+
 class tensor_descriptor_type(tensor_descriptor_base_type):
 
     def __init__(self, block_type: block_type, shape_type: tuple_type, strides_type: tuple_type):
@@ -2077,7 +2129,8 @@ def dot_scaled(lhs, lhs_scale, lhs_format, rhs, rhs_scale, rhs_format, acc=None,
 
 @builtin
 def load(pointer, mask=None, other=None, boundary_check=(), padding_option="", cache_modifier="", eviction_policy="",
-         volatile=False, care_padding=True, _semantic=None):
+         volatile=False, care_padding=True, index=None, tile=None, traversal_strides=None, sparse_dim=None,
+         _semantic=None):
     """
     Return a tensor of data whose values are loaded from memory at location defined by `pointer`:
 
@@ -2101,10 +2154,15 @@ def load(pointer, mask=None, other=None, boundary_check=(), padding_option="", c
             - `mask` and `other` must be `None`, and
             - `boundary_check` and `padding_option` can be specified to control the behavior of out-of-bound access.
 
+        (4) If `pointer` is a `tl.tensor_view`, `index` and `tile` select the
+            loaded tile. `traversal_strides` controls tile traversal and
+            `sparse_dim` marks gather dimensions. Masks apply only to sparse
+            dimensions; regular boundaries come from the view shape.
+
     :param pointer: Pointer to the data to be loaded
-    :type pointer: `triton.PointerType`, or block of `dtype=triton.PointerType`
+    :type pointer: `triton.PointerType`, block of `dtype=triton.PointerType`, or `tl.tensor_view`
     :param mask: if `mask[idx]` is false, do not load the data at address `pointer[idx]`
-        (must be `None` with block pointers)
+        (must be `None` with block pointers; only meaningful with `sparse_dim` for tensor views)
     :type mask: Block of `triton.int1`, optional
     :param other: if `mask[idx]` is false, return `other[idx]`
     :type other: Block, optional
@@ -2125,7 +2183,20 @@ def load(pointer, mask=None, other=None, boundary_check=(), padding_option="", c
         2. if 'other' is None and 'care_padding' = True, loaded tensor will fill zeroes on masked places.
         3. if 'other' is None and 'care_padding' = False, masked places on loaded tensor will be random values, and tl.load may have a better performence.
     :type care_padding: bool, optional
+    :param index: (`tl.tensor_view` only) the tile's position, one entry per dimension
+    :type index: sequence of int or tensor, required with `pointer` a `tl.tensor_view`
+    :param tile: (`tl.tensor_view` only) the tile's shape, one entry per dimension
+    :type tile: sequence of `tl.constexpr` or int, required with `pointer` a `tl.tensor_view`
+    :param traversal_strides: (`tl.tensor_view` only) inter-tile stride per dimension, default same as `tile`
+    :type traversal_strides: sequence of `tl.constexpr` or int, optional
+    :param sparse_dim: (`tl.tensor_view` only) the dimension(s) (if any) that are a data-dependent gather index
+    :type sparse_dim: int or sequence of int, optional
     """
+    if isinstance(pointer, tensor_view):
+        assert other is None and not boundary_check and not padding_option, \
+            "`other`/`boundary_check`/`padding_option` are not supported when loading a `tl.tensor_view`"
+        assert index is not None and tile is not None, "`index` and `tile` are required when loading a `tl.tensor_view`"
+        return _semantic.tensor_view_load(pointer, index, tile, traversal_strides, sparse_dim, mask)
     # `mask` and `other` can be constexpr
     mask = _unwrap_if_constexpr(mask)
     other = _unwrap_if_constexpr(other)
@@ -2158,7 +2229,8 @@ def store_tensor_descriptor(desc: tensor_descriptor_base, offsets: Sequence[cons
 
 @_tensor_member_fn
 @builtin
-def store(pointer, value, mask=None, boundary_check=(), cache_modifier="", eviction_policy="", _semantic=None):
+def store(pointer, value, mask=None, boundary_check=(), cache_modifier="", eviction_policy="", index=None, tile=None,
+         traversal_strides=None, sparse_dim=None, _semantic=None):
     """
     Store a tensor of data into memory locations defined by `pointer`.
 
@@ -2180,13 +2252,19 @@ def store(pointer, value, mask=None, boundary_check=(), cache_modifier="", evict
             - `mask` must be None, and
             - `boundary_check` can be specified to control the behavior of out-of-bound access.
 
+        (4) If `pointer` is a `tl.tensor_view`, `index` and `tile` select the
+            stored tile. `traversal_strides` controls tile traversal and
+            `sparse_dim` marks scatter dimensions. Masks apply only to sparse
+            dimensions.
+
     `value` is implicitly broadcast to `pointer.shape` and typecast to `pointer.dtype.element_ty`.
 
     :param pointer: The memory location where the elements of `value` are stored
-    :type pointer: `triton.PointerType`, or block of `dtype=triton.PointerType`
+    :type pointer: `triton.PointerType`, block of `dtype=triton.PointerType`, or `tl.tensor_view`
     :param value: The tensor of elements to be stored
     :type value: Block
     :param mask: If `mask[idx]` is false, do not store `value[idx]` at `pointer[idx]`
+        (must be `None` with block pointers; only meaningful with `sparse_dim` for tensor views)
     :type mask: Block of triton.int1, optional
     :param boundary_check: tuple of integers, indicating the dimensions which should do the boundary check
     :type boundary_check: tuple of ints, optional
@@ -2196,9 +2274,21 @@ def store(pointer, value, mask=None, boundary_check=(), cache_modifier="", evict
         stands for cache write-through, see `cache operator <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#cache-operators>`_ for more details.
     :param eviction_policy: changes eviction policy in NVIDIA PTX
     :type eviction_policy: str, optional, should be one of {"", "evict_first", "evict_last"}
+    :param index: (`tl.tensor_view` only) the tile's position, one entry per dimension
+    :type index: sequence of int or tensor, required with `pointer` a `tl.tensor_view`
+    :param tile: (`tl.tensor_view` only) the tile's shape, one entry per dimension
+    :type tile: sequence of `tl.constexpr` or int, required with `pointer` a `tl.tensor_view`
+    :param traversal_strides: (`tl.tensor_view` only) inter-tile stride per dimension, default same as `tile`
+    :type traversal_strides: sequence of `tl.constexpr` or int, optional
+    :param sparse_dim: (`tl.tensor_view` only) the dimension(s) (if any) that are a data-dependent scatter index
+    :type sparse_dim: int or sequence of int, optional
     """
     # `value` can be constexpr
     value = _semantic.to_tensor(value)
+    if isinstance(pointer, tensor_view):
+        assert not boundary_check, "`boundary_check` is not supported when storing to a `tl.tensor_view`"
+        assert index is not None and tile is not None, "`index` and `tile` are required when storing to a `tl.tensor_view`"
+        return _semantic.tensor_view_store(pointer, value, index, tile, traversal_strides, sparse_dim, mask)
     mask = _unwrap_if_constexpr(mask)
     if mask is not None:
         mask = _semantic.to_tensor(mask)
@@ -2235,6 +2325,20 @@ def advance(base, offsets, _semantic=None):
     :param offsets: the offsets to advance, a tuple by dimension
     """
     return _semantic.advance(base, offsets)
+
+
+@builtin
+def make_tensor_view(base: tensor, shape, strides, _semantic=None) -> tensor_view:
+    """
+    Reinterpret a scalar pointer as an N-dimensional logical tensor. Access
+    tiles with `tl.load` or `tl.store` using `index` and `tile`.
+
+    :param base: The base pointer to the parent tensor
+    :param shape: The shape of the parent tensor, one entry per dimension
+    :param strides: The element strides of the parent tensor, one entry per
+        dimension
+    """
+    return _semantic.make_tensor_view(base, shape, strides)
 
 
 @builtin

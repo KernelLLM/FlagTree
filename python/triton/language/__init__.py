@@ -134,6 +134,7 @@ from .math import (umulhi, exp, exp2, fma, log, log2, cos, rsqrt, sin, sqrt, sqr
                    ceil)
 if FLAGTREE_BACKEND in ("ascend", ):
     from .math import cdiv
+    from .core import tensor_view, tensor_view_type, make_tensor_view
 
 from .random import (
     pair_uniform_to_normal,
