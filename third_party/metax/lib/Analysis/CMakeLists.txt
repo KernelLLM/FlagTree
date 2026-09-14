@@ -24,8 +24,11 @@ add_triton_library(TritonAnalysis
   TritonGPUAttrDefsIncGen
   TritonGPUTypeInterfacesIncGen
   TritonGPUOpInterfacesIncGen
-  McTleTableGen
 
   LINK_LIBS PUBLIC
   ${LINK_IR_LIBS}
 )
+
+if(BUILD_MCTLE)
+  add_dependencies(TritonAnalysis McTleTableGen)
+endif()
