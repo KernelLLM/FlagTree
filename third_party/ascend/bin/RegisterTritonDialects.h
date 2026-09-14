@@ -5,6 +5,7 @@
 #include "ascend/include/TritonToHFusion/Passes.h"
 #include "ascend/include/TritonToHIVM/Passes.h"
 #include "ascend/include/TritonToLLVM/Passes.h"
+#include "ascend/include/CommonIRToHIVM/Passes.h"
 #include "incubated/Conversion/DiscreteMaskAccessConversion/Passes.h"
 #include "incubated/Conversion/TritonToLinalgIncubated/Passes.h"
 
@@ -13,6 +14,7 @@
 #include "incubated/Conversion/TritonToUnstructureIncubated/Passes.h"
 #include "triton-shared/Conversion/TensorViewLowering/Passes.h"
 #include "triton-shared/Dialect/TensorView/IR/TensorViewDialect.h"
+#include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 
 #include "bishengir/Dialect/Annotation/IR/Annotation.h"
 #include "bishengir/Dialect/HACC/IR/HACC.h"
@@ -112,6 +114,7 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
   mlir::triton::registerTritonToUnstructureIncubatedPasses();
   mlir::triton::registerTensorViewLoweringPasses();
   mlir::triton::registerTritonToHIVMPasses();
+  mlir::triton::registerCommonIRToHIVMPasses();
   mlir::triton::registerTritonToHFusionPasses();
   mlir::triton::registerTritonToLLVMPasses();
   mlir::triton::registerAutoBlockifyPasses();
@@ -182,6 +185,7 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
       mlir::triton::proton::gpu::ProtonGPUDialect,
 #endif
       mlir::ROCDL::ROCDLDialect, mlir::triton::gluon::GluonDialect,
+      mlir::triton::tile::CommonIRDialect,
       mlir::triton::tv::TensorViewDialect,
       mlir::triton::ascend::TritonAscendDialect, mlir::hivm::HIVMDialect,
       mlir::scope::ScopeDialect, mlir::hacc::HACCDialect,
