@@ -456,6 +456,25 @@ void init_triton_ascend_ir(py::module &&m) {
              }
              return triton::tv::TensorViewType::get(dynShape, elementType,
                                                     dynStrides, encoding);
+           })
+      // Extract tile shape from a tensor_view's encoding attribute.
+      // Returns empty vector if the view has no encoding (base view).
+      .def("get_tensor_view_encoding_tile",
+           [](TritonOpBuilder &self, Value view) -> std::vector<int64_t> {
+             auto tvTy = cast<triton::tv::TensorViewType>(view.getType());
+             auto enc = tvTy.getEncoding();
+             if (!enc)
+               return {};
+             if (auto pv = dyn_cast<triton::tv::PartitionViewAttr>(enc))
+               return std::vector<int64_t>(pv.getTile().begin(),
+                                           pv.getTile().end());
+             if (auto sv = dyn_cast<triton::tv::StridedViewAttr>(enc))
+               return std::vector<int64_t>(sv.getTile().begin(),
+                                           sv.getTile().end());
+             if (auto gs = dyn_cast<triton::tv::GatherScatterViewAttr>(enc))
+               return std::vector<int64_t>(gs.getTile().begin(),
+                                           gs.getTile().end());
+             return {};
            });
 }
 

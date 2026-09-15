@@ -431,3 +431,21 @@ def tile_concat(lhs: tensor, rhs: tensor, dim: int, _semantic=None, _generator=N
     dim = _unwrap_if_constexpr(dim)
     return tle_semantic.tile_concat(lhs, rhs, dim, _semantic.builder)
 
+@builtin
+def tile_load(src, index=None, space=None, _semantic=None, _generator=None) -> tensor:
+    """Load a tile from an encoded tensor_view.
+
+    Usage:
+        tile_load(view, index=(i, j))
+    """
+    return tle_semantic.tile_load(src, index, space, _semantic.builder)
+
+
+@builtin
+def tile_store(src, value=None, index=None, _semantic=None, _generator=None):
+    """Store a tile into an encoded tensor_view.
+
+    Usage:
+        tile_store(view, value=tensor_val, index=(i, j))
+    """
+    tle_semantic.tile_store(src, value, index, _semantic.builder)
