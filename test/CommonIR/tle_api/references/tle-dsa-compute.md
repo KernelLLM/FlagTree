@@ -1,7 +1,7 @@
 # TLE DSA Compute
 
-> **Layer**: Tensor operations and loop control.
-> **Source**: `tle.dsa.extract_slice.md`, `tle.dsa.insert_slice.md`, `tle.dsa.extract_element.md`, `tle.dsa.parallel.md`
+> **Layer**: Tensor operations.
+> **Source**: `tle.dsa.extract_slice.md`, `tle.dsa.insert_slice.md`, `tle.dsa.extract_element.md`
 
 ## 1. `tle.dsa.extract_slice` — extract a subtensor
 
@@ -86,41 +86,5 @@ k_cache_offset = tle.dsa.extract_element(index_value, (i,)) * HEAD_DIM
 ```
 
 Use `extract_slice` when the result should be a ranked tensor; use `extract_element` only when a scalar is needed.
-
-## 4. `tle.dsa.parallel` — parallel loop iterator
-
-```python
-for i in tle.dsa.parallel(end):
-    ...
-
-for i in tle.dsa.parallel(start, end):
-    ...
-
-for i in tle.dsa.parallel(start, end, step):
-    ...
-
-for i in tle.dsa.parallel(start, end, step, loop_unroll_factor=4):
-    ...
-```
-
-Expresses that loop iterations are independent and can be scheduled in parallel. Inherits from `tle.dsa.range`. Can only be used as a `for` loop iterator inside `@triton.jit` functions.
-
-`loop_unroll_factor` passes an unroll hint to the compiler. Values smaller than 2 mean no unrolling.
-
-Does not support: `disallow_acc_multi_buffer`, `flatten`, `warp_specialize`, `disable_licm`.
-
-```python
-# Sum across 4 input tiles
-acc = tl.full((n_elements,), 0, tl.int32)
-offsets = tl.arange(0, n_elements)
-
-for i in tle.dsa.parallel(0, 4, 1):
-    val = tl.load(input_ptr + offsets + i * n_elements)
-    acc += val
-
-tl.store(output_ptr + offsets, acc)
-```
-
-> Do not use `tle.dsa.parallel` when the loop body has cross-iteration data dependencies. Use a plain `for` loop or `tl.range` instead.
 
 **Next**: [tle-dsa-ascend-advanced.md](tle-dsa-ascend-advanced.md) for compile hints, sub-vector ID, and inter-core CV pipeline sync.

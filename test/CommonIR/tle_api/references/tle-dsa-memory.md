@@ -21,12 +21,9 @@ a_ub = tle.dsa.alloc([BLOCK], dtype=tl.float32, mem_addr_space=tle.dsa.ascend.UB
 
 # 2D L1 buffer for a matmul tile
 a_l1 = tle.dsa.alloc([BLOCK_M, BLOCK_K], dtype=tl.float16, mem_addr_space=tle.dsa.ascend.L1)
-
-# L0 operand and accumulator buffers
-a_l0a = tle.dsa.alloc([BLOCK_M, BLOCK_K], dtype=tl.float16, mem_addr_space=tle.dsa.ascend.L0A)
-b_l0b = tle.dsa.alloc([BLOCK_K, BLOCK_N], dtype=tl.float16, mem_addr_space=tle.dsa.ascend.L0B)
-c_l0c = tle.dsa.alloc([BLOCK_M, BLOCK_N], dtype=tl.float32, mem_addr_space=tle.dsa.ascend.L0C)
 ```
+
+> L0A, L0B, L0C cannot be manually allocated via `tle.dsa.alloc`. L0 memory is managed by the compiler.
 
 > `mem_addr_space` is required and cannot be `None`. `shape` must be compile-time constants — runtime tensor values are not accepted.
 
@@ -57,10 +54,6 @@ tle.dsa.copy(x_ptr + offsets, a_ub, [tail])
 # UB → GM (1D)
 tle.dsa.copy(c_ub, out_ptr + offsets, [tail])
 
-# GM → L1 (2D) using a computed pointer
-a_ptr = tle.dsa.tile_gm_offset(a_base, [m_off, k_off], [K, 1])
-tle.dsa.copy(a_ptr, a_l1, [BLOCK_M, BLOCK_K])
-
 # Write tensor result back to GM via to_buffer
 result = c_val - b_val                           # tl.tensor arithmetic
 d_ub = tle.dsa.to_buffer(result, tle.dsa.ascend.UB)
@@ -85,14 +78,14 @@ Returns a new buffer pointing into `src`'s memory without copying. The returned 
 `sizes` and `strides` accept only plain integers or `tl.constexpr`. Tensor values are not accepted. `offsets` may be tensors.
 
 ```python
-# Split a [2*BLOCK_M, BLOCK_K] L1 buffer into two slots for ping-pong
-a_l1 = tle.dsa.alloc([2*BLOCK_M, BLOCK_K], tl.float16, tle.dsa.ascend.L1)
+# Split a [2*BLOCK_M, BLOCK_K] UB buffer into two slots for ping-pong
+a_ub = tle.dsa.alloc([2*BLOCK_M, BLOCK_K], tl.float16, tle.dsa.ascend.UB)
 
-a_l1_0 = tle.dsa.subview(a_l1, offsets=[0,       0], sizes=[BLOCK_M, BLOCK_K], strides=[1, 1])
-a_l1_1 = tle.dsa.subview(a_l1, offsets=[BLOCK_M, 0], sizes=[BLOCK_M, BLOCK_K], strides=[1, 1])
+a_ub_0 = tle.dsa.subview(a_ub, offsets=[0,       0], sizes=[BLOCK_M, BLOCK_K], strides=[1, 1])
+a_ub_1 = tle.dsa.subview(a_ub, offsets=[BLOCK_M, 0], sizes=[BLOCK_M, BLOCK_K], strides=[1, 1])
 ```
 
-> Do not allocate two separate `tle.dsa.alloc` calls with identical shape and dtype for double-buffering. The compiler (`commonir_to_hivm`) merges them into a single physical buffer, causing silent wrong results. Use `subview` on one larger allocation instead.
+> `subview` on L1 buffers is not currently supported — only UB buffers support subview. Do not allocate two separate `tle.dsa.alloc` calls with identical shape and dtype for double-buffering; the compiler (`commonir_to_hivm`) merges them into a single physical buffer, causing silent wrong results. Use `subview` on a single larger UB allocation instead.
 
 ## 4. `tle.dsa.to_tensor` — buffer to `tl.tensor`
 

@@ -17,11 +17,11 @@ TLE DSA is a lower-level path than TileLang. TileLang abstracts the memory hiera
 
 | File | Contents |
 |------|----------|
-| [tle-dsa-kernel-basics.md](references/tle-dsa-kernel-basics.md) | Imports, `@triton.jit` skeleton, address space constants (UB / L1 / L0A/B/C), namespace mapping from `triton-ascend` community docs |
-| [tle-dsa-memory.md](references/tle-dsa-memory.md) | `tle.dsa.alloc`, `tle.dsa.copy`, `tle.dsa.subview`, `tle.dsa.to_tensor`, `tle.dsa.to_buffer`, `tle.dsa.hint` |
-| [tle-dsa-compute.md](references/tle-dsa-compute.md) | `tle.dsa.extract_slice`, `tle.dsa.insert_slice`, `tle.dsa.extract_element`, `tle.dsa.parallel` |
+| [tle-dsa-kernel-basics.md](references/tle-dsa-kernel-basics.md) | Imports, `@triton.jit` skeleton, address space constants (UB / L1), namespace mapping from `triton-ascend` community docs |
+| [tle-dsa-memory.md](references/tle-dsa-memory.md) | `tle.dsa.alloc`, `tle.dsa.copy`, `tle.dsa.subview` (UB only), `tle.dsa.to_tensor`, `tle.dsa.to_buffer`, `tle.dsa.hint` |
+| [tle-dsa-compute.md](references/tle-dsa-compute.md) | `tle.dsa.extract_slice`, `tle.dsa.insert_slice`, `tle.dsa.extract_element` |
 | [tle-dsa-ascend-advanced.md](references/tle-dsa-ascend-advanced.md) | `compile_hint` (5 hint types with IR examples), `sub_vec_id`, `sync_block_set/wait/all`, CV inter-core double-buffer pipeline pattern |
 
 ## Reading order
 
-Start with `tle-dsa-kernel-basics.md` for the skeleton and address-space overview. Then read `tle-dsa-memory.md` — every TLE DSA kernel uses alloc and copy. Read `tle-dsa-compute.md` if the kernel needs tensor slicing or parallel loops. Read `tle-dsa-ascend-advanced.md` only when the kernel requires manual CV inter-core sync or compiler hints for specific optimization problems.
+Start with `tle-dsa-kernel-basics.md` for the skeleton and address-space overview. Then read `tle-dsa-memory.md` — every TLE DSA kernel uses alloc and copy. Read `tle-dsa-compute.md` if the kernel needs tensor slicing. Read `tle-dsa-ascend-advanced.md` only when the kernel requires manual CV inter-core sync or compiler hints for specific optimization problems.
