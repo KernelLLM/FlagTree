@@ -265,7 +265,6 @@ class CUDABackend(BaseBackend):
 
     def load_dialects(self, ctx):
         nvidia.load_dialects(ctx)
-        tle.load_dialects(ctx)
         if COMMON_IR_ENABLED:
             tle.load_tile_dialects(ctx)
         if CUDABackend.instrumentation:
@@ -280,10 +279,6 @@ class CUDABackend(BaseBackend):
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
         passes.common.add_inliner(pm)
-        pm.run(mod, 'make_ttir.inliner')
-
-        pm = ir.pass_manager(mod.context)
-        pm.enable_debug()
         if COMMON_IR_ENABLED:
             nvidia.passes.commonir.add_to_ttgir(pm, capability >= 80)
         passes.ttir.add_rewrite_tensor_pointer(pm)
