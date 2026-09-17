@@ -47,8 +47,11 @@ def _invalid(src, CASE: tl.constexpr):
         tle.gpu.store_tensor(tl.full([16], 0, tl.int32), buf)
     elif CASE == 6:
         tle.gpu.copy((src + idx).to(tl.pointer_type(tl.int32)), buf, [16])
-    else:
+    elif CASE == 7:
         tle.gpu.alloc([32, 32], tl.float32, scope=tle.gpu.tmem)
+    else:
+        barrier = tle.gpu.alloc_barrier(expect_bytes=64)
+        tle.gpu.copy(src + idx, buf, [16], barrier=barrier)
 
 
 @pytest.mark.parametrize("case, message", [
@@ -60,6 +63,7 @@ def _invalid(src, CASE: tl.constexpr):
     (5, "store_tensor requires the full buffer shape and element type"),
     (6, "copy requires pointers with the buffer element type"),
     (7, "currently supports only shared-memory buffers"),
+    (8, "barrier is only supported for global-to-shared TMA copy"),
 ])
 def test_invalid_buffer_semantics(case, message):
     src = torch.empty(16, dtype=torch.float32, device="cuda")

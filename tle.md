@@ -133,12 +133,17 @@ Supported GPU buffer forms are:
 | `tle.gpu.store_tensor` | `tile.store_tensor` | `ttg.local_store` |
 | buffered-tensor slot/view | `tile.subview` | memdesc subview |
 | `tle.gpu.local_ptr` on a local buffer | temporary `!tile.buf` to `!ttg.memdesc` bridge | existing TLE local-pointer operations |
+| `tle.gpu.wgmma` shared operands, including transpose | buffer-to-memdesc bridge | existing descriptor views and WGMMA lowering |
+
+TMA descriptor copies retain the existing TMA operation after the buffer-to-memdesc
+bridge. Global-to-shared TMA copies also preserve a user-provided completion
+barrier and its expected byte count; barrier validation follows the native path.
 
 The CommonIR build currently rejects the following forms with an explicit
 frontend diagnostic instead of silently bypassing CommonIR:
 
 - aliased `tle.gpu.alloc` buffers;
-- `tle.gpu.copy` with a completion barrier or mask;
+- `tle.gpu.copy` with a mask, or a completion barrier outside global-to-shared TMA copy;
 - remote-buffer `tle.gpu.local_ptr`;
 - normal pointer copies with offsets (offset the pointer operands instead).
 
@@ -146,6 +151,7 @@ After building, the focused checks are:
 
 ```bash
 python -m pytest -q test/CommonIR/test_gpu_semantics.py
+python -m pytest -q test/CommonIR/test_gpu_wgmma_bridge.py python/test/tle/integration/test_tle_tma_copy.py
 python -m pytest -q python/test/tle/unit/test_tle_whitelist.py
 lit -sv --filter='gpu-tileir' build/cmake.*/test
 ```

@@ -785,7 +785,7 @@ def _transpose_wgmma_smem_operand(value: tle.buffered_tensor, name: str,
     _require_rank2_wgmma_operand(value, name)
     order = [1, 0]
     _require_transpose_order(order, len(value.type.shape), name)
-    handle = _semantic.builder.create_memdesc_trans(value.handle, order)
+    handle = _semantic.builder.create_memdesc_trans(tle_semantic.get_memdesc(value, _semantic), order)
     shape = [value.type.shape[i] for i in order]
 
     alloc_shape = value.type.alloc_shape
@@ -952,9 +952,13 @@ def wgmma(
             raise ValueError(f"wgmma acc dtype must be {ret_scalar_ty}, got {acc.dtype}")
         acc_handle = acc.handle
 
+    # A transposed shared operand already holds a native descriptor view.
+    a_handle = tle_semantic.get_memdesc(a,
+                                        _semantic) if isinstance(a, tle.buffered_tensor) and not trans_a else a.handle
+    b_handle = b.handle if trans_b else tle_semantic.get_memdesc(b, _semantic)
     result = builder.create_tle_wgmma(
-        a.handle,
-        b.handle,
+        a_handle,
+        b_handle,
         acc_handle,
         input_precision,
         max_num_imprecise_acc,
@@ -1214,12 +1218,15 @@ def copy(
         else:
             raise ValueError(f"Shape parameter must be tuple or list, but got {type(shape)}")
     if tle_semantic.COMMON_IR_ENABLED:
-        if barrier is not None:
-            raise ValueError("GPU CommonIR copy does not yet support completion barriers")
         if mask is not None:
             raise ValueError("GPU CommonIR copy does not yet support masks")
         descriptor = src if isinstance(
             src, tl.tensor_descriptor) else (dst if isinstance(dst, tl.tensor_descriptor) else None)
+        barrier_slot = None
+        if barrier is not None:
+            if descriptor is None or direction != CopyDirection.GM_TO_LOCAL:
+                raise ValueError("TMA copy barrier is only supported for global-to-shared TMA copy")
+            barrier_slot = _tma_completion_barrier_slot(barrier, _semantic)
         if descriptor is not None:
             if offsets is None:
                 raise ValueError("TMA copy requires offsets")
@@ -1239,6 +1246,7 @@ def copy(
             offsets if descriptor is not None else None,
             direction,
             _semantic,
+            completion_barrier=barrier_slot,
         )
     if is_normcopy:
         if barrier is not None:

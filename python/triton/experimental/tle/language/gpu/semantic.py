@@ -76,7 +76,7 @@ def alloc(shape, dtype, storage, layout, layout_handle, init_value, _semantic):
     return result
 
 
-def copy(src, dst, shape, offsets, direction, _semantic):
+def copy(src, dst, shape, offsets, direction, _semantic, completion_barrier=None):
     descriptor = src if isinstance(src,
                                    tl.tensor_descriptor) else dst if isinstance(dst, tl.tensor_descriptor) else None
 
@@ -97,7 +97,11 @@ def copy(src, dst, shape, offsets, direction, _semantic):
         memdesc = get_memdesc(buffer, _semantic)
         src_handle = src.handle if src is descriptor else memdesc
         dst_handle = dst.handle if dst is descriptor else memdesc
-        _semantic.builder.create_tma_copy(src_handle, dst_handle, indices)
+        if completion_barrier is None:
+            _semantic.builder.create_tma_copy(src_handle, dst_handle, indices)
+        else:
+            _semantic.builder.create_tma_copy(src_handle, dst_handle, indices, completion_barrier.handle,
+                                              completion_barrier.expect_bytes)
         return
 
     if descriptor is not None:
