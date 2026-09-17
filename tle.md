@@ -147,7 +147,7 @@ After building, the focused checks are:
 ```bash
 python -m pytest -q test/CommonIR/test_gpu_semantics.py
 python -m pytest -q python/test/tle/unit/test_tle_whitelist.py
-python -m lit -sv --filter='gpu-tileir' build/cmake.*/test
+lit -sv --filter='gpu-tileir' build/cmake.*/test
 ```
 
 The lit tests check both the intermediate TileIR contract and the absence of
