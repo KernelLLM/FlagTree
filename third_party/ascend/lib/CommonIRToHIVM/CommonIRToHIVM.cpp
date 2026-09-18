@@ -58,6 +58,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "triton-shared/Dialect/TensorView/IR/TensorViewDialect.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 #include "llvm/Support/LogicalResult.h"
@@ -65,6 +66,7 @@
 using namespace mlir;
 namespace tile = mlir::triton::tile;
 namespace hivm = mlir::hivm;
+namespace tv = mlir::triton::tv;
 
 namespace mlir {
 namespace triton {
@@ -186,6 +188,11 @@ static Value getAsMemRef(Value val, PatternRewriter &rewriter) {
     else
       targetTy = MemRefType::get({ShapedType::kDynamic}, pointeeTy,
                                  MemRefLayoutAttrInterface{}, gmSpace);
+  } else if (auto tvPtrTy = dyn_cast<tv::PtrType>(val.getType())) {
+    auto gmSpace = hivm::AddressSpaceAttr::get(val.getType().getContext(),
+                                               hivm::AddressSpace::GM);
+    targetTy = MemRefType::get({ShapedType::kDynamic}, tvPtrTy.getPointeeType(),
+                               MemRefLayoutAttrInterface{}, gmSpace);
   } else
     return val;
   return rewriter
@@ -432,6 +439,256 @@ struct TileStoreTensorToHIVM : OpRewritePattern<tile::StoreTensorOp> {
 // =============================================================================
 // Step 4: tile.load → hivm.load
 // =============================================================================
+struct TensorViewInfo {
+  Value basePtr;
+  Type elementType;
+  SmallVector<Value> sizes;
+  SmallVector<Value> strides;
+  SmallVector<int64_t> tile;
+  bool ok = false;
+};
+
+static TensorViewInfo traceTensorView(Value view, OperandRange indices,
+                                      OpBuilder &builder, Location loc) {
+  TensorViewInfo info;
+
+  auto partitionView = view.getDefiningOp<tv::MakePartitionViewOp>();
+  if (!partitionView)
+    return info;
+
+  auto partitionViewTy = cast<tv::TensorViewType>(partitionView.getResult().getType());
+  auto partitionAttr = dyn_cast_or_null<tv::PartitionViewAttr>(partitionViewTy.getEncoding());
+  if (!partitionAttr)
+    return info;
+
+  info.tile.assign(partitionAttr.getTile().begin(), partitionAttr.getTile().end());
+
+  Value baseView = partitionView.getSource();
+  auto makeTensorView = baseView.getDefiningOp<tv::MakeTensorViewOp>();
+  if (!makeTensorView)
+    return info;
+
+  auto baseTy = cast<tv::TensorViewType>(makeTensorView.getResult().getType());
+  info.basePtr = makeTensorView.getSource();
+  info.elementType = baseTy.getElementType();
+  info.sizes.assign(makeTensorView.getSizes().begin(), makeTensorView.getSizes().end());
+  info.strides.assign(makeTensorView.getStrides().begin(), makeTensorView.getStrides().end());
+
+  if (info.tile.size() != info.strides.size() ||
+      info.tile.size() != indices.size())
+    return info;
+
+  info.ok = true;
+  return info;
+}
+
+static Value computeTensorViewOffset(const TensorViewInfo &info,
+                                     OperandRange indices,
+                                     OpBuilder &builder, Location loc) {
+  Value offset;
+  for (unsigned d = 0; d < info.tile.size(); ++d) {
+    Value idx = indices[d];
+    if (!idx.getType().isIndex())
+      idx = builder.create<arith::IndexCastOp>(loc, builder.getIndexType(), idx);
+
+    Value tileConst = builder.create<arith::ConstantIndexOp>(loc, info.tile[d]);
+    Value tileProd = builder.create<arith::MulIOp>(loc, idx, tileConst);
+    Value offsetD = builder.create<arith::MulIOp>(loc, tileProd, info.strides[d]);
+
+    offset = offset ? builder.create<arith::AddIOp>(loc, offset, offsetD).getResult()
+                    : offsetD;
+  }
+  return offset ? offset : builder.create<arith::ConstantIndexOp>(loc, 0);
+}
+
+struct TileLoadPartitionViewToHIVM : OpRewritePattern<tile::LoadOp> {
+  using OpRewritePattern<tile::LoadOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(tile::LoadOp op,
+                                PatternRewriter &rewriter) const final {
+    if (op.getIndices().empty())
+      return failure();
+
+    Value src = op.getSrc();
+    auto viewTy = dyn_cast<tv::TensorViewType>(src.getType());
+    if (!viewTy || !viewTy.getEncoding())
+      return failure();
+
+    auto partitionAttr = dyn_cast<tv::PartitionViewAttr>(viewTy.getEncoding());
+    if (!partitionAttr)
+      return failure();
+
+    Location loc = op.getLoc();
+    OpBuilder::InsertionGuard guard(rewriter);
+    rewriter.setInsertionPoint(op);
+
+    TensorViewInfo info = traceTensorView(src, op.getIndices(), rewriter, loc);
+    if (!info.ok)
+      return failure();
+
+    MLIRContext *ctx = rewriter.getContext();
+    Value baseMemref = getAsMemRef(info.basePtr, rewriter);
+    baseMemref = castDefaultMemrefToGM(baseMemref, loc, rewriter);
+
+    Value offset = computeTensorViewOffset(info, op.getIndices(), rewriter, loc);
+
+    auto gmSpace = hivm::AddressSpaceAttr::get(ctx, hivm::AddressSpace::GM);
+    auto ubSpace = hivm::AddressSpaceAttr::get(ctx, hivm::AddressSpace::UB);
+
+    auto ubMemrefTy = MemRefType::get(info.tile, info.elementType,
+                                      MemRefLayoutAttrInterface{}, ubSpace);
+    Value ubBuffer = rewriter.create<memref::AllocOp>(loc, ubMemrefTy);
+
+    auto paddingValue = partitionAttr.getPaddingValue();
+    if (paddingValue != tv::PaddingValue::ZERO) {
+      // Compute actual data size per dimension for boundary tiles
+      SmallVector<Value> actualSizes;
+      for (unsigned d = 0; d < info.tile.size(); ++d) {
+        Value idx = op.getIndices()[d];
+        if (!idx.getType().isIndex())
+          idx = rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), idx);
+
+        Value tileConst = rewriter.create<arith::ConstantIndexOp>(loc, info.tile[d]);
+        Value tileStart = rewriter.create<arith::MulIOp>(loc, idx, tileConst);
+        Value remaining = rewriter.create<arith::SubIOp>(loc, info.sizes[d], tileStart);
+        Value actualSize = rewriter.create<arith::MinSIOp>(loc, tileConst, remaining);
+        actualSizes.push_back(actualSize);
+      }
+
+      // src memref with dynamic shape (actual data size)
+      SmallVector<int64_t> dynShape(info.tile.size(), ShapedType::kDynamic);
+      auto layout = StridedLayoutAttr::get(ctx, ShapedType::kDynamic,
+                                           SmallVector<int64_t>(info.tile.size(), ShapedType::kDynamic));
+      auto gmMemrefTy = MemRefType::get(dynShape, info.elementType, layout, gmSpace);
+
+      SmallVector<OpFoldResult> strides, sizes;
+      for (Value s : info.strides)
+        strides.push_back(s);
+      for (Value s : actualSizes)
+        sizes.push_back(s);
+
+      Value gmView = rewriter.create<memref::ReinterpretCastOp>(
+          loc, gmMemrefTy, baseMemref, offset, sizes, strides);
+
+      // right_padding on last dimension
+      Value lastTileConst = rewriter.create<arith::ConstantIndexOp>(loc, info.tile.back());
+      Value rightPadding = rewriter.create<arith::SubIOp>(loc, lastTileConst, actualSizes.back());
+
+      auto padMode = hivm::PadModeAttr::get(ctx, hivm::PadMode::PadValue);
+
+      TypedAttr padValueAttr;
+      if (auto floatTy = dyn_cast<FloatType>(info.elementType)) {
+        APFloat apfVal(floatTy.getFloatSemantics());
+        switch (paddingValue) {
+          case tv::PaddingValue::NAN_VALUE:
+            apfVal = APFloat::getNaN(floatTy.getFloatSemantics());
+            break;
+          case tv::PaddingValue::POS_INF:
+            apfVal = APFloat::getInf(floatTy.getFloatSemantics(), false);
+            break;
+          case tv::PaddingValue::NEG_INF:
+            apfVal = APFloat::getInf(floatTy.getFloatSemantics(), true);
+            break;
+          default:
+            apfVal = APFloat::getZero(floatTy.getFloatSemantics());
+        }
+        padValueAttr = rewriter.getFloatAttr(floatTy, apfVal);
+      } else {
+        padValueAttr = rewriter.getZeroAttr(info.elementType);
+      }
+
+      Value padValueConst = rewriter.create<arith::ConstantOp>(loc, padValueAttr);
+      Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+
+      rewriter.create<hivm::LoadOp>(loc, TypeRange{}, gmView, ubBuffer,
+                                    padMode, padValueConst, zero, rightPadding);
+    } else {
+      // No padding: src and dst have the same static tile shape
+      auto layout = StridedLayoutAttr::get(ctx, ShapedType::kDynamic,
+                                           SmallVector<int64_t>(info.tile.size(), ShapedType::kDynamic));
+      auto gmMemrefTy = MemRefType::get(info.tile, info.elementType, layout, gmSpace);
+
+      SmallVector<OpFoldResult> strides, sizes;
+      for (Value s : info.strides)
+        strides.push_back(s);
+      for (int64_t s : info.tile)
+        sizes.push_back(rewriter.getIndexAttr(s));
+
+      Value gmView = rewriter.create<memref::ReinterpretCastOp>(
+          loc, gmMemrefTy, baseMemref, offset, sizes, strides);
+
+      rewriter.create<hivm::LoadOp>(loc, TypeRange{}, gmView, ubBuffer);
+    }
+
+    auto resultTy = cast<RankedTensorType>(op.getResult().getType());
+    Value result = rewriter.create<bufferization::ToTensorOp>(
+        loc, resultTy, ubBuffer, /*restrict=*/true, /*writable=*/false);
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct TileStorePartitionViewToHIVM : OpRewritePattern<tile::StoreOp> {
+  using OpRewritePattern<tile::StoreOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(tile::StoreOp op,
+                                PatternRewriter &rewriter) const final {
+    if (op.getIndices().empty())
+      return failure();
+
+    Value dst = op.getDst();
+    auto viewTy = dyn_cast<tv::TensorViewType>(dst.getType());
+    if (!viewTy || !viewTy.getEncoding())
+      return failure();
+
+    if (!isa<tv::PartitionViewAttr>(viewTy.getEncoding()))
+      return failure();
+
+    Location loc = op.getLoc();
+    OpBuilder::InsertionGuard guard(rewriter);
+    rewriter.setInsertionPoint(op);
+
+    TensorViewInfo info = traceTensorView(dst, op.getIndices(), rewriter, loc);
+    if (!info.ok)
+      return failure();
+
+    MLIRContext *ctx = rewriter.getContext();
+    Value baseMemref = getAsMemRef(info.basePtr, rewriter);
+    baseMemref = castDefaultMemrefToGM(baseMemref, loc, rewriter);
+
+    Value offset = computeTensorViewOffset(info, op.getIndices(), rewriter, loc);
+
+    auto gmSpace = hivm::AddressSpaceAttr::get(ctx, hivm::AddressSpace::GM);
+    auto layout = StridedLayoutAttr::get(ctx, ShapedType::kDynamic,
+                                         SmallVector<int64_t>(info.tile.size(), ShapedType::kDynamic));
+    auto gmMemrefTy = MemRefType::get(info.tile, info.elementType, layout, gmSpace);
+
+    SmallVector<OpFoldResult> strides, sizes;
+    for (Value s : info.strides)
+      strides.push_back(s);
+    for (int64_t s : info.tile)
+      sizes.push_back(rewriter.getIndexAttr(s));
+
+    Value gmView = rewriter.create<memref::ReinterpretCastOp>(
+        loc, gmMemrefTy, baseMemref, offset, sizes, strides);
+
+    auto srcTensorTy = cast<RankedTensorType>(op.getSrc().getType());
+    auto srcMemrefTy = MemRefType::get(srcTensorTy.getShape(), srcTensorTy.getElementType());
+
+#ifndef __LLVM_MAJOR_VERSION_22_COMPATIBLE__
+    Value srcMemref = rewriter.create<bufferization::ToMemrefOp>(
+        loc, srcMemrefTy, op.getSrc(), /*restrict=*/true, /*writable=*/false);
+#else
+    Value srcMemref = rewriter.create<bufferization::ToBufferOp>(
+        loc, srcMemrefTy, op.getSrc());
+#endif
+
+    rewriter.replaceOpWithNewOp<hivm::StoreOp>(op, TypeRange{}, srcMemref, gmView);
+    return success();
+  }
+};
+
 struct TileLoadToHIVM : OpRewritePattern<tile::LoadOp> {
   using OpRewritePattern<tile::LoadOp>::OpRewritePattern;
 
@@ -440,7 +697,7 @@ struct TileLoadToHIVM : OpRewritePattern<tile::LoadOp> {
     auto resultTy = op.getResult().getType();
     if (auto t = dyn_cast<tile::TensorType>(resultTy)) {
       auto memrefTy = convertTensorToMemRef(t);
-      rewriter.replaceOpWithNewOp<hivm::LoadOp>(op, memrefTy, op.getOperand());
+      rewriter.replaceOpWithNewOp<hivm::LoadOp>(op, memrefTy, op.getSrc());
       return success();
     }
     return failure();
@@ -455,9 +712,11 @@ struct TileStoreToHIVM : OpRewritePattern<tile::StoreOp> {
 
   LogicalResult matchAndRewrite(tile::StoreOp op,
                                 PatternRewriter &rewriter) const final {
-    Value src = getAsMemRef(op.getOperand(0), rewriter);
-    rewriter.replaceOpWithNewOp<hivm::StoreOp>(op, Type(), src,
-                                               op.getOperand(1));
+    if (!op.getIndices().empty())
+      return failure();
+    Value src = getAsMemRef(op.getSrc(), rewriter);
+    rewriter.replaceOpWithNewOp<hivm::StoreOp>(op, TypeRange{}, src,
+                                               op.getDst());
     return success();
   }
 };
@@ -876,6 +1135,8 @@ void CommonIRToHIVMPass::runOnOperation() {
   APPLY_REWRITE_PATTERN(TileToTensorEliminate);
   APPLY_REWRITE_PATTERN(TileCopyToHIVM);
   APPLY_REWRITE_PATTERN(TileStoreTensorToHIVM);
+  APPLY_REWRITE_PATTERN(TileLoadPartitionViewToHIVM);
+  APPLY_REWRITE_PATTERN(TileStorePartitionViewToHIVM);
   APPLY_REWRITE_PATTERN(TileLoadToHIVM);
   APPLY_REWRITE_PATTERN(TileStoreToHIVM);
   APPLY_REWRITE_PATTERN(TileSetFlagToHIVM);

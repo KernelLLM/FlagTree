@@ -15,4 +15,5 @@ add_triton_library(CommonIRToHIVM
   MLIRMemRefDialect
   MLIRTensorDialect
   MLIRBufferizationDialect
+  TensorViewIR
 )
