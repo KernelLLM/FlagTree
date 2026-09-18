@@ -569,6 +569,21 @@ class buffered_tensor(tl.base_value):
         handles.append(self.handle)
 
     @tl.builtin
+    def load(self, writable: bool = True, target_shape=None, _semantic=None) -> tl.tensor:
+        """Load the full buffer into a tensor value, on either compilation path."""
+        from . import semantic as tle_semantic
+        target_shape = tl._unwrap_if_constexpr(target_shape)
+        shape = list(self.shape if target_shape is None else target_shape)
+        writable = tl._unwrap_if_constexpr(writable)
+        return tle_semantic.to_tensor(self, bool(writable), tl.block_type(self.dtype, shape), _semantic)
+
+    @tl.builtin
+    def store(self, value: tl.tensor, _semantic=None) -> None:
+        """Store a tensor value into the full buffer."""
+        from . import semantic as tle_semantic
+        tle_semantic.store_tensor(value, self, _semantic)
+
+    @tl.builtin
     def slot(self, stage, _semantic: TLESemantic | None = None):
         if len(self.shape) < 2:
             raise ValueError("buffered_tensor.slot requires a rank >= 2 buffer")

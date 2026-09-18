@@ -131,11 +131,18 @@ Supported GPU buffer forms are:
 | --- | --- | --- |
 | `tle.gpu.alloc` (SMEM, no alias) | `tile.alloc` / `!tile.buf<..., #shared>` | `ttg.local_alloc` / `!ttg.memdesc` |
 | `tle.gpu.copy` (full-buffer pointer copy) | `tile.copy` | synchronous or asynchronous TTGIR copy operations |
-| `tle.gpu.to_tensor` | `tile.to_tensor` | `ttg.local_load` |
-| `tle.gpu.store_tensor` | `tile.store_tensor` | `ttg.local_store` |
+| `buf.load()` | `tile.to_tensor` | `ttg.local_load` |
+| `buf.store(value)` | `tile.store_tensor` | `ttg.local_store` |
 | buffered-tensor slot/view | `tile.subview` | memdesc subview |
 | `tle.gpu.local_ptr` on a local buffer | temporary `!tile.buf` to `!ttg.memdesc` bridge | existing TLE local-pointer operations |
 | `tle.gpu.wgmma` shared operands, including transpose | buffer-to-memdesc bridge | existing descriptor views and WGMMA lowering |
+
+`buf` is a `tle.gpu.buffered_tensor`. Its `load()` / `store(value)` methods use
+the same spelling in native and CommonIR builds. Native builds lower them through
+`tle.gpu.local_ptr` and `tl.load` / `tl.store`; CommonIR builds preserve the
+full-buffer TileIR operations until conversion. The former experimental
+`tle.gpu.to_tensor(buf)` / `tle.gpu.store_tensor(value, buf)` entry points are
+replaced by these methods, not retained as aliases.
 
 TMA descriptor copies retain the existing TMA operation after the buffer-to-memdesc
 bridge. Global-to-shared TMA copies also preserve a user-provided completion
@@ -155,6 +162,7 @@ After building, the focused checks are:
 python -m pytest -q test/CommonIR/test_gpu_semantics.py
 python -m pytest -q test/CommonIR/test_gpu_wgmma_bridge.py python/test/tle/integration/test_tle_tma_copy.py
 python -m pytest -q python/test/tle/unit/test_tle_whitelist.py
+python -m pytest -q python/test/tle/unit/test_tle_gpu_buffer_access.py
 lit -sv --filter='gpu-tileir' build/cmake.*/test
 ```
 

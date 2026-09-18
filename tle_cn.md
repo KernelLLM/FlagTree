@@ -125,11 +125,17 @@ FLAGTREE_COMMON_IR=1 python -m pip install -e . --no-build-isolation
 | --- | --- | --- |
 | `tle.gpu.alloc`（SMEM，无 alias） | `tile.alloc` / `!tile.buf<..., #shared>` | `ttg.local_alloc` / `!ttg.memdesc` |
 | `tle.gpu.copy`（整个 buffer 的指针拷贝） | `tile.copy` | 同步或异步 TTGIR 拷贝操作 |
-| `tle.gpu.to_tensor` | `tile.to_tensor` | `ttg.local_load` |
-| `tle.gpu.store_tensor` | `tile.store_tensor` | `ttg.local_store` |
+| `buf.load()` | `tile.to_tensor` | `ttg.local_load` |
+| `buf.store(value)` | `tile.store_tensor` | `ttg.local_store` |
 | buffered-tensor 的 slot / view | `tile.subview` | memdesc subview |
 | 本地 buffer 上的 `tle.gpu.local_ptr` | 临时的 `!tile.buf` 到 `!ttg.memdesc` 桥接 | 已有 TLE local-pointer 操作 |
 | `tle.gpu.wgmma` 的共享内存操作数，包括转置 | buffer-to-memdesc 桥接 | 已有 descriptor view 和 WGMMA Lowering |
+
+`buf` 是 `tle.gpu.buffered_tensor`，其 `load()` / `store(value)` 方法在原生与 CommonIR
+构建中使用相同写法。原生构建通过 `tle.gpu.local_ptr` 和 `tl.load` / `tl.store` 实现；
+CommonIR 构建保留整个 buffer 的 TileIR 操作，直到 conversion 阶段。
+原实验接口 `tle.gpu.to_tensor(buf)` / `tle.gpu.store_tensor(value, buf)` 改用这两个方法，
+不保留旧名称别名。
 
 TMA descriptor 拷贝经过 buffer-to-memdesc 桥接后，保留已有 TMA 操作。
 GM 到 shared 的 TMA 拷贝还会保留用户提供的完成屏障和预期字节数，
@@ -148,6 +154,7 @@ CommonIR 构建目前会对下列形式给出明确的前端错误，而不是�
 python -m pytest -q test/CommonIR/test_gpu_semantics.py
 python -m pytest -q test/CommonIR/test_gpu_wgmma_bridge.py python/test/tle/integration/test_tle_tma_copy.py
 python -m pytest -q python/test/tle/unit/test_tle_whitelist.py
+python -m pytest -q python/test/tle/unit/test_tle_gpu_buffer_access.py
 lit -sv --filter='gpu-tileir' build/cmake.*/test
 ```
 
