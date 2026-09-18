@@ -24,7 +24,7 @@
 #include "Python.h"
 #include "Transforms/Passes.h"
 #include "ir.h" // TritonOpBuilder
-#ifdef FLAGTREE_COMMON_IR
+#ifdef __FLAGTREE_COMMON_IR__
 #include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #endif
@@ -70,11 +70,11 @@ namespace tt = triton;
 namespace ttg = triton::gpu;
 namespace ttng = triton::nvidia_gpu;
 namespace tle = triton::tle;
-#ifdef FLAGTREE_COMMON_IR
+#ifdef __FLAGTREE_COMMON_IR__
 namespace tile = triton::tile;
 #endif
 
-#ifdef FLAGTREE_COMMON_IR
+#ifdef __FLAGTREE_COMMON_IR__
 static std::string attrToLowerString(Attribute attr) {
   if (!attr)
     return "";
@@ -364,7 +364,7 @@ void init_triton_tle_ir(py::module &&m) {
              return self.create<tle::LocalPointersOp>(resultTy, memDesc,
                                                       indices);
            })
-#ifdef FLAGTREE_COMMON_IR
+#ifdef __FLAGTREE_COMMON_IR__
       .def("tile_get_string_attr",
            [](TritonOpBuilder &self, const std::string &name) -> Attribute {
              return self.getBuilder().getStringAttr(name);
@@ -1165,7 +1165,7 @@ void init_triton_tle_dsa(py::module m);
 
 void init_triton_tle(py::module &&m) {
   m.def("is_common_ir_enabled", []() {
-#ifdef FLAGTREE_COMMON_IR
+#ifdef __FLAGTREE_COMMON_IR__
     return true;
 #else
     return false;
@@ -1180,7 +1180,7 @@ void init_triton_tle(py::module &&m) {
     // context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
   });
-#ifdef FLAGTREE_COMMON_IR
+#ifdef __FLAGTREE_COMMON_IR__
   m.def("load_tile_dialects", [](mlir::MLIRContext &context) {
     mlir::DialectRegistry registry;
     registry.insert<mlir::triton::tile::CommonIRDialect>();

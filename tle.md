@@ -117,9 +117,11 @@ git clone https://github.com/flagos-ai/flir.git third_party/flir
 FLAGTREE_COMMON_IR=1 python -m pip install -e . --no-build-isolation
 ```
 
-The C++ build defines `FLAGTREE_COMMON_IR`, exposes one capability query to
-Python, and registers the CommonIR dialect and conversion pass only for this
-build. Do not set `FLAGTREE_BACKEND` at the same time. Rebuild FlagTree when
+The environment variable `FLAGTREE_COMMON_IR` sets the internal CMake variable
+`FLAGTREE_COMMON_IR_ENABLED`. When enabled, the C++ build defines
+`__FLAGTREE_COMMON_IR__`, exposes one capability query to Python, and registers
+the CommonIR dialect and conversion pass only for this build. Do not set
+`FLAGTREE_BACKEND` at the same time. Rebuild FlagTree when
 switching between the native and CommonIR paths; this is not a per-kernel
 runtime option.
 

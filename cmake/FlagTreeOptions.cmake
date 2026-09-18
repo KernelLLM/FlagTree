@@ -34,7 +34,7 @@ macro(flagtree_configure_options)
     if(FLAGTREE_BACKEND)
       message(FATAL_ERROR "FLAGTREE_COMMON_IR requires the default NVIDIA backend")
     endif()
-    add_compile_definitions(FLAGTREE_COMMON_IR)
+    add_compile_definitions(__FLAGTREE_COMMON_IR__)
   endif()
 
   set(FLAGCX_ENABLED OFF)
