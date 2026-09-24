@@ -1,0 +1,38 @@
+{
+  "experiment_log": "experiment_log.md#h1",
+  "hypothesis": "H1 reduction-first ownership at fixed 16x32 tile and four warps",
+  "schema_version": 1,
+  "sources": {
+    "l1": {
+      "baseline": "gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l1_kernel-5cb970117bbb46ee.py",
+      "baseline_sha256": "12a38c392e5a8db6eac285e61b3178cc5cc8b37b8dc7b14b19a71939df1549dc",
+      "optimized": "gluon_optimized/megamoe_h1_l1_reduction_first.py",
+      "optimized_sha256": "eac9ec730d624f66ceaba7aa3cf80bd4d7ce43d9932a4a2cd57360d7c2daf81f",
+      "rewrite_counts": {
+        "k_expand_axis_0_to_1": 5,
+        "n_expand_axis_1_to_0": 4,
+        "primary_layout": 28,
+        "slice_0_to_1": 8,
+        "slice_1_to_0": 4,
+        "sum_axis_1_to_0": 1,
+        "x_expand_axis_0_to_1": 1
+      }
+    },
+    "l2": {
+      "baseline": "gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l2_kernel-590137d8f2e23261.py",
+      "baseline_sha256": "64ead53c0a8725cf1894aa160c209fe49fdaa88e14c9d6c8e21d2642def3cb2a",
+      "optimized": "gluon_optimized/megamoe_h1_l2_reduction_first.py",
+      "optimized_sha256": "5d0277c316962b0c956d38c9175f5b9f9f2187d6693669aa50958bd0eb76e1ba",
+      "rewrite_counts": {
+        "act_expand_axis_0_to_1": 1,
+        "expert_acc_output_slice": 2,
+        "k_expand_axis_0_to_1": 5,
+        "n_expand_axis_1_to_0": 4,
+        "primary_layout": 32,
+        "slice_0_to_1": 10,
+        "slice_1_to_0": 4,
+        "sum_axis_1_to_0": 1
+      }
+    }
+  }
+}

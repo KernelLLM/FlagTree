@@ -1,0 +1,292 @@
+{
+  "schema_version": 1,
+  "operator": "add_rms_norm",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/add_rms_norm.py",
+  "sources": [
+    "hard81/group6/add_rms_norm",
+    "hard81/group6/add_rms_norm"
+  ],
+  "multiple_sources": false,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "add_rms_norm/tle_source/add_rms_norm.py",
+      "source": "hard81/group6/add_rms_norm/original/add_rms_norm.py",
+      "sha256": "979a118b11953a18e4a8aaa6810535f4f60ad2480958a7f2fafddd12ae413030"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/__init__.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/__init__.py",
+      "sha256": "0a6fea65f18dfd9319a07f20007bf492000980cfcb408f2288375118c9147698"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/add_rms_norm_kernel_053039aa3c_082617045006.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/add_rms_norm_kernel_053039aa3c_082617045006.py",
+      "sha256": "62b62229da46c62756f38979d7c76003e80041a384600e5bbf5efe17083309cd"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/loop_m1_n8192_bfloat16_t8192_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m1_n8192_bfloat16_t8192_w4.py",
+      "sha256": "2a4f314b424d81cb903c32ec3cfef201c0fba7fc1d60675c613217fdb6347554"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/loop_m1_n8192_float16_t8192_w8.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m1_n8192_float16_t8192_w8.py",
+      "sha256": "a9134b60314a1d50d5ffa5865eae7f7afb28a8b88c604e6a9b25f3438da64eb1"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/loop_m200_n40999_bfloat16_t1024_w16.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m200_n40999_bfloat16_t1024_w16.py",
+      "sha256": "dc35459292e00563d727621ed5e75f509a039ee619851584da71af8a1a0677d3"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/loop_m32_n16384_bfloat16_t8192_w8.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m32_n16384_bfloat16_t8192_w8.py",
+      "sha256": "fd5895c33ef174bf831acad7eb53927f52c82cd1a970fdb2ff8620a3f8f1327e"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/loop_m32_n16384_float16_t4096_w8.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m32_n16384_float16_t4096_w8.py",
+      "sha256": "f13badd083057cb0afd7ce6e66a9a4a7c7b177a270d7252e29662c7b31e7f104"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/loop_m32_n40999_float32_t1024_w16.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m32_n40999_float32_t1024_w16.py",
+      "sha256": "06b817edbdcfae700eb2e9b1838eba128d90db8b55fab0ce1e31cce559a1a2fa"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m128_n128_bfloat16_t128_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m128_n128_bfloat16_t128_w4.py",
+      "sha256": "0e5c7a6f97d009f35fd0bcdf5d6ca3fa0993dc7e3ddb747d262051fe9d9b3bb5"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m128_n128_float16_t128_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m128_n128_float16_t128_w4.py",
+      "sha256": "dfe2923d33af746baaf07a713819f29078bedf51eadb5af7eafddf8ee0aff236"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m128_n128_float32_t128_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m128_n128_float32_t128_w4.py",
+      "sha256": "3c0c40e339cfd8cc1785c370789fe4ac356a45174d83c39788aed45e490b6af4"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m16_n4096_float32_t4096_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m16_n4096_float32_t4096_w4.py",
+      "sha256": "0a356931bbab7ec935049e2201080264940a31b3285cb2b2029a5acb871ae56c"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m1_n1024_bfloat16_t1024_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m1_n1024_bfloat16_t1024_w4.py",
+      "sha256": "f11823958078fcd3b338c3d7ab0da08afc1627aec99facd354ca59ce75f9733a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m1_n1024_float16_t1024_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m1_n1024_float16_t1024_w4.py",
+      "sha256": "100519bbb134401e347a0637c6bcffe595853506cbd517f70f4317875543b0e2"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m1_n128_bfloat16_t128_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m1_n128_bfloat16_t128_w4.py",
+      "sha256": "cad3067f48e0a1eb714712b6e4b4b3901b1521169414e50f06f39e943f916341"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m256_n1024_bfloat16_t1024_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m256_n1024_bfloat16_t1024_w4.py",
+      "sha256": "eb7233e3c2f928fe5a1c8c3b1bc55d6bba779ce248701721b6129fc03bd92818"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m256_n1024_float16_t1024_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m256_n1024_float16_t1024_w4.py",
+      "sha256": "bd9ed84bc5c7339d5d28f6e7af4c58b33faa20252a9650a374f84e1116202a6d"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m2_n32_float16_t32_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m2_n32_float16_t32_w4.py",
+      "sha256": "27ed29dfb65e1158f9767aa624fc3433daed56c25419a83a4734010bf43583ca"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m32_n2048_bfloat16_t2048_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m32_n2048_bfloat16_t2048_w4.py",
+      "sha256": "0b06289c70a8d5f698dd0cbe4b23ed68933f2d171af333ad2a12a4fdc58ba842"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m32_n2048_float16_t2048_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m32_n2048_float16_t2048_w4.py",
+      "sha256": "23659a1a39ce7fe3f6f237c4d9109b9b1f96e81a556665f2276922e179260d0b"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m32_n2048_float32_t2048_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m32_n2048_float32_t2048_w4.py",
+      "sha256": "b828ea0df9a34267cb1793748cc50c87e4bf015a478afef8076b4e6ed20eaab2"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m512_n512_bfloat16_t512_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m512_n512_bfloat16_t512_w4.py",
+      "sha256": "f6152aadd950e434299618bc5fd654b5585d7f33e36d55992414da8eceac7669"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m64_n1024_bfloat16_t1024_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n1024_bfloat16_t1024_w4.py",
+      "sha256": "1057a916d713da32b28029f7a99772c3c4eb67c0baa460b7a72a4ff9895f2767"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m64_n1024_float16_t1024_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n1024_float16_t1024_w4.py",
+      "sha256": "4bbc233e591482f3a367174b6fb59ea0c4be0f789c80c84e370caa12b6ee149c"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m64_n1024_float32_t1024_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n1024_float32_t1024_w4.py",
+      "sha256": "c10944bdd9c39f55d1971c06e5b5d9a43a76901eb2407faf9cb694afdd155e47"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m64_n4096_bfloat16_t4096_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n4096_bfloat16_t4096_w4.py",
+      "sha256": "2bf36515b3a00de5b135665941fa19a8d833f6be0f4d95bdbae3be772fe39a84"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m64_n4096_float16_t4096_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n4096_float16_t4096_w4.py",
+      "sha256": "3fcc737f4fff86231d1f2308954ba4c69f2200f766c57ecf24c99ceee4945f9e"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m64_n512_bfloat16_t512_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n512_bfloat16_t512_w4.py",
+      "sha256": "da43a0276bf302352a8adf9de48b37ae57fd2b4e8dc0874d6fb29d6176509dff"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m64_n512_float16_t512_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n512_float16_t512_w4.py",
+      "sha256": "7500e9844611d36128533f29db63153d074e114f4dc58e3f2cfe04037bee054f"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "add_rms_norm/gluon_baseline/small_m64_n512_float32_t512_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n512_float32_t512_w4.py",
+      "sha256": "15a6c4feaaef2d51c2057809ee8e19f4730128d0f7a0fe8269caf5fab52f58ba"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t1024_w16_s1.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t1024_w16_s1.py",
+      "sha256": "7b22f9c997f6d82b7b1f0303cf56094848ee0ac245c7dbbc02a56f9278350f72"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t1024_w8_s1.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t1024_w8_s1.py",
+      "sha256": "92a0aa0be4ed1264005830ed6343efd6951353ef426834c229e5f6bd7c5c553d"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t8192_w8_s8.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t8192_w8_s8.py",
+      "sha256": "2c8b97a527786f70f0cea23b29971b3bba86e8abe2c45bd6819d9847a62bb578"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s1.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s1.py",
+      "sha256": "6dc92ebb07cc558f35518c5d8da69921b63a2dcac6e022d5767d4f7711e8c1b9"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s4.py",
+      "sha256": "b1d504f77e6df39319d1d79edf4217adbc6ab2237ba3609dc14ad5483c18bfc8"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s8.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s8.py",
+      "sha256": "516617b973d51e6facc037ba689fa8c5cb0ad1ccd2506b7727ad5ad5b0c75af5"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w4_s2.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w4_s2.py",
+      "sha256": "12a0c693f981277cda489623101cf31d9d78fa77c50bbffaea9c2546f124f3c4"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w4_s4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w4_s4.py",
+      "sha256": "6b3988bd57b4f66497c1af9678da111daeb00de8fc7391d8f94f14584857d594"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w8_s2.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w8_s2.py",
+      "sha256": "69d6a2e68113f7825f74d76d08937673397f98cd31d3a26268d18654ba7e7ef7"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w8_s4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w8_s4.py",
+      "sha256": "c856fdaf051bc0d1f909ccbfae3a89b20e4e86e0ca4e2c7fd96c97538728626f"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/loop_m32_n16384_bfloat16_t8192_w8.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/loop_m32_n16384_bfloat16_t8192_w8.py",
+      "sha256": "fd5895c33ef174bf831acad7eb53927f52c82cd1a970fdb2ff8620a3f8f1327e"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/loop_m32_n16384_float16_t4096_w8.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/loop_m32_n16384_float16_t4096_w8.py",
+      "sha256": "f13badd083057cb0afd7ce6e66a9a4a7c7b177a270d7252e29662c7b31e7f104"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/selection.json",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/selection.json",
+      "sha256": "19be3b3f3be4071f26b819706bfc723e1c9367143bb7e96cc36e028e11edad93"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/small_m64_n4096_bfloat16_t4096_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/small_m64_n4096_bfloat16_t4096_w4.py",
+      "sha256": "2bf36515b3a00de5b135665941fa19a8d833f6be0f4d95bdbae3be772fe39a84"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "add_rms_norm/gluon_optimized/final/small_m64_n512_bfloat16_t512_w4.py",
+      "source": "hard81/group6/add_rms_norm/gluon_optimized/final/small_m64_n512_bfloat16_t512_w4.py",
+      "sha256": "da43a0276bf302352a8adf9de48b37ae57fd2b4e8dc0874d6fb29d6176509dff"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

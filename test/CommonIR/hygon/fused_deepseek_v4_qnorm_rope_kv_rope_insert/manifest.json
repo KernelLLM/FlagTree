@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "operator": "fused_deepseek_v4_qnorm_rope_kv_rope_insert",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/fused_deepseek_v4_qnorm_rope_kv_rope_insert.py",
+  "sources": [
+    "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_insert",
+    "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_insert",
+    "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_insert"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "fused_deepseek_v4_qnorm_rope_kv_rope_insert/tle_source/fused_deepseek_v4_qnorm_rope_kv_rope_insert.py",
+      "source": "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_insert/original/fused_deepseek_v4_qnorm_rope_kv_rope_insert.py",
+      "sha256": "0dee7c547fbc9f715b6d8e36740bae18ba87b186bfcf2b89f5ac10c0e82afb28"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_baseline/kernel.py",
+      "source": "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_baseline/kernel.py",
+      "sha256": "6d8329da379b1db3b3a09a4c5b1fda5385a1634309471e57a8132025445b8e3b"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_optimized/full13/final/kernel.py",
+      "source": "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_optimized/final/kernel.py",
+      "sha256": "c8aef9b9f7965cddd10d4060dd1b895b102285c74df62c17c6114487c7fe127e"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_optimized/full13/final/launch.py",
+      "source": "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_optimized/final/launch.py",
+      "sha256": "da14d0bb74e8a83c5f15536e07edd15a0f4055a5a084c80a6a55dcbfa11e05bf"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

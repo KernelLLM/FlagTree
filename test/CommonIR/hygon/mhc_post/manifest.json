@@ -1,0 +1,347 @@
+{
+  "schema_version": 1,
+  "operator": "mhc_post",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/mhc_post.py",
+  "sources": [
+    "hard81/group7/mhc_post",
+    "hard81/group7/mhc_post",
+    "hard81/group8/mhc_post"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "mhc_post/tle_source/mhc_post.py",
+      "source": "hard81/group7/mhc_post/original/mhc_post.py",
+      "sha256": "53347736261244be811831fc1fa8ae6c9098b54f9747b3603ce7ad32f427eec9"
+    },
+    {
+      "section": "tle_source",
+      "path": "mhc_post/tle_source/generated/mhc_post.py",
+      "source": "hard81/group7/mhc_post/original/generated/mhc_post.py",
+      "sha256": "53347736261244be811831fc1fa8ae6c9098b54f9747b3603ce7ad32f427eec9"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/04e9b251c93c13fd.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/04e9b251c93c13fd.json",
+      "sha256": "97ae15d1349edf0c0571691fdb9087d2ddcdbdfc41c34837cb05f0ccc3f1ab09"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/04e9b251c93c13fd.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/04e9b251c93c13fd.py",
+      "sha256": "c277ef7fedb47f5daa11f767917467685632d726e6c7b2d20d9b5214aeb66a0e"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/080d32ecef755bbb.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/080d32ecef755bbb.json",
+      "sha256": "3bb0830018004a8783ca68571ca6978d4ef3408ad56f5655fa9dabf0c6ed7beb"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/080d32ecef755bbb.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/080d32ecef755bbb.py",
+      "sha256": "93debe8631470555c1ae14cbaaaf2e31b24d5954954e9de5b11b425de5598ceb"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/0ea5d147f4e26e3b.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/0ea5d147f4e26e3b.json",
+      "sha256": "4aa1c45cf7a9630503cbef29d7c6392a8df6fff671b9fff4e03b078e8bd967a1"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/0ea5d147f4e26e3b.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/0ea5d147f4e26e3b.py",
+      "sha256": "e1cf1024333d4b0d85e4164ec185226c8effeae377ad7d4480626416787a5dd5"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/13289487e7915e95.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/13289487e7915e95.json",
+      "sha256": "8e0d753527e15552db5235202a780e200a136e650a5576395c2e0e81bb6f8fd3"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/13289487e7915e95.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/13289487e7915e95.py",
+      "sha256": "5e49ae7b92ef1d384a0a29d32d539d92083d911fee2b2ab828ca6ce8cea1316d"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/19bc4070d3502f52.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/19bc4070d3502f52.json",
+      "sha256": "204e59bc1169ec34802fda7afd5c09801f0109fd9b55aa3c4c0cd1d0b96e4479"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/19bc4070d3502f52.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/19bc4070d3502f52.py",
+      "sha256": "3d9581fef54176256037abf4afa39b7bb59e9369cd0a200351624b282c141321"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/1fbde74081bc0a3d.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/1fbde74081bc0a3d.json",
+      "sha256": "e421923365c1215031e51ca0e09d360f57bc6ad0b1a1fe3f0d10234deb47fc34"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/1fbde74081bc0a3d.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/1fbde74081bc0a3d.py",
+      "sha256": "6ac008fdb9566a01334a42f1fc2e2a70e5f94c04a52160d19c9f61fc1f11e3e7"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/330fc41009bc8c56.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/330fc41009bc8c56.json",
+      "sha256": "c64f0ae63af812f22b7723d002f80f4cd97d36a8beae38997528a87f0b4b6bc9"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/330fc41009bc8c56.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/330fc41009bc8c56.py",
+      "sha256": "716df92ab8c805fb72dd5ef6a7e04a962b60df209c2c9733611b739c7eb281e7"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/5c003919aa8594ee.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/5c003919aa8594ee.json",
+      "sha256": "6c1a5de2bb446f9cdb32d28f1646c540821fea7a808ead78cd9ff4983c253dc8"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/5c003919aa8594ee.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/5c003919aa8594ee.py",
+      "sha256": "4d6cbfd1c3cc524dcf311f5ae5d42c1c3e2e644def832659d404205552f62e26"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/5dd8ed755e9a8317.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/5dd8ed755e9a8317.json",
+      "sha256": "62cb19fd164c92ad22d8121d6d49726ecd425ab6a9e86f49073d7db662591879"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/5dd8ed755e9a8317.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/5dd8ed755e9a8317.py",
+      "sha256": "e70c41cf4f61d3399b1ef2c7903c87df5be6039bf8897ee79e3d98e31096e3c6"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/75004f938a36a80a.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/75004f938a36a80a.json",
+      "sha256": "ae7ec5357770d0773f09e36a13880f4bd76bac737882349c81245f01bfe56c3f"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/75004f938a36a80a.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/75004f938a36a80a.py",
+      "sha256": "cb7e1c89e8c0eaec5785992ae658a3ece95fb9a631777503c1a9f223b6378d4a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/75979b57c0183a18.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/75979b57c0183a18.json",
+      "sha256": "a3b850d6e8ff97c335b64847b5caa060d0dbb5c6be8be4e5c06b10ba7da5fe85"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/75979b57c0183a18.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/75979b57c0183a18.py",
+      "sha256": "16f4205f0f67ef98620fc16d5d0c72e303a9c18a96ef0b150dd37d2782c7461a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/7698ca5804ac856c.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/7698ca5804ac856c.json",
+      "sha256": "8e02632ec6f743a03748e2ccb998082002557a6df1ba9e9cd56f8169294db8f4"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/7698ca5804ac856c.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/7698ca5804ac856c.py",
+      "sha256": "3b7edebee26f6308a119e87c34edd59e26d7ad23613092a69abe96289cc8e7f2"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/84cad2e25356defd.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/84cad2e25356defd.json",
+      "sha256": "4cc2ec9e69101e42699cc445efd1c1de8712cf3abff51cd2a83c8a7290e72c3c"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/84cad2e25356defd.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/84cad2e25356defd.py",
+      "sha256": "598a0cd072383d93ffa89b8e699898db86d443cb8ebd57eeda786249a647206d"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/927675d1787863bf.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/927675d1787863bf.json",
+      "sha256": "3af086a7316e960b2f86bc9a31d0db4c8f56cf59c169793467bed281e90980b4"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/927675d1787863bf.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/927675d1787863bf.py",
+      "sha256": "bacec88b9660627bba7fae7c7984628dbd42d8125bf877375b6d0d602674d451"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/a33403f8de9b1592.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/a33403f8de9b1592.json",
+      "sha256": "29b2af4615c961826a257377f629ab3d9e82c9d96ffe74dbc0c3e8bbc54e4ceb"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/a33403f8de9b1592.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/a33403f8de9b1592.py",
+      "sha256": "fc445d2a05efc7c20b5fab78c027c815ca3030844e215e3516a4cd02d7d0c1ea"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/a97dc70eaf2ce0aa.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/a97dc70eaf2ce0aa.json",
+      "sha256": "96bb0c3328fcac4dcd42f137ba7cada867efcce4b343af84609615b42be45bea"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/a97dc70eaf2ce0aa.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/a97dc70eaf2ce0aa.py",
+      "sha256": "21696abfb91eb7b48f60f7b4f7fd616be299b3dd6ba43cb8f56fd86c29f76a00"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/acd27e3ce3a2c63e.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/acd27e3ce3a2c63e.json",
+      "sha256": "7494df00965a2422c1182b18942479bfb1f0f9e4e9a31ee0ceab13f86e9af13d"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/acd27e3ce3a2c63e.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/acd27e3ce3a2c63e.py",
+      "sha256": "ecf75cc1096c911da22582be5872703006f597cdacce579112187fcbf12e913b"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/b9552f3e19dc066d.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/b9552f3e19dc066d.json",
+      "sha256": "2fefc8d89da67c5e152e1a7faa0b028e08d5190996afe553b1f7f0ca83bbe14c"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/b9552f3e19dc066d.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/b9552f3e19dc066d.py",
+      "sha256": "7b67bb8ccba61886feb8e34d5b2e28a587f9fd8fe3bb3471aab600c9fc8cae3b"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/bd05d4ab6a119636.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/bd05d4ab6a119636.json",
+      "sha256": "931d41f4fd4d776be6f80b4df4a078d86103746bf8436137be89a0fc3d60f805"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/bd05d4ab6a119636.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/bd05d4ab6a119636.py",
+      "sha256": "81ec1db90e74ed83d3cb92f2041c7bc2b83b4bf87a2f40dca377326cf610dd54"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/cc0bf038cde5fd66.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/cc0bf038cde5fd66.json",
+      "sha256": "30ff1fd18504cb22fb4570d567811f868a61b26acb158b3889ef486e221b9b03"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/cc0bf038cde5fd66.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/cc0bf038cde5fd66.py",
+      "sha256": "113b1acdded1a4f4638f649a106267dfc376c0e37aec7836fbbbc181a1ce6649"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/cd3f0771e7376ee6.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/cd3f0771e7376ee6.json",
+      "sha256": "8843efb4105cf41bf3b5adba873a72794bfa35f2966a3d81825bc2277a6744c4"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/cd3f0771e7376ee6.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/cd3f0771e7376ee6.py",
+      "sha256": "d676d56e181db862c8355eac56e34b40988ad4bf4bd9760d5a5ad362aa038200"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/e25762db0316e221.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/e25762db0316e221.json",
+      "sha256": "560f462b7797684fcef93517a397aa06e867f3c67b1bd069c473564ae45793a8"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/e25762db0316e221.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/e25762db0316e221.py",
+      "sha256": "36e771161b8b3dc6da12087fe386b273f5ba8ece49f0896be1f7746009550acc"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/e43b68644d29a96f.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/e43b68644d29a96f.json",
+      "sha256": "e5ae15e89f79a4cb6a58de2815e5cf85a02520322d13a81a733eda77c459ebcb"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/e43b68644d29a96f.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/e43b68644d29a96f.py",
+      "sha256": "95b9c5ca29b0978a766fd504d9550388b988e8c25c81b19d29009def3269f570"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/e82c3d82899754b2.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/e82c3d82899754b2.json",
+      "sha256": "7bd219a198021a321252c810e6cf87808567f3a3d809da7750b92806bf0d16ad"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/e82c3d82899754b2.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/e82c3d82899754b2.py",
+      "sha256": "356eb95a6490dcc60de6f4e78a466d8c944a90402527bcf2dc017a409adb7770"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/ec44db9a5a8452ba.json",
+      "source": "hard81/group7/mhc_post/gluon_baseline/ec44db9a5a8452ba.json",
+      "sha256": "9d16b1bff30603edecda9bdb99dd06d7b67cc453034340e5f7e81f96630e461b"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/ec44db9a5a8452ba.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/ec44db9a5a8452ba.py",
+      "sha256": "e5fd1942e637356ec707715a0ab81864b2ecadcda11c4406a8518b830853c450"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_post/gluon_baseline/run.py",
+      "source": "hard81/group7/mhc_post/gluon_baseline/run.py",
+      "sha256": "f3c30db06d51a6da8ff6a619f38e52907e0abb787734acecffa7bbcb1d5558e0"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mhc_post/gluon_optimized/group8/080d32ecef755bbb-4e8c4d8358ac.py",
+      "source": "hard81/group8/mhc_post/gluon_optimized/080d32ecef755bbb-4e8c4d8358ac.py",
+      "sha256": "d490589d78315a1b09de83831dfab53751da1a751e92362893976701fe547baa"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mhc_post/gluon_optimized/group8/080d32ecef755bbb-f80ac411a63b.py",
+      "source": "hard81/group8/mhc_post/gluon_optimized/080d32ecef755bbb-f80ac411a63b.py",
+      "sha256": "5514f3bd828d476e929201646fd4a22342fa98c104f716bb0c0590fa6cbf37c7"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Two final winning HC=2 layout representatives retained: BlockedLayout([4],[64],[8],[0]) and BlockedLayout([8],[64],[8],[0]); all mutation candidates removed."
+}

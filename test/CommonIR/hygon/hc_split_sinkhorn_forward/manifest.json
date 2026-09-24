@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "operator": "hc_split_sinkhorn_forward",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/hc_split_sinkhorn_forward.py",
+  "sources": [
+    "hard81/group8/hc_split_sinkhorn_forward",
+    "hard81/group8/hc_split_sinkhorn_forward",
+    "hard81/full18/hc_split_sinkhorn_forward"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "gluon_baseline",
+      "path": "hc_split_sinkhorn_forward/gluon_baseline/generic_t128_hc2_b1_w1.py",
+      "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/generic_t128_hc2_b1_w1.py",
+      "sha256": "e076a0197866cf9b3ee04388cc1ceedd3d461a37aa54e920984db9eba4e2e431"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "hc_split_sinkhorn_forward/gluon_baseline/generic_t16384_hc2_b1_w1.py",
+      "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/generic_t16384_hc2_b1_w1.py",
+      "sha256": "f1a1df7c933f9cdfa8781da1a580c8f78b97e491d4704d969f29b8fdf1c80a93"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "hc_split_sinkhorn_forward/gluon_baseline/generic_t2048_hc2_b1_w1.py",
+      "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/generic_t2048_hc2_b1_w1.py",
+      "sha256": "99d90ff2b5e168e670b05cdb57602cc0cf5d6398b9bdeb3af493e8b0a079c00b"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "hc_split_sinkhorn_forward/gluon_baseline/generic_t65536_hc2_b1_w1.py",
+      "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/generic_t65536_hc2_b1_w1.py",
+      "sha256": "2ccf824b4f0ce00e3c26ef52ad9bfc0b36c1889fda90e516376b5ae7c826d4eb"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t128_hc4_b16_w1.py",
+      "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t128_hc4_b16_w1.py",
+      "sha256": "d3edb782a40a9624283cbf4352165b592448aebde7b61a8b230521ee71290f50"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t16384_hc4_b128_w4.py",
+      "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t16384_hc4_b128_w4.py",
+      "sha256": "62157228a97ce56f7ed6a23dd2b8e91e99d4e5dd309c62715da6d64b42da1644"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t2048_hc4_b32_w1.py",
+      "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t2048_hc4_b32_w1.py",
+      "sha256": "43229d1f87fcee2f337f3354b00de4f5eeeaa3a90c537740d2d285103fa597ea"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t65536_hc4_b256_w8.py",
+      "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t65536_hc4_b256_w8.py",
+      "sha256": "a3c75c22f8e2e69d5911120baa315188e62c0ceaccbaf868e784782379c3115b"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case00_hcmult_4_t128_hc4_b16_w1_b16_w1.py",
+      "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case00_hcmult_4_t128_hc4_b16_w1_b16_w1.py",
+      "sha256": "d3edb782a40a9624283cbf4352165b592448aebde7b61a8b230521ee71290f50"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case01_hcmult_4_t2048_hc4_b32_w1_b32_w1.py",
+      "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case01_hcmult_4_t2048_hc4_b32_w1_b32_w1.py",
+      "sha256": "43229d1f87fcee2f337f3354b00de4f5eeeaa3a90c537740d2d285103fa597ea"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case02_case02_b64_sp1_w1_b64_w1.py",
+      "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case02_case02_b64_sp1_w1_b64_w1.py",
+      "sha256": "93f6baa328ac2bec6ac5940600cb435274e8f4d220af28e9efc51cac906d1398"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case03_case03_b64_sp1_w1_b64_w1.py",
+      "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case03_case03_b64_sp1_w1_b64_w1.py",
+      "sha256": "88ed13c17aeb100d3fe8d9fe856151a544b1e3c4e74572865334900851cfbd2c"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case04_generic_t128_hc2_b1_w1_baseline.py",
+      "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case04_generic_t128_hc2_b1_w1_baseline.py",
+      "sha256": "e076a0197866cf9b3ee04388cc1ceedd3d461a37aa54e920984db9eba4e2e431"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case05_generic_t2048_hc2_b1_w1_baseline.py",
+      "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case05_generic_t2048_hc2_b1_w1_baseline.py",
+      "sha256": "99d90ff2b5e168e670b05cdb57602cc0cf5d6398b9bdeb3af493e8b0a079c00b"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case06_generic_t16384_hc2_b1_w1_baseline.py",
+      "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case06_generic_t16384_hc2_b1_w1_baseline.py",
+      "sha256": "f1a1df7c933f9cdfa8781da1a580c8f78b97e491d4704d969f29b8fdf1c80a93"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case07_generic_t65536_hc2_b1_w1_baseline.py",
+      "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case07_generic_t65536_hc2_b1_w1_baseline.py",
+      "sha256": "2ccf824b4f0ce00e3c26ef52ad9bfc0b36c1889fda90e516376b5ae7c826d4eb"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

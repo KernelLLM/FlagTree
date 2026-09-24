@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "operator": "mhc_pre",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/mhc_pre.py",
+  "sources": [
+    "hard81/group7/mhc_pre",
+    "hard81/group7/mhc_pre",
+    "hard81/group8/mhc_pre"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "mhc_pre/tle_source/mhc_pre.py",
+      "source": "hard81/group7/mhc_pre/original/mhc_pre.py",
+      "sha256": "e1a32f89c8696c19b9978fdfdb21ef8985b87c75692a200efb9eb69bdfdb3aca"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/__init__.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/__init__.py",
+      "sha256": "e82654f9f34d2a2088cf4b56d3f68342ca57bfd149dd17650a042cbc049c8914"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_3e23ace3ae4e.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_3e23ace3ae4e.py",
+      "sha256": "4f89c2bdbe359a2c4bcdd72ecb60a6c10300b58426ba0f468cd3de9d84de8c33"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_6043b9edc5ab.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_6043b9edc5ab.py",
+      "sha256": "05140bce6feb62769dfade550c2e1e84c2023881b7a10c60b799ea39a7f2c975"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_6cc900d4b492.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_6cc900d4b492.py",
+      "sha256": "10e3e6ab25b5962b420c59fefef90fcfbe41aa643df1893ce9f3bf360ed66f86"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_8cca9c3e4a16.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_8cca9c3e4a16.py",
+      "sha256": "2d77d0010a5f24fee58c31a0f8938e6de8d62717e43cf17607d3d9d9742539ae"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_d485f56398e2.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_d485f56398e2.py",
+      "sha256": "88d09f8933d7eb1c05051cad4e4c7105bcf7d3a59645df807670f3f3d334d29e"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_daa7fe6a29ee.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_daa7fe6a29ee.py",
+      "sha256": "4d04c4c4b09c4e8b89c9eeb4da01991f88508ea52dd686941c00a199b908cf8a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/official/h1280_b1024_w4_s1_weuNone.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/official/h1280_b1024_w4_s1_weuNone.py",
+      "sha256": "711a8bde53f009ab52f6a903fc53c145fc3ab351c06543c0d82044eedb87b681"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/official/h2560_b1024_w4_s1_weuNone.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/official/h2560_b1024_w4_s1_weuNone.py",
+      "sha256": "8beb789fd1aaac46d939a73e410fea876157c8086ba3356151879fd369ea1188"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_pre/gluon_baseline/official/h4096_b1024_w4_s1_weuNone.py",
+      "source": "hard81/group7/mhc_pre/gluon_baseline/official/h4096_b1024_w4_s1_weuNone.py",
+      "sha256": "9590d26f4ac3d3606e45c293111f5d9cbdfd19b04e349b9bfa6b9e3ed7757874"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mhc_pre/gluon_optimized/group8/final/b1024_w1_s16.py",
+      "source": "hard81/group8/mhc_pre/gluon_optimized/final/b1024_w1_s16.py",
+      "sha256": "74478870a25df968f4b8ae18fea0f7235502ce45dfa051d39e4086133049b501"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mhc_pre/gluon_optimized/group8/final/b1024_w2_s8.py",
+      "source": "hard81/group8/mhc_pre/gluon_optimized/final/b1024_w2_s8.py",
+      "sha256": "4eaafb06038ef0ab8645eca98ee6ae69496e8687138c5e5e2437865358522d5b"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mhc_pre/gluon_optimized/group8/final/b512_w1_s8.py",
+      "source": "hard81/group8/mhc_pre/gluon_optimized/final/b512_w1_s8.py",
+      "sha256": "0843e070eac2fd29319da01533bd5d2eee4ee0f861ed02111cf59d97867c12bd"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mhc_pre/gluon_optimized/group8/final/selection.json",
+      "source": "hard81/group8/mhc_pre/gluon_optimized/final/selection.json",
+      "sha256": "431ecce27784b2b52345c595be61e1380d3f9601c77f464bfb55a79ee8a31946"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

@@ -1,0 +1,146 @@
+{
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 173,
+      "end_line": 173,
+      "call": "tl.static_range",
+      "generated_line": 28,
+      "generated_column": 13
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 180,
+      "end_line": 180,
+      "call": "tl.store",
+      "generated_line": 32,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 156,
+      "end_line": 156,
+      "call": "tl.program_id",
+      "generated_line": 15,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 157,
+      "end_line": 157,
+      "call": "tl.program_id",
+      "generated_line": 16,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 158,
+      "end_line": 158,
+      "call": "tl.program_id",
+      "generated_line": 17,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 169,
+      "end_line": 169,
+      "call": "tl.load(d_ptr + d_base + h_off, mask=h_mask, other=0.0).to",
+      "generated_line": 25,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 170,
+      "end_line": 170,
+      "call": "tl.load(c_ptr + c_base + pid_i).to",
+      "generated_line": 26,
+      "generated_column": 23
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 180,
+      "end_line": 180,
+      "call": "acc.to",
+      "generated_line": 32,
+      "generated_column": 89
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 160,
+      "end_line": 160,
+      "call": "tl.arange",
+      "generated_line": 18,
+      "generated_column": 73
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 174,
+      "end_line": 174,
+      "call": "tl.load(a_ptr + a_base + j * HC + pid_i).to",
+      "generated_line": 29,
+      "generated_column": 28
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 175,
+      "end_line": 177,
+      "call": "tl.load(b_ptr + b_base + j * H + h_off, mask=h_mask, other=0.0).to",
+      "generated_line": 30,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 169,
+      "end_line": 169,
+      "call": "tl.load",
+      "generated_line": 25,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 170,
+      "end_line": 170,
+      "call": "tl.load",
+      "generated_line": 26,
+      "generated_column": 23
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 174,
+      "end_line": 174,
+      "call": "tl.load",
+      "generated_line": 29,
+      "generated_column": 28
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 175,
+      "end_line": 175,
+      "call": "tl.load",
+      "generated_line": 30,
+      "generated_column": 27
+    }
+  ],
+  "mapped_sites": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 169,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([2], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 175,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([2], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group1_20260908/src/FlagGems-vllm/src/flaggems_vllm/ops/mhc/mhc_post.py",
+      "line": 180,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([2], [64], [4], [0])"
+    }
+  ],
+  "helper_hash": "7bf7b6cc50d12fcfd61168b84e2d08aafd0a34b9a2fd89d8f0cf16f63f06676b",
+  "reference_hash": "75979b57c0183a18cca8ce4c97f47c1c4a80427b245719ead52b112f74151921"
+}

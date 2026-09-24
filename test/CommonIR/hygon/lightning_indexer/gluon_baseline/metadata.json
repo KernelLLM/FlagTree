@@ -1,0 +1,1028 @@
+{
+  "run_id": "812406",
+  "helper_hash": "94eb0d787f57425d81cc224fc836910da6e7e6b0121ae3b6a22658badb459d9e",
+  "optimizer": "1",
+  "pipeline": "1",
+  "buffer_ops": "0",
+  "original_source_sha256": "2c6886bc69659660a84341bae948460b7b2ed90f47a6fe683f4a192a4f7e8bf6",
+  "original_module": "flaggems_vllm.ops.DSA.indexer_k_tiled",
+  "original_name": "triton_lighting_indexer_k_tiled",
+  "original_file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+  "reference_hash": "f5faccdad68ee75b4ab03e172707813d584a2f4e79d483163857e85cc35a4ea8",
+  "reference_metadata": {
+    "allow_flush_denorm": false,
+    "allowed_dot_input_precisions": [
+      "ieee"
+    ],
+    "arch": "gfx936",
+    "async_copy_use_single_buffer": true,
+    "backend_name": "hip",
+    "cluster_dims": [
+      1,
+      1,
+      1
+    ],
+    "debug": false,
+    "default_dot_input_precision": "ieee",
+    "deprecated_fp8_dot_operand_dtypes": [],
+    "enable_fp_fusion": true,
+    "extern_libs": [
+      [
+        "ocml",
+        "/opt/dtk/amdgcn/bitcode/ocml.bc"
+      ],
+      [
+        "ockl",
+        "/opt/dtk/amdgcn/bitcode/ockl.bc"
+      ],
+      [
+        "hip",
+        "/opt/dtk/amdgcn/bitcode/hip.bc"
+      ],
+      [
+        "opencl",
+        "/opt/dtk/amdgcn/bitcode/opencl.bc"
+      ]
+    ],
+    "hash": "f5faccdad68ee75b4ab03e172707813d584a2f4e79d483163857e85cc35a4ea8",
+    "instrumentation_mode": "",
+    "kpack": 1,
+    "launch_cooperative_grid": false,
+    "matrix_instr_nonkdim": 0,
+    "max_num_imprecise_acc_default": 0,
+    "mmac_layout_force": -1,
+    "name": "triton_lighting_indexer_k_tiled",
+    "num_ctas": 1,
+    "num_stages": 3,
+    "num_warps": 4,
+    "optimize_epilogue": false,
+    "profile_scratch_align": 1,
+    "profile_scratch_size": 0,
+    "sanitize_overflow": true,
+    "sched_latency": "none",
+    "schedule_hint": "none",
+    "shared": 8320,
+    "supported_fp8_dtypes": [
+      "fp8e4nv",
+      "fp8e5"
+    ],
+    "target": "GPUTarget(backend='hip', arch='gfx936', warp_size=64)",
+    "tensordesc_meta": [],
+    "triton_version": "3.6.0",
+    "use_nvshmem": false,
+    "warp_size": 64,
+    "wasp_enabled": false,
+    "wasp_num_load_warps": null,
+    "wasp_num_mma_warps": null,
+    "waves_per_eu": 1,
+    "wdra_enabled": false,
+    "wdra_num_load_regs": null,
+    "wdra_num_mma_regs_main": null,
+    "wdra_num_mma_regs_tail": null
+  },
+  "source": "kernels/case_65/triton_lighting_indexer_k_tiled_4015fb1c4b_f5faccdad68e.py",
+  "layout_reference": {
+    "definitions": {
+      "#blocked": "#ttg.blocked<{sizePerThread = [8, 1], threadsPerWarp = [4, 16], warpsPerCTA = [1, 4], order = [0, 1]}>",
+      "#blocked1": "#ttg.blocked<{sizePerThread = [1], threadsPerWarp = [64], warpsPerCTA = [4], order = [0]}>",
+      "#blocked2": "#ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 64], warpsPerCTA = [4, 1], order = [1, 0]}>",
+      "#blocked3": "#ttg.blocked<{sizePerThread = [1, 2], threadsPerWarp = [4, 16], warpsPerCTA = [4, 1], order = [1, 0]}>",
+      "#linear": "#ttg.linear<{register = [[4, 0], [8, 0], [16, 0], [32, 0]], lane = [[0, 1], [0, 2], [0, 4], [0, 8], [1, 0], [2, 0]], warp = [[0, 0], [0, 0]], block = []}>",
+      "#linear1": "#ttg.linear<{register = [[4, 0, 0], [8, 0, 0], [16, 0, 0], [32, 0, 0]], lane = [[0, 0, 1], [0, 0, 2], [0, 0, 4], [0, 0, 8], [1, 0, 0], [2, 0, 0]], warp = [[0, 0, 0], [0, 0, 0]], block = []}>",
+      "#linear2": "#ttg.linear<{register = [[0, 4], [0, 8], [0, 16], [0, 32]], lane = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 1], [0, 2]], warp = [[0, 0], [0, 0]], block = []}>",
+      "#mma": "#ttg.amd_mfma<{version = 3, warpsPerCTA = [4, 1], instrShape = [16, 16, 16], isTransposed = false, mmacLayout = 1}>",
+      "#shared": "#ttg.swizzled_shared<{vec = 4, perPhase = 2, maxPhase = 8, order = [1, 0]}>",
+      "#shared1": "#ttg.swizzled_shared<{vec = 4, perPhase = 2, maxPhase = 8, order = [0, 1]}>",
+      "#smem": "#ttg.shared_memory",
+      "#inline_25deac3e6723": "#ttg.slice<{dim = 0, parent = #blocked}>",
+      "#inline_9cdf450d8995": "#ttg.slice<{dim = 1, parent = #blocked2}>",
+      "#inline_c2dcabae17d0": "#ttg.slice<{dim = 1, parent = #blocked3}>",
+      "#inline_3e0c396e4189": "#ttg.slice<{dim = 0, parent = #blocked3}>",
+      "#inline_07e665bef0da": "#ttg.slice<{dim = 1, parent = #blocked}>",
+      "#inline_6f538bf2624a": "#ttg.slice<{dim = 1, parent = #mma}>",
+      "#inline_0c2bcf95935d": "#ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>",
+      "#inline_23310867439d": "#ttg.slice<{dim = 0, parent = #blocked2}>",
+      "#inline_83c097af48b4": "#ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>",
+      "#inline_599cc1a58007": "#ttg.slice<{dim = 2, parent = #linear1}>"
+    },
+    "operations": [
+      {
+        "kind": "load",
+        "layouts": [
+          "#inline_9cdf450d8995"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            58,
+            42
+          ]
+        ],
+        "ir": "%4 = hcug.buffer_load %cu_bg_seqlens[%2], %mask_cu_10, %cst_3 : tensor<1xi32, #ttg.slice<{dim = 1, parent = #blocked2}>> loc(#loc2)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            58,
+            42
+          ]
+        ],
+        "ir": "%5 = hcug.buffer_load %cu_bg_seqlens[%3], %mask_cu_11, %cst_2 : tensor<1xi32, #blocked1> loc(#loc2)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#inline_9cdf450d8995"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            60,
+            42
+          ]
+        ],
+        "ir": "%11 = hcug.buffer_load %cu_ed_seqlens[%2], %mask_cu_10, %cst_4 : tensor<1xi32, #ttg.slice<{dim = 1, parent = #blocked2}>> loc(#loc3)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            60,
+            42
+          ]
+        ],
+        "ir": "%12 = hcug.buffer_load %cu_ed_seqlens[%3], %mask_cu_11, %cst_1 : tensor<1xi32, #blocked1> loc(#loc3)"
+      },
+      {
+        "kind": "reduce",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+            272,
+            40
+          ],
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            63,
+            31
+          ]
+        ],
+        "ir": "%13 = \"tt.reduce\"(%10) <{axis = 0 : i32}> ({     ^bb0(%arg9: i32 loc(callsite(#loc1 at #loc15)), %arg10: i32 loc(callsite(#loc1 at #loc15))):       %18 = arith.minsi %arg9, %arg10 : i32 loc(#loc148)       tt.reduce.return %18 : i32 loc(#loc95)     }) : (tensor<1xi32, #blocked1>) -> i32 loc(#loc95)"
+      },
+      {
+        "kind": "reduce",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+            213,
+            40
+          ],
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            63,
+            55
+          ]
+        ],
+        "ir": "%15 = \"tt.reduce\"(%eos_vec_18) <{axis = 0 : i32}> ({     ^bb0(%arg9: i32 loc(callsite(#loc1 at #loc19)), %arg10: i32 loc(callsite(#loc1 at #loc19))):       %18 = arith.maxsi %arg9, %arg10 : i32 loc(#loc149)       tt.reduce.return %18 : i32 loc(#loc97)     }) : (tensor<1xi32, #blocked1>) -> i32 loc(#loc97)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_c2dcabae17d0"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            70,
+            31
+          ]
+        ],
+        "ir": "%offs_bq = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 1, parent = #blocked3}>> loc(#loc101)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_6f538bf2624a"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            70,
+            31
+          ]
+        ],
+        "ir": "%offs_bq_19 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 1, parent = #mma}>> loc(#loc101)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_3e0c396e4189"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            72,
+            30
+          ]
+        ],
+        "ir": "%offs_d = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 0, parent = #blocked3}>> loc(#loc104)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_07e665bef0da"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            72,
+            30
+          ]
+        ],
+        "ir": "%offs_d_25 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked}>> loc(#loc104)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked3"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            80,
+            38
+          ]
+        ],
+        "ir": "%q_blk = hcug.buffer_load %q_index[%q_ptr_36], %q_msk_40 : tensor<16x32xbf16, #blocked3> loc(#loc112)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#inline_6f538bf2624a"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            84,
+            38
+          ]
+        ],
+        "ir": "%w_blk_46 = tt.load %w_blk_45, %mask_bq_26, %cst_8 : tensor<16x!tt.ptr<f32>, #ttg.slice<{dim = 1, parent = #mma}>> loc(#loc114)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_25deac3e6723"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            88,
+            45
+          ]
+        ],
+        "ir": "%offs_bk = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked}>> loc(#loc117)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_23310867439d"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            88,
+            45
+          ]
+        ],
+        "ir": "%offs_bk_50 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked2}>> loc(#loc117)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            92,
+            42
+          ]
+        ],
+        "ir": "%k_blk_77 = hcug.buffer_load %k_index[%k_ptr_73], %20 : tensor<32x64xbf16, #blocked> loc(#loc134)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            92,
+            42
+          ]
+        ],
+        "ir": "%k_blk_89 = hcug.buffer_load %k_index[%k_ptr_85], %23 : tensor<32x64xbf16, #blocked> loc(#loc134)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            92,
+            42
+          ]
+        ],
+        "ir": "%k_blk_166 = hcug.buffer_load %k_index[%k_ptr_161], %k_msk_165 : tensor<32x64xbf16, #blocked> loc(#loc134)"
+      },
+      {
+        "kind": "dot",
+        "layouts": [
+          "#inline_0c2bcf95935d",
+          "#inline_83c097af48b4",
+          "#mma"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            93,
+            32
+          ]
+        ],
+        "ir": "%acc_170 = tt.dot %q_blk_44, %k_blk_169, %cst_0 : tensor<16x32xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>> * tensor<32x64xf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>> -> tensor<16x64xf32, #mma> loc(#loc141)",
+        "k_width": [
+          4,
+          4
+        ],
+        "result_dtype": "f32",
+        "operand_dtypes": [
+          "f16",
+          "f16"
+        ]
+      },
+      {
+        "kind": "trans",
+        "layouts": [
+          "#mma",
+          "#linear"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            95,
+            22
+          ]
+        ],
+        "ir": "%out_blk_175 = tt.trans %acc_174 {order = array<i32: 1, 0>} : tensor<16x64xf32, #mma> -> tensor<64x16xf32, #linear> loc(#loc143)"
+      },
+      {
+        "kind": "reduce",
+        "layouts": [
+          "#linear1",
+          "#inline_599cc1a58007"
+        ],
+        "origins": [
+          [
+            "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+            315,
+            36
+          ],
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            95,
+            57
+          ]
+        ],
+        "ir": "%out_blk_177 = \"tt.reduce\"(%out_blk_176) <{axis = 2 : i32}> ({         ^bb0(%out_blk_190: f32 loc(callsite(#loc1 at #loc145)), %out_blk_191: f32 loc(callsite(#loc1 at #loc145))):           %out_blk_192 = arith.addf %out_blk_190, %out_blk_191 : f32 loc(#loc158)           tt.reduce.return %out_blk_192 : f32 loc(#loc154)         }) : (tensor<64x1x16xf32, #linear1>) -> tensor<64x1xf32, #ttg.slice<{dim = 2, parent = #linear1}>> loc(#loc154)"
+      },
+      {
+        "kind": "trans",
+        "layouts": [
+          "#inline_599cc1a58007",
+          "#linear2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            95,
+            22
+          ]
+        ],
+        "ir": "%out_blk_178 = tt.trans %out_blk_177 {order = array<i32: 1, 0>} : tensor<64x1xf32, #ttg.slice<{dim = 2, parent = #linear1}>> -> tensor<1x64xf32, #linear2> loc(#loc143)"
+      },
+      {
+        "kind": "convert_layout",
+        "layouts": [
+          "#linear2",
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            105,
+            54
+          ]
+        ],
+        "ir": "%40 = ttg.convert_layout %39 : tensor<1x64xf16, #linear2> -> tensor<1x64xf16, #blocked2> loc(#loc79)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            105,
+            54
+          ]
+        ],
+        "ir": "hcug.buffer_store %41, %logits[%out_ptr_182], %out_msk_188 : tensor<1x64xf32, #blocked2> loc(#loc79)"
+      },
+      {
+        "kind": "dot",
+        "layouts": [
+          "#inline_0c2bcf95935d",
+          "#inline_83c097af48b4",
+          "#mma"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            93,
+            32
+          ]
+        ],
+        "ir": "%acc_144 = tt.dot %q_blk_44, %k_blk_99, %cst_0 : tensor<16x32xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>> * tensor<32x64xf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>> -> tensor<16x64xf32, #mma> loc(#loc141)",
+        "k_width": [
+          4,
+          4
+        ],
+        "result_dtype": "f32",
+        "operand_dtypes": [
+          "f16",
+          "f16"
+        ]
+      },
+      {
+        "kind": "trans",
+        "layouts": [
+          "#mma",
+          "#linear"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            95,
+            22
+          ]
+        ],
+        "ir": "%out_blk = tt.trans %acc_104 {order = array<i32: 1, 0>} : tensor<16x64xf32, #mma> -> tensor<64x16xf32, #linear> loc(#loc143)"
+      },
+      {
+        "kind": "reduce",
+        "layouts": [
+          "#linear1",
+          "#inline_599cc1a58007"
+        ],
+        "origins": [
+          [
+            "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+            315,
+            36
+          ],
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            95,
+            57
+          ]
+        ],
+        "ir": "%out_blk_106 = \"tt.reduce\"(%out_blk_105) <{axis = 2 : i32}> ({       ^bb0(%out_blk_144: f32 loc(callsite(#loc1 at #loc145)), %out_blk_145: f32 loc(callsite(#loc1 at #loc145))):         %out_blk_146 = arith.addf %out_blk_144, %out_blk_145 : f32 loc(#loc158)         tt.reduce.return %out_blk_146 : f32 loc(#loc154)       }) : (tensor<64x1x16xf32, #linear1>) -> tensor<64x1xf32, #ttg.slice<{dim = 2, parent = #linear1}>> loc(#loc154)"
+      },
+      {
+        "kind": "trans",
+        "layouts": [
+          "#inline_599cc1a58007",
+          "#linear2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            95,
+            22
+          ]
+        ],
+        "ir": "%out_blk_107 = tt.trans %out_blk_106 {order = array<i32: 1, 0>} : tensor<64x1xf32, #ttg.slice<{dim = 2, parent = #linear1}>> -> tensor<1x64xf32, #linear2> loc(#loc143)"
+      },
+      {
+        "kind": "convert_layout",
+        "layouts": [
+          "#linear2",
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            105,
+            54
+          ]
+        ],
+        "ir": "%29 = ttg.convert_layout %28 : tensor<1x64xf16, #linear2> -> tensor<1x64xf16, #blocked2> loc(#loc79)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            105,
+            54
+          ]
+        ],
+        "ir": "hcug.buffer_store %30, %logits[%out_ptr_111], %32 : tensor<1x64xf32, #blocked2> loc(#loc79)"
+      },
+      {
+        "kind": "dot",
+        "layouts": [
+          "#inline_0c2bcf95935d",
+          "#inline_83c097af48b4",
+          "#mma"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            93,
+            32
+          ]
+        ],
+        "ir": "%acc_144 = tt.dot %q_blk_44, %k_blk_126, %cst_0 : tensor<16x32xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>> * tensor<32x64xf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>> -> tensor<16x64xf32, #mma> loc(#loc141)",
+        "k_width": [
+          4,
+          4
+        ],
+        "result_dtype": "f32",
+        "operand_dtypes": [
+          "f16",
+          "f16"
+        ]
+      },
+      {
+        "kind": "trans",
+        "layouts": [
+          "#mma",
+          "#linear"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            95,
+            22
+          ]
+        ],
+        "ir": "%out_blk_132 = tt.trans %acc_131 {order = array<i32: 1, 0>} : tensor<16x64xf32, #mma> -> tensor<64x16xf32, #linear> loc(#loc143)"
+      },
+      {
+        "kind": "reduce",
+        "layouts": [
+          "#linear1",
+          "#inline_599cc1a58007"
+        ],
+        "origins": [
+          [
+            "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+            315,
+            36
+          ],
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            95,
+            57
+          ]
+        ],
+        "ir": "%out_blk_134 = \"tt.reduce\"(%out_blk_133) <{axis = 2 : i32}> ({       ^bb0(%out_blk_144: f32 loc(callsite(#loc1 at #loc145)), %out_blk_145: f32 loc(callsite(#loc1 at #loc145))):         %out_blk_146 = arith.addf %out_blk_144, %out_blk_145 : f32 loc(#loc158)         tt.reduce.return %out_blk_146 : f32 loc(#loc154)       }) : (tensor<64x1x16xf32, #linear1>) -> tensor<64x1xf32, #ttg.slice<{dim = 2, parent = #linear1}>> loc(#loc154)"
+      },
+      {
+        "kind": "trans",
+        "layouts": [
+          "#inline_599cc1a58007",
+          "#linear2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            95,
+            22
+          ]
+        ],
+        "ir": "%out_blk_135 = tt.trans %out_blk_134 {order = array<i32: 1, 0>} : tensor<64x1xf32, #ttg.slice<{dim = 2, parent = #linear1}>> -> tensor<1x64xf32, #linear2> loc(#loc143)"
+      },
+      {
+        "kind": "convert_layout",
+        "layouts": [
+          "#linear2",
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            105,
+            54
+          ]
+        ],
+        "ir": "%34 = ttg.convert_layout %33 : tensor<1x64xf16, #linear2> -> tensor<1x64xf16, #blocked2> loc(#loc79)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+            105,
+            54
+          ]
+        ],
+        "ir": "hcug.buffer_store %35, %logits[%out_ptr_137], %37 : tensor<1x64xf32, #blocked2> loc(#loc79)"
+      }
+    ]
+  },
+  "mapped_sites": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 80,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1, 2], [4, 16], [4, 1], [1, 0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 84,
+      "kind": "load",
+      "layout": "gl.SliceLayout(1, __h81.AMDMFMALayout(version=3, instr_shape=[16, 16, 16], transposed=False, warps_per_cta=[4, 1], element_bitwidth=32, tiles_per_warp=None))"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 92,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([8, 1], [4, 16], [1, 4], [0, 1])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 93,
+      "kind": "dot",
+      "layout": "__h81.AMDMFMALayout(version=3, instr_shape=[16, 16, 16], transposed=False, warps_per_cta=[4, 1], element_bitwidth=32, tiles_per_warp=None)",
+      "k_width": [
+        4,
+        4
+      ],
+      "operand_dtypes": [
+        "f16",
+        "f16"
+      ],
+      "result_dtype": "f32"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 105,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1, 1], [1, 64], [4, 1], [1, 0])"
+    }
+  ],
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 62,
+      "end_line": 62,
+      "call": "tl.minimum",
+      "generated_line": 18,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 87,
+      "end_line": 87,
+      "call": "range",
+      "generated_line": 40,
+      "generated_column": 18
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 53,
+      "end_line": 53,
+      "call": "tl.program_id",
+      "generated_line": 14,
+      "generated_column": 32
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 53,
+      "end_line": 53,
+      "call": "tl.program_id",
+      "generated_line": 14,
+      "generated_column": 50
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 55,
+      "end_line": 55,
+      "call": "tl.arange",
+      "generated_line": 15,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 59,
+      "end_line": 61,
+      "call": "tl.load",
+      "generated_line": 17,
+      "generated_column": 183
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 63,
+      "end_line": 63,
+      "call": "max",
+      "generated_line": 19,
+      "generated_column": 31
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 63,
+      "end_line": 63,
+      "call": "min",
+      "generated_line": 19,
+      "generated_column": 105
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 72,
+      "end_line": 72,
+      "call": "tl.arange",
+      "generated_line": 28,
+      "generated_column": 30
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 80,
+      "end_line": 80,
+      "call": "tl.load(q_ptr, q_msk, 0.0).to",
+      "generated_line": 35,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 84,
+      "end_line": 84,
+      "call": "tl.load(w_ptr, w_msk, 0.0).to",
+      "generated_line": 38,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 86,
+      "end_line": 86,
+      "call": "tl.cdiv",
+      "generated_line": 39,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 105,
+      "end_line": 105,
+      "call": "tl.store",
+      "generated_line": 51,
+      "generated_column": 12
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 57,
+      "end_line": 59,
+      "call": "tl.load",
+      "generated_line": 17,
+      "generated_column": 39
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 63,
+      "end_line": 63,
+      "call": "bos_vec.min",
+      "generated_line": 19,
+      "generated_column": 35
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 63,
+      "end_line": 63,
+      "call": "eos_vec.max",
+      "generated_line": 19,
+      "generated_column": 109
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 70,
+      "end_line": 70,
+      "call": "tl.arange",
+      "generated_line": 26,
+      "generated_column": 31
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 71,
+      "end_line": 71,
+      "call": "tl.arange",
+      "generated_line": 27,
+      "generated_column": 32
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 92,
+      "end_line": 92,
+      "call": "tl.load(k_ptr, k_msk, 0.0).to",
+      "generated_line": 45,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 93,
+      "end_line": 93,
+      "call": "tl.dot",
+      "generated_line": 46,
+      "generated_column": 31
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 95,
+      "end_line": 95,
+      "call": "acc.trans().reshape(BK, BQ, H).sum(-1).trans",
+      "generated_line": 48,
+      "generated_column": 35
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 105,
+      "end_line": 105,
+      "call": "out_blk.to",
+      "generated_line": 51,
+      "generated_column": 48
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 80,
+      "end_line": 80,
+      "call": "tl.load",
+      "generated_line": 35,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 84,
+      "end_line": 84,
+      "call": "tl.load",
+      "generated_line": 38,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 88,
+      "end_line": 88,
+      "call": "tl.arange",
+      "generated_line": 41,
+      "generated_column": 75
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 94,
+      "end_line": 94,
+      "call": "tl.maximum",
+      "generated_line": 47,
+      "generated_column": 31
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 92,
+      "end_line": 92,
+      "call": "tl.load",
+      "generated_line": 45,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 95,
+      "end_line": 95,
+      "call": "acc.trans().reshape(BK, BQ, H).sum",
+      "generated_line": 48,
+      "generated_column": 35
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 95,
+      "end_line": 95,
+      "call": "acc.trans().reshape",
+      "generated_line": 48,
+      "generated_column": 71
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/DSA/indexer_k_tiled.py",
+      "line": 95,
+      "end_line": 95,
+      "call": "acc.trans",
+      "generated_line": 48,
+      "generated_column": 71
+    }
+  ],
+  "gluon_source_sha256": "29244ace18afd50cd496239187eb5f5026a1aa7d85c8124d4ae78868bba6e903",
+  "gluon_metadata": {
+    "allow_flush_denorm": false,
+    "allowed_dot_input_precisions": [
+      "ieee"
+    ],
+    "arch": "gfx936",
+    "async_copy_use_single_buffer": true,
+    "backend_name": "hip",
+    "cluster_dims": [
+      1,
+      1,
+      1
+    ],
+    "debug": false,
+    "default_dot_input_precision": "ieee",
+    "deprecated_fp8_dot_operand_dtypes": [],
+    "enable_fp_fusion": true,
+    "extern_libs": [
+      [
+        "ocml",
+        "/opt/dtk/amdgcn/bitcode/ocml.bc"
+      ],
+      [
+        "ockl",
+        "/opt/dtk/amdgcn/bitcode/ockl.bc"
+      ],
+      [
+        "hip",
+        "/opt/dtk/amdgcn/bitcode/hip.bc"
+      ],
+      [
+        "opencl",
+        "/opt/dtk/amdgcn/bitcode/opencl.bc"
+      ]
+    ],
+    "hash": "838953eec318af4d86441b05b0a27e153b100c15efb743dd4bd6cfc6f024efe6",
+    "instrumentation_mode": "",
+    "kpack": 1,
+    "launch_cooperative_grid": false,
+    "matrix_instr_nonkdim": 0,
+    "max_num_imprecise_acc_default": 0,
+    "mmac_layout_force": -1,
+    "name": "triton_lighting_indexer_k_tiled_4015fb1c4b",
+    "num_ctas": 1,
+    "num_stages": 3,
+    "num_warps": 4,
+    "optimize_epilogue": false,
+    "profile_scratch_align": 1,
+    "profile_scratch_size": 0,
+    "sanitize_overflow": true,
+    "sched_latency": "none",
+    "schedule_hint": "none",
+    "shared": 8320,
+    "supported_fp8_dtypes": [
+      "fp8e4nv",
+      "fp8e5"
+    ],
+    "target": "GPUTarget(backend='hip', arch='gfx936', warp_size=64)",
+    "tensordesc_meta": [],
+    "triton_version": "3.6.0",
+    "use_nvshmem": false,
+    "warp_size": 64,
+    "wasp_enabled": false,
+    "wasp_num_load_warps": null,
+    "wasp_num_mma_warps": null,
+    "waves_per_eu": 1,
+    "wdra_enabled": false,
+    "wdra_num_load_regs": null,
+    "wdra_num_mma_regs_main": null,
+    "wdra_num_mma_regs_tail": null
+  },
+  "compiled": true,
+  "executed": true
+}

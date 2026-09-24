@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "operator": "dequantize_and_gather_k_cache",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/dequantize_and_gather_k_cache.py",
+  "sources": [
+    "hard81/group5/dequantize_and_gather_k_cache",
+    "hard81/group5/dequantize_and_gather_k_cache",
+    "hard81/full13/dequantize_and_gather_k_cache"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "dequantize_and_gather_k_cache/tle_source/operator.py",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/original/operator.py",
+      "sha256": "01e0f3d819dab162002e6f58a79d4c10f9a64d0095dd766ff2c2eedefd1c7e8a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "dequantize_and_gather_k_cache/gluon_baseline/kernel.py",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/kernel.py",
+      "sha256": "86036f73f1b08fee8fd05d1aecdb53a19d853d95661ebe2506e055b634181ece"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "dequantize_and_gather_k_cache/gluon_baseline/no_gather_lens.export.json",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/no_gather_lens.export.json",
+      "sha256": "f017285d9757538ac53762d3a6b0d6829775f9bfc6f000df6383b3e8f345cd52"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "dequantize_and_gather_k_cache/gluon_baseline/no_gather_lens.py",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/no_gather_lens.py",
+      "sha256": "64d6c2e82586b19cd5d77e9d529e6ccc500187f8312d7dabed9b8c0e2ea11be3"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "dequantize_and_gather_k_cache/gluon_baseline/official_448.export.json",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/official_448.export.json",
+      "sha256": "6ad104f5b05ab93e54f35f181a22820064fab4b9812111f5a2211a2244f55687"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "dequantize_and_gather_k_cache/gluon_baseline/official_448.py",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/official_448.py",
+      "sha256": "fb0d7434d25f9d705fca32f32216897c736970b841f54b34e817a898760779a7"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "dequantize_and_gather_k_cache/gluon_baseline/small_aligned.export.json",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/small_aligned.export.json",
+      "sha256": "df392bfc00f4f61efc126cfd65e124a922bb1edec0689a63d6ad763749b5ded1"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "dequantize_and_gather_k_cache/gluon_baseline/small_aligned.py",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/small_aligned.py",
+      "sha256": "9a25f6f62231a80fc2d2e761a1f935cde4ba8377729fc8b64f3bb372e8d0d7b3"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "dequantize_and_gather_k_cache/gluon_baseline/tail_96.export.json",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/tail_96.export.json",
+      "sha256": "c451033e175432ce779c82172d61f086da01a35f0e1e6878aae32be0961d021e"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "dequantize_and_gather_k_cache/gluon_baseline/tail_96.py",
+      "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/tail_96.py",
+      "sha256": "32a08376884710e0f50aec46bce7a9ed6d94bd46eff45355e7f7eceed8443de1"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/final_kernel.py",
+      "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/final_kernel.py",
+      "sha256": "d4fd9ab3d43d495c652bc7c2ddbdb449f7e8d95cba8efd2add9f6cf58122899f"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/no_gather_lens.py",
+      "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/no_gather_lens.py",
+      "sha256": "b7079946bc8da792cf6da6690bb9be4ea77cd7b0aa8fa56c624f97464508b697"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/official_448.py",
+      "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/official_448.py",
+      "sha256": "e3e7698f4f251c2e66c5c6a6af73a4d0bd6a7cf7d501287ef4132558c096a1b0"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/small_aligned.py",
+      "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/small_aligned.py",
+      "sha256": "0be96e65c67440c10371d2bc1aa5f1bdc92f2bc43eab31d24534087a6584c788"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/tail_96.py",
+      "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/tail_96.py",
+      "sha256": "26994ea3b6e4b9dfaaa33c185daec3ad6d41fecac6156db1026cdd7b99e15aec"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

@@ -1,0 +1,913 @@
+{
+  "run_id": "812406",
+  "helper_hash": "093efe07010b4be7513e9b5f8120e860da84667d307f44ea453d22cd1046bfde",
+  "optimizer": "1",
+  "pipeline": "1",
+  "buffer_ops": "1",
+  "original_source_sha256": "81613d5c718fb08afaccfbf9799afd46b624afd70470a8b547e407ef24f675bc",
+  "original_module": "flaggems_vllm.ops.fused_inv_rope_fp8_quant",
+  "original_name": "_fused_inv_rope_fp8_quant_per_head",
+  "original_file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+  "reference_hash": "25b9a6019dc50e97a7af8c482ee0161153894860a2522eb98628c028de3e0d5b",
+  "reference_metadata": {
+    "allow_flush_denorm": false,
+    "allowed_dot_input_precisions": [
+      "ieee"
+    ],
+    "arch": "gfx936",
+    "async_copy_use_single_buffer": true,
+    "backend_name": "hip",
+    "cluster_dims": [
+      1,
+      1,
+      1
+    ],
+    "debug": false,
+    "default_dot_input_precision": "ieee",
+    "deprecated_fp8_dot_operand_dtypes": [],
+    "enable_fp_fusion": true,
+    "extern_libs": [
+      [
+        "ocml",
+        "/opt/dtk/amdgcn/bitcode/ocml.bc"
+      ],
+      [
+        "ockl",
+        "/opt/dtk/amdgcn/bitcode/ockl.bc"
+      ],
+      [
+        "hip",
+        "/opt/dtk/amdgcn/bitcode/hip.bc"
+      ],
+      [
+        "opencl",
+        "/opt/dtk/amdgcn/bitcode/opencl.bc"
+      ]
+    ],
+    "hash": "25b9a6019dc50e97a7af8c482ee0161153894860a2522eb98628c028de3e0d5b",
+    "instrumentation_mode": "",
+    "kpack": 1,
+    "launch_cooperative_grid": false,
+    "matrix_instr_nonkdim": 0,
+    "max_num_imprecise_acc_default": 0,
+    "mmac_layout_force": -1,
+    "name": "_fused_inv_rope_fp8_quant_per_head",
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 1,
+    "optimize_epilogue": false,
+    "profile_scratch_align": 1,
+    "profile_scratch_size": 0,
+    "sanitize_overflow": true,
+    "sched_latency": "none",
+    "schedule_hint": "none",
+    "shared": 0,
+    "supported_fp8_dtypes": [
+      "fp8e4nv",
+      "fp8e5"
+    ],
+    "target": "GPUTarget(backend='hip', arch='gfx936', warp_size=64)",
+    "tensordesc_meta": [],
+    "triton_version": "3.6.0",
+    "use_nvshmem": false,
+    "warp_size": 64,
+    "wasp_enabled": false,
+    "wasp_num_load_warps": null,
+    "wasp_num_mma_warps": null,
+    "waves_per_eu": 1,
+    "wdra_enabled": false,
+    "wdra_num_load_regs": null,
+    "wdra_num_mma_regs_main": null,
+    "wdra_num_mma_regs_tail": null
+  },
+  "source": "kernels/case_59/_fused_inv_rope_fp8_quant_per_head_625a5a92b8_25b9a6019dc5.py",
+  "layout_reference": {
+    "definitions": {
+      "#blocked": "#ttg.blocked<{sizePerThread = [1, 8], threadsPerWarp = [4, 16], warpsPerCTA = [1, 1], order = [1, 0]}>",
+      "#blocked1": "#ttg.blocked<{sizePerThread = [8], threadsPerWarp = [64], warpsPerCTA = [1], order = [0]}>",
+      "#blocked2": "#ttg.blocked<{sizePerThread = [1], threadsPerWarp = [64], warpsPerCTA = [1], order = [0]}>",
+      "#linear": "#ttg.linear<{register = [], lane = [[0, 0], [0, 0], [0, 0], [0, 0], [1, 0], [2, 0]], warp = [], block = []}>",
+      "#inline_07e665bef0da": "#ttg.slice<{dim = 1, parent = #blocked}>"
+    },
+    "operations": [
+      {
+        "kind": "arange",
+        "layouts": [
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            80,
+            41
+          ]
+        ],
+        "ir": "%block_offsets = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32, #blocked2> loc(#loc101)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            88,
+            34
+          ]
+        ],
+        "ir": "hcug.buffer_store %cst_3, %scale_ptr[%scale_addrs_23] : tensor<4xf32, #blocked2> loc(#loc17)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            94,
+            27
+          ]
+        ],
+        "ir": "%offsets = tt.make_range {end = 512 : i32, start = 0 : i32} : tensor<512xi32, #blocked1> loc(#loc112)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            95,
+            16
+          ]
+        ],
+        "ir": "%x_30 = hcug.buffer_load %o_ptr[%x_29] : tensor<512xbf16, #blocked1> loc(#loc114)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            103,
+            24
+          ]
+        ],
+        "ir": "%x_partner_36 = hcug.buffer_load %o_ptr[%x_partner_35], %is_rope : tensor<512xbf16, #blocked1> loc(#loc123)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            107,
+            20
+          ]
+        ],
+        "ir": "%cos_v_40 = hcug.buffer_load %cos_sin_cache_ptr[%cos_v_39], %is_rope, %cst_4 : tensor<512xf32, #blocked1> loc(#loc128)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            108,
+            20
+          ]
+        ],
+        "ir": "%sin_v_43 = hcug.buffer_load %cos_sin_cache_ptr[%sin_v_42], %is_rope : tensor<512xf32, #blocked1> loc(#loc131)"
+      },
+      {
+        "kind": "reduce",
+        "layouts": [
+          "#blocked",
+          "#inline_07e665bef0da"
+        ],
+        "origins": [
+          [
+            "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+            213,
+            40
+          ],
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            116,
+            37
+          ]
+        ],
+        "ir": "%block_absmax = \"tt.reduce\"(%x_2d_48) <{axis = 1 : i32}> ({     ^bb0(%block_absmax_78: f32 loc(callsite(#loc1 at #loc142)), %block_absmax_79: f32 loc(callsite(#loc1 at #loc142))):       %block_absmax_80 = arith.maxnumf %block_absmax_78, %block_absmax_79 : f32 loc(#loc172)       tt.reduce.return %block_absmax_80 : f32 loc(#loc166)     }) : (tensor<4x128xf32, #blocked>) -> tensor<4xf32, #ttg.slice<{dim = 1, parent = #blocked}>> loc(#loc166)"
+      },
+      {
+        "kind": "convert_layout",
+        "layouts": [
+          "#linear",
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            126,
+            8
+          ]
+        ],
+        "ir": "%scales_exp_50 = ttg.convert_layout %scales_exp : tensor<4x1xf32, #linear> -> tensor<4x1xf32, #blocked> loc(#loc146)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            136,
+            33
+          ]
+        ],
+        "ir": "hcug.buffer_store %x_quant_54, %fp8_ptr[%3] : tensor<512xf8E4M3FN, #blocked1> loc(#loc71)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            138,
+            33
+          ]
+        ],
+        "ir": "%block_offsets_62 = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32, #blocked2> loc(#loc157)"
+      },
+      {
+        "kind": "convert_layout",
+        "layouts": [
+          "#inline_07e665bef0da",
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            155,
+            30
+          ]
+        ],
+        "ir": "%4 = ttg.convert_layout %scales : tensor<4xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<4xf32, #blocked2> loc(#loc79)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked2"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+            155,
+            30
+          ]
+        ],
+        "ir": "hcug.buffer_store %4, %scale_ptr[%scale_addrs_77] : tensor<4xf32, #blocked2> loc(#loc79)"
+      }
+    ]
+  },
+  "mapped_sites": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 88,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [1], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 95,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([8], [64], [1], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 103,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([8], [64], [1], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 107,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([8], [64], [1], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 108,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([8], [64], [1], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 116,
+      "kind": "reduce",
+      "layout": "gl.BlockedLayout([1, 8], [4, 16], [1, 1], [1, 0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 136,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([8], [64], [1], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 155,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [1], [0])"
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 213,
+      "kind": "reduce",
+      "layout": "gl.BlockedLayout([1, 8], [4, 16], [1, 1], [1, 0])"
+    }
+  ],
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 136,
+      "end_line": 136,
+      "call": "tl.store",
+      "generated_line": 58,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 62,
+      "end_line": 62,
+      "call": "tl.program_id(0).to",
+      "generated_line": 16,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 63,
+      "end_line": 63,
+      "call": "tl.program_id(1).to",
+      "generated_line": 17,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 94,
+      "end_line": 94,
+      "call": "tl.arange",
+      "generated_line": 34,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 95,
+      "end_line": 95,
+      "call": "tl.load(input_base + offsets).to",
+      "generated_line": 35,
+      "generated_column": 21
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 98,
+      "end_line": 98,
+      "call": "tl.load",
+      "generated_line": 37,
+      "generated_column": 23
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 103,
+      "end_line": 105,
+      "call": "tl.load(input_base + (offsets ^ 1), mask=is_rope, other=0.0).to",
+      "generated_line": 41,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 106,
+      "end_line": 106,
+      "call": "tl.maximum",
+      "generated_line": 42,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 107,
+      "end_line": 107,
+      "call": "tl.load",
+      "generated_line": 43,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 108,
+      "end_line": 108,
+      "call": "tl.load",
+      "generated_line": 44,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 112,
+      "end_line": 112,
+      "call": "tl.where",
+      "generated_line": 48,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 113,
+      "end_line": 113,
+      "call": "tl.where",
+      "generated_line": 49,
+      "generated_column": 21
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 115,
+      "end_line": 115,
+      "call": "tl.reshape",
+      "generated_line": 50,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 116,
+      "end_line": 116,
+      "call": "tl.maximum",
+      "generated_line": 51,
+      "generated_column": 32
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 121,
+      "end_line": 127,
+      "call": "tl.reshape",
+      "generated_line": 55,
+      "generated_column": 30
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 128,
+      "end_line": 128,
+      "call": "tl.clamp(x / scales_exp, -fp8_max, fp8_max).to",
+      "generated_line": 56,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 138,
+      "end_line": 138,
+      "call": "tl.arange",
+      "generated_line": 59,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 150,
+      "end_line": 150,
+      "call": "tl.store",
+      "generated_line": 66,
+      "generated_column": 8
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 155,
+      "end_line": 155,
+      "call": "tl.store",
+      "generated_line": 69,
+      "generated_column": 8
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 78,
+      "end_line": 78,
+      "call": "tl.store",
+      "generated_line": 25,
+      "generated_column": 12
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 88,
+      "end_line": 88,
+      "call": "tl.store",
+      "generated_line": 30,
+      "generated_column": 12
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 115,
+      "end_line": 115,
+      "call": "tl.abs",
+      "generated_line": 50,
+      "generated_column": 35
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 116,
+      "end_line": 116,
+      "call": "tl.max",
+      "generated_line": 51,
+      "generated_column": 43
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 119,
+      "end_line": 119,
+      "call": "tl.math.exp2",
+      "generated_line": 54,
+      "generated_column": 30
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 122,
+      "end_line": 125,
+      "call": "tl.broadcast_to",
+      "generated_line": 55,
+      "generated_column": 41
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 141,
+      "end_line": 141,
+      "call": "scales.to",
+      "generated_line": 62,
+      "generated_column": 34
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 143,
+      "end_line": 143,
+      "call": "tl.sum",
+      "generated_line": 64,
+      "generated_column": 34
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 62,
+      "end_line": 62,
+      "call": "tl.program_id",
+      "generated_line": 16,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 63,
+      "end_line": 63,
+      "call": "tl.program_id",
+      "generated_line": 17,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 78,
+      "end_line": 78,
+      "call": "tl.zeros",
+      "generated_line": 25,
+      "generated_column": 51
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 80,
+      "end_line": 80,
+      "call": "tl.arange",
+      "generated_line": 27,
+      "generated_column": 41
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 88,
+      "end_line": 88,
+      "call": "tl.zeros",
+      "generated_line": 30,
+      "generated_column": 52
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 95,
+      "end_line": 95,
+      "call": "tl.load",
+      "generated_line": 35,
+      "generated_column": 21
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 103,
+      "end_line": 103,
+      "call": "tl.load",
+      "generated_line": 41,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 119,
+      "end_line": 119,
+      "call": "tl.ceil",
+      "generated_line": 54,
+      "generated_column": 38
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 123,
+      "end_line": 123,
+      "call": "tl.reshape",
+      "generated_line": 55,
+      "generated_column": 108
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 128,
+      "end_line": 128,
+      "call": "tl.clamp",
+      "generated_line": 56,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 119,
+      "end_line": 119,
+      "call": "tl.log2",
+      "generated_line": 54,
+      "generated_column": 46
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 119,
+      "end_line": 119,
+      "call": "tl.maximum",
+      "generated_line": 54,
+      "generated_column": 54
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "line": 119,
+      "end_line": 119,
+      "call": "tl.abs",
+      "generated_line": 54,
+      "generated_column": 65
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 151,
+      "end_line": 151,
+      "call": "core.full",
+      "generated_line": 75,
+      "generated_column": 11
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 200,
+      "end_line": 200,
+      "call": "core._promote_bfloat16_to_float32",
+      "generated_line": 80,
+      "generated_column": 25
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 213,
+      "end_line": 213,
+      "call": "core.reduce",
+      "generated_line": 93,
+      "generated_column": 15
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 203,
+      "end_line": 203,
+      "call": "core._reduce_with_indices",
+      "generated_line": 83,
+      "generated_column": 19
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 205,
+      "end_line": 205,
+      "call": "core._reduce_with_indices",
+      "generated_line": 85,
+      "generated_column": 19
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 207,
+      "end_line": 207,
+      "call": "core.constexpr",
+      "generated_line": 87,
+      "generated_column": 25
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 207,
+      "end_line": 207,
+      "call": "core.constexpr",
+      "generated_line": 87,
+      "generated_column": 86
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 208,
+      "end_line": 208,
+      "call": "core.constexpr",
+      "generated_line": 88,
+      "generated_column": 15
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 208,
+      "end_line": 208,
+      "call": "input.dtype.is_floating",
+      "generated_line": 88,
+      "generated_column": 28
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 211,
+      "end_line": 211,
+      "call": "input.dtype.is_int",
+      "generated_line": 91,
+      "generated_column": 23
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 209,
+      "end_line": 209,
+      "call": "input.to",
+      "generated_line": 89,
+      "generated_column": 37
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 212,
+      "end_line": 212,
+      "call": "input.to",
+      "generated_line": 92,
+      "generated_column": 37
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 311,
+      "end_line": 311,
+      "call": "_pick_sum_dtype",
+      "generated_line": 98,
+      "generated_column": 30
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 315,
+      "end_line": 315,
+      "call": "core.reduce",
+      "generated_line": 101,
+      "generated_column": 11
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 314,
+      "end_line": 314,
+      "call": "input.to",
+      "generated_line": 100,
+      "generated_column": 29
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 182,
+      "end_line": 182,
+      "call": "_argmax_combine",
+      "generated_line": 106,
+      "generated_column": 11
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 187,
+      "end_line": 187,
+      "call": "_argmax_combine",
+      "generated_line": 111,
+      "generated_column": 11
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 192,
+      "end_line": 192,
+      "call": "core.maximum",
+      "generated_line": 116,
+      "generated_column": 11
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 299,
+      "end_line": 299,
+      "call": "in_dtype.is_int_signed",
+      "generated_line": 124,
+      "generated_column": 7
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 301,
+      "end_line": 301,
+      "call": "in_dtype.is_int_unsigned",
+      "generated_line": 126,
+      "generated_column": 9
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 175,
+      "end_line": 175,
+      "call": "core.where",
+      "generated_line": 143,
+      "generated_column": 25
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 176,
+      "end_line": 176,
+      "call": "core.where",
+      "generated_line": 144,
+      "generated_column": 25
+    }
+  ],
+  "gluon_source_sha256": "03a0d23ce88f94ad36225b0fe5dba2891142d6f9f6b4f5fc0eb10b9fa2062687",
+  "gluon_metadata": {
+    "allow_flush_denorm": false,
+    "allowed_dot_input_precisions": [
+      "ieee"
+    ],
+    "arch": "gfx936",
+    "async_copy_use_single_buffer": true,
+    "backend_name": "hip",
+    "cluster_dims": [
+      1,
+      1,
+      1
+    ],
+    "debug": false,
+    "default_dot_input_precision": "ieee",
+    "deprecated_fp8_dot_operand_dtypes": [],
+    "enable_fp_fusion": true,
+    "extern_libs": [
+      [
+        "ocml",
+        "/opt/dtk/amdgcn/bitcode/ocml.bc"
+      ],
+      [
+        "ockl",
+        "/opt/dtk/amdgcn/bitcode/ockl.bc"
+      ],
+      [
+        "hip",
+        "/opt/dtk/amdgcn/bitcode/hip.bc"
+      ],
+      [
+        "opencl",
+        "/opt/dtk/amdgcn/bitcode/opencl.bc"
+      ]
+    ],
+    "hash": "5b06bc3d8e20eeac54100dfabee63dae2017bae7bcc28bb25e4771b92711d2ef",
+    "instrumentation_mode": "",
+    "kpack": 1,
+    "launch_cooperative_grid": false,
+    "matrix_instr_nonkdim": 0,
+    "max_num_imprecise_acc_default": 0,
+    "mmac_layout_force": -1,
+    "name": "_fused_inv_rope_fp8_quant_per_head_625a5a92b8",
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 1,
+    "optimize_epilogue": false,
+    "profile_scratch_align": 1,
+    "profile_scratch_size": 0,
+    "sanitize_overflow": true,
+    "sched_latency": "none",
+    "schedule_hint": "none",
+    "shared": 0,
+    "supported_fp8_dtypes": [
+      "fp8e4nv",
+      "fp8e5"
+    ],
+    "target": "GPUTarget(backend='hip', arch='gfx936', warp_size=64)",
+    "tensordesc_meta": [],
+    "triton_version": "3.6.0",
+    "use_nvshmem": false,
+    "warp_size": 64,
+    "wasp_enabled": false,
+    "wasp_num_load_warps": null,
+    "wasp_num_mma_warps": null,
+    "waves_per_eu": 1,
+    "wdra_enabled": false,
+    "wdra_num_load_regs": null,
+    "wdra_num_mma_regs_main": null,
+    "wdra_num_mma_regs_tail": null
+  },
+  "compiled": true,
+  "executed": true
+}

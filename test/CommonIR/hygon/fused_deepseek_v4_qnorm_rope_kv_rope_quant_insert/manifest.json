@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "operator": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert.py",
+  "sources": [
+    "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert",
+    "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert",
+    "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/tle_source/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert.py",
+      "source": "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/original/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert.py",
+      "sha256": "3f27cce67bb968937a86e027e5190748359ca67cc4695968a18802162ac421b2"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_baseline/kernel.py",
+      "source": "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_baseline/kernel.py",
+      "sha256": "5abe4e574f18d9c31a019711bcc8fbcc0213b11f1a1c9c225c818a328452b076"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_optimized/full13/final/kernel.py",
+      "source": "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_optimized/final/kernel.py",
+      "sha256": "71b7b56a939cc3185ce6ac8ee2ab1ae136f2245e6d483e10201aadefbc3d90d4"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_optimized/full13/final/selection.json",
+      "source": "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_optimized/final/selection.json",
+      "sha256": "c748e7aabb41a639b670f0999cc5796ff94a5ca7f1162f57e949e463323bca8d"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

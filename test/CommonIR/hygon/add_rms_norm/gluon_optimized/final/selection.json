@@ -1,0 +1,340 @@
+{
+  "cases": [
+    {
+      "case_id": 0,
+      "kind": "small",
+      "shape": [
+        2,
+        32
+      ],
+      "dtype": "float16",
+      "layout_id": "w1_s1",
+      "source": "gluon_optimized/add_rms_norm_w1_s1.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w1_s1.py"
+    },
+    {
+      "case_id": 1,
+      "kind": "small",
+      "shape": [
+        128,
+        128
+      ],
+      "dtype": "float16",
+      "layout_id": "w1_s1",
+      "source": "gluon_optimized/add_rms_norm_w1_s1.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w1_s1.py"
+    },
+    {
+      "case_id": 2,
+      "kind": "small",
+      "shape": [
+        64,
+        512
+      ],
+      "dtype": "float16",
+      "layout_id": "w1_s8",
+      "source": "gluon_optimized/add_rms_norm_w1_s8.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w1_s8.py"
+    },
+    {
+      "case_id": 3,
+      "kind": "small",
+      "shape": [
+        1,
+        1024
+      ],
+      "dtype": "float16",
+      "layout_id": "w4_s2",
+      "source": "gluon_optimized/add_rms_norm_w4_s2.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w4_s2.py"
+    },
+    {
+      "case_id": 4,
+      "kind": "small",
+      "shape": [
+        64,
+        1024
+      ],
+      "dtype": "float16",
+      "layout_id": "w4_s2",
+      "source": "gluon_optimized/add_rms_norm_w4_s2.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w4_s2.py"
+    },
+    {
+      "case_id": 5,
+      "kind": "small",
+      "shape": [
+        256,
+        1024
+      ],
+      "dtype": "float16",
+      "layout_id": "w1_s8",
+      "source": "gluon_optimized/add_rms_norm_w1_s8.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w1_s8.py"
+    },
+    {
+      "case_id": 6,
+      "kind": "small",
+      "shape": [
+        32,
+        2048
+      ],
+      "dtype": "float16",
+      "layout_id": "w4_s2",
+      "source": "gluon_optimized/add_rms_norm_w4_s2.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w4_s2.py"
+    },
+    {
+      "case_id": 7,
+      "kind": "small",
+      "shape": [
+        64,
+        4096
+      ],
+      "dtype": "float16",
+      "layout_id": "w8_s2",
+      "source": "gluon_optimized/add_rms_norm_w8_s2.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w8_s2.py"
+    },
+    {
+      "case_id": 8,
+      "kind": "small",
+      "shape": [
+        1,
+        128
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "w4_s2",
+      "source": "gluon_optimized/add_rms_norm_w4_s2.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w4_s2.py"
+    },
+    {
+      "case_id": 9,
+      "kind": "small",
+      "shape": [
+        128,
+        128
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "w4_s2",
+      "source": "gluon_optimized/add_rms_norm_w4_s2.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w4_s2.py"
+    },
+    {
+      "case_id": 10,
+      "kind": "small",
+      "shape": [
+        64,
+        512
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "baseline_retained",
+      "source": "gluon_baseline/small_m64_n512_bfloat16_t512_w4.py",
+      "archived_source": "gluon_optimized/final/small_m64_n512_bfloat16_t512_w4.py"
+    },
+    {
+      "case_id": 11,
+      "kind": "small",
+      "shape": [
+        512,
+        512
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "w1_s8",
+      "source": "gluon_optimized/add_rms_norm_w1_s8.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w1_s8.py"
+    },
+    {
+      "case_id": 12,
+      "kind": "small",
+      "shape": [
+        1,
+        1024
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "w4_s2",
+      "source": "gluon_optimized/add_rms_norm_w4_s2.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w4_s2.py"
+    },
+    {
+      "case_id": 13,
+      "kind": "small",
+      "shape": [
+        64,
+        1024
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "w4_s2",
+      "source": "gluon_optimized/add_rms_norm_w4_s2.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w4_s2.py"
+    },
+    {
+      "case_id": 14,
+      "kind": "small",
+      "shape": [
+        256,
+        1024
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "w1_s8",
+      "source": "gluon_optimized/add_rms_norm_w1_s8.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w1_s8.py"
+    },
+    {
+      "case_id": 15,
+      "kind": "small",
+      "shape": [
+        32,
+        2048
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "w8_s2",
+      "source": "gluon_optimized/add_rms_norm_w8_s2.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w8_s2.py"
+    },
+    {
+      "case_id": 16,
+      "kind": "small",
+      "shape": [
+        64,
+        4096
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "baseline_retained",
+      "source": "gluon_baseline/small_m64_n4096_bfloat16_t4096_w4.py",
+      "archived_source": "gluon_optimized/final/small_m64_n4096_bfloat16_t4096_w4.py"
+    },
+    {
+      "case_id": 17,
+      "kind": "small",
+      "shape": [
+        128,
+        128
+      ],
+      "dtype": "float32",
+      "layout_id": "w1_s1",
+      "source": "gluon_optimized/add_rms_norm_w1_s1.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w1_s1.py"
+    },
+    {
+      "case_id": 18,
+      "kind": "small",
+      "shape": [
+        64,
+        512
+      ],
+      "dtype": "float32",
+      "layout_id": "w1_s4",
+      "source": "gluon_optimized/add_rms_norm_w1_s4.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w1_s4.py"
+    },
+    {
+      "case_id": 19,
+      "kind": "small",
+      "shape": [
+        64,
+        1024
+      ],
+      "dtype": "float32",
+      "layout_id": "w1_s4",
+      "source": "gluon_optimized/add_rms_norm_w1_s4.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w1_s4.py"
+    },
+    {
+      "case_id": 20,
+      "kind": "small",
+      "shape": [
+        32,
+        2048
+      ],
+      "dtype": "float32",
+      "layout_id": "w4_s4",
+      "source": "gluon_optimized/add_rms_norm_w4_s4.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w4_s4.py"
+    },
+    {
+      "case_id": 21,
+      "kind": "small",
+      "shape": [
+        16,
+        4096
+      ],
+      "dtype": "float32",
+      "layout_id": "w8_s4",
+      "source": "gluon_optimized/add_rms_norm_w8_s4.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_w8_s4.py"
+    },
+    {
+      "case_id": 22,
+      "kind": "loop",
+      "shape": [
+        1,
+        8192
+      ],
+      "dtype": "float16",
+      "layout_id": "loop_t8192_w8_s8",
+      "source": "gluon_optimized/add_rms_norm_loop_t8192_w8_s8.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_loop_t8192_w8_s8.py"
+    },
+    {
+      "case_id": 23,
+      "kind": "loop",
+      "shape": [
+        32,
+        16384
+      ],
+      "dtype": "float16",
+      "layout_id": "baseline_retained",
+      "source": "gluon_baseline/loop_m32_n16384_float16_t4096_w8.py",
+      "archived_source": "gluon_optimized/final/loop_m32_n16384_float16_t4096_w8.py"
+    },
+    {
+      "case_id": 24,
+      "kind": "loop",
+      "shape": [
+        1,
+        8192
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "loop_t8192_w8_s8",
+      "source": "gluon_optimized/add_rms_norm_loop_t8192_w8_s8.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_loop_t8192_w8_s8.py"
+    },
+    {
+      "case_id": 25,
+      "kind": "loop",
+      "shape": [
+        32,
+        16384
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "baseline_retained",
+      "source": "gluon_baseline/loop_m32_n16384_bfloat16_t8192_w8.py",
+      "archived_source": "gluon_optimized/final/loop_m32_n16384_bfloat16_t8192_w8.py"
+    },
+    {
+      "case_id": 26,
+      "kind": "loop",
+      "shape": [
+        200,
+        40999
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "loop_t1024_w8_s1",
+      "source": "gluon_optimized/add_rms_norm_loop_t1024_w8_s1.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_loop_t1024_w8_s1.py"
+    },
+    {
+      "case_id": 27,
+      "kind": "loop",
+      "shape": [
+        32,
+        40999
+      ],
+      "dtype": "float32",
+      "layout_id": "loop_t1024_w16_s1",
+      "source": "gluon_optimized/add_rms_norm_loop_t1024_w16_s1.py",
+      "archived_source": "gluon_optimized/final/add_rms_norm_loop_t1024_w16_s1.py"
+    }
+  ]
+}

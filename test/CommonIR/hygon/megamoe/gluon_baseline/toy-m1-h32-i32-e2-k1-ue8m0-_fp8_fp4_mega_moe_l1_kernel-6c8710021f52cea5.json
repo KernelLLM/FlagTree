@@ -1,0 +1,365 @@
+{
+  "case": {
+    "id": "toy-m1-h32-i32-e2-k1-ue8m0",
+    "M": 1,
+    "H": 32,
+    "I": 32,
+    "E": 2,
+    "TOPK": 1,
+    "scale": "ue8m0",
+    "activation_clamp": null,
+    "partition": "control"
+  },
+  "reference_hash": "6c8710021f52cea535e5241b9d697e18987ec774119ba6a1397c42f09a5fe6c3",
+  "helper_hash": "64e253bc2ea2d0226c3aa239e6a8d880a9a88457caf7a1c38287b1279c838b63",
+  "mapped_sites": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 152,
+      "kind": "load",
+      "layout": "gl.SliceLayout(0, gl.BlockedLayout([1, 1], [16, 4], [1, 4], [0, 1]))"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 157,
+      "kind": "load",
+      "layout": "gl.SliceLayout(0, gl.BlockedLayout([1, 1], [16, 4], [1, 4], [0, 1]))"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 180,
+      "kind": "reduce",
+      "layout": "gl.BlockedLayout([1, 1], [16, 4], [1, 4], [0, 1])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 188,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 84,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1, 1], [16, 4], [1, 4], [0, 1])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 99,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1, 1], [16, 4], [1, 4], [0, 1])"
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 315,
+      "kind": "reduce",
+      "layout": "gl.BlockedLayout([1, 1], [16, 4], [1, 4], [0, 1])"
+    }
+  ],
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 150,
+      "end_line": 150,
+      "call": "range",
+      "generated_line": 22,
+      "generated_column": 14
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 188,
+      "end_line": 188,
+      "call": "tl.store",
+      "generated_line": 30,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 139,
+      "end_line": 139,
+      "call": "tl.program_id",
+      "generated_line": 14,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 140,
+      "end_line": 140,
+      "call": "tl.program_id",
+      "generated_line": 15,
+      "generated_column": 28
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 141,
+      "end_line": 141,
+      "call": "tl.program_id",
+      "generated_line": 16,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 144,
+      "end_line": 144,
+      "call": "tl.arange",
+      "generated_line": 18,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 146,
+      "end_line": 146,
+      "call": "tl.load",
+      "generated_line": 19,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 148,
+      "end_line": 148,
+      "call": "tl.zeros",
+      "generated_line": 21,
+      "generated_column": 23
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 143,
+      "end_line": 143,
+      "call": "tl.arange",
+      "generated_line": 17,
+      "generated_column": 77
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 152,
+      "end_line": 156,
+      "call": "tl.load(x_ptr + pid_m * stride_xm + ks * stride_xh, mask=ks < H, other=0.0).to",
+      "generated_line": 24,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 157,
+      "end_line": 161,
+      "call": "tl.load(x_scale_ptr + pid_m * stride_xsm + ks // 32 * stride_xsg, mask=ks < H, other=0.0).to",
+      "generated_line": 25,
+      "generated_column": 31
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 164,
+      "end_line": 179,
+      "call": "_load_fp4_weight",
+      "generated_line": 27,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 180,
+      "end_line": 180,
+      "call": "tl.sum",
+      "generated_line": 28,
+      "generated_column": 48
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 152,
+      "end_line": 156,
+      "call": "tl.load",
+      "generated_line": 24,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 157,
+      "end_line": 161,
+      "call": "tl.load",
+      "generated_line": 25,
+      "generated_column": 31
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 151,
+      "end_line": 151,
+      "call": "core.full",
+      "generated_line": 36,
+      "generated_column": 11
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 84,
+      "end_line": 88,
+      "call": "tl.load(packed_ptr + packed_offsets, mask=(n_offsets[:, None] < N) & (k_offsets[None, :] < K), other=0).to",
+      "generated_line": 42,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 91,
+      "end_line": 91,
+      "call": "tl.where",
+      "generated_line": 45,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 92,
+      "end_line": 92,
+      "call": "_decode_e2m1",
+      "generated_line": 46,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 99,
+      "end_line": 103,
+      "call": "tl.load",
+      "generated_line": 48,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 104,
+      "end_line": 104,
+      "call": "_ue8m0_to_f32",
+      "generated_line": 49,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 104,
+      "end_line": 104,
+      "call": "raw_scale.to",
+      "generated_line": 49,
+      "generated_column": 99
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 84,
+      "end_line": 88,
+      "call": "tl.load",
+      "generated_line": 42,
+      "generated_column": 26
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 311,
+      "end_line": 311,
+      "call": "_pick_sum_dtype",
+      "generated_line": 55,
+      "generated_column": 30
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 315,
+      "end_line": 315,
+      "call": "core.reduce",
+      "generated_line": 58,
+      "generated_column": 11
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 314,
+      "end_line": 314,
+      "call": "input.to",
+      "generated_line": 57,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 59,
+      "end_line": 59,
+      "call": "tl.where",
+      "generated_line": 65,
+      "generated_column": 11
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 38,
+      "end_line": 58,
+      "call": "tl.where",
+      "generated_line": 64,
+      "generated_column": 23
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 41,
+      "end_line": 57,
+      "call": "tl.where",
+      "generated_line": 64,
+      "generated_column": 81
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 44,
+      "end_line": 56,
+      "call": "tl.where",
+      "generated_line": 64,
+      "generated_column": 139
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 47,
+      "end_line": 55,
+      "call": "tl.where",
+      "generated_line": 64,
+      "generated_column": 197
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 50,
+      "end_line": 54,
+      "call": "tl.where",
+      "generated_line": 64,
+      "generated_column": 255
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 53,
+      "end_line": 53,
+      "call": "tl.where",
+      "generated_line": 64,
+      "generated_column": 313
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 53,
+      "end_line": 53,
+      "call": "tl.where",
+      "generated_line": 64,
+      "generated_column": 371
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 32,
+      "end_line": 32,
+      "call": "tl.exp2",
+      "generated_line": 70,
+      "generated_column": 11
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/fused/fp8_fp4_mega_moe.py",
+      "line": 32,
+      "end_line": 32,
+      "call": "x.to",
+      "generated_line": 70,
+      "generated_column": 19
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 299,
+      "end_line": 299,
+      "call": "in_dtype.is_int_signed",
+      "generated_line": 78,
+      "generated_column": 7
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 301,
+      "end_line": 301,
+      "call": "in_dtype.is_int_unsigned",
+      "generated_line": 80,
+      "generated_column": 9
+    }
+  ]
+}

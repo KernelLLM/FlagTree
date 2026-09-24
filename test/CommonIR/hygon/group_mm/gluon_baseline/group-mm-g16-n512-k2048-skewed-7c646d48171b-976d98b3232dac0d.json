@@ -1,0 +1,249 @@
+{
+  "case": {
+    "op": "group_mm",
+    "groups": 16,
+    "n": 512,
+    "k": 2048,
+    "dtype": "bfloat16",
+    "profile": "skewed",
+    "group_sizes": [
+      4096,
+      2048,
+      1024,
+      513,
+      1,
+      2,
+      3,
+      5,
+      7,
+      9,
+      13,
+      17,
+      23,
+      31,
+      1,
+      2
+    ],
+    "m": 7795,
+    "id": "group-mm-g16-n512-k2048-skewed-7c646d48171b"
+  },
+  "reference_hash": "976d98b3232dac0d4fe257202bf5a5a3ff52e3ba56e78541fc95894b19592a4d",
+  "helper_hash": "64e253bc2ea2d0226c3aa239e6a8d880a9a88457caf7a1c38287b1279c838b63",
+  "mapped_sites": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 379,
+      "kind": "dot",
+      "layout": "__h81.AMDMFMALayout(version=3, instr_shape=[16, 16, 16], transposed=False, warps_per_cta=[2, 4], element_bitwidth=32, tiles_per_warp=None)",
+      "k_width": [
+        4,
+        4
+      ],
+      "operand_dtypes": [
+        "bf16",
+        "bf16"
+      ],
+      "result_dtype": "f32"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 392,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1, 8], [2, 32], [8, 1], [1, 0])"
+    }
+  ],
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 355,
+      "end_line": 355,
+      "call": "tl.range",
+      "generated_line": 21,
+      "generated_column": 21
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 348,
+      "end_line": 348,
+      "call": "tl.num_programs",
+      "generated_line": 15,
+      "generated_column": 30
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 349,
+      "end_line": 349,
+      "call": "tl.program_id",
+      "generated_line": 16,
+      "generated_column": 28
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 350,
+      "end_line": 350,
+      "call": "tl.cdiv",
+      "generated_line": 17,
+      "generated_column": 31
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 356,
+      "end_line": 356,
+      "call": "tl.load(offs + group_idx).to",
+      "generated_line": 22,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 358,
+      "end_line": 358,
+      "call": "tl.cdiv",
+      "generated_line": 24,
+      "generated_column": 35
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 364,
+      "end_line": 364,
+      "call": "tl.range",
+      "generated_line": 29,
+      "generated_column": 21
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 376,
+      "end_line": 376,
+      "call": "tl.range",
+      "generated_line": 36,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 356,
+      "end_line": 356,
+      "call": "tl.load",
+      "generated_line": 22,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 366,
+      "end_line": 368,
+      "call": "grouped_launch",
+      "generated_line": 31,
+      "generated_column": 56
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 374,
+      "end_line": 374,
+      "call": "tl.zeros",
+      "generated_line": 35,
+      "generated_column": 43
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 376,
+      "end_line": 376,
+      "call": "tl.cdiv",
+      "generated_line": 36,
+      "generated_column": 75
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 381,
+      "end_line": 381,
+      "call": "accumulator.to",
+      "generated_line": 40,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 384,
+      "end_line": 384,
+      "call": "c_desc.store",
+      "generated_line": 42,
+      "generated_column": 20
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 392,
+      "end_line": 392,
+      "call": "tl.store",
+      "generated_line": 48,
+      "generated_column": 20
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 377,
+      "end_line": 377,
+      "call": "a_desc.load",
+      "generated_line": 37,
+      "generated_column": 37
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 378,
+      "end_line": 378,
+      "call": "b_desc.load",
+      "generated_line": 38,
+      "generated_column": 37
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 379,
+      "end_line": 379,
+      "call": "tl.dot",
+      "generated_line": 39,
+      "generated_column": 47
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 386,
+      "end_line": 386,
+      "call": "tl.arange",
+      "generated_line": 44,
+      "generated_column": 68
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 387,
+      "end_line": 387,
+      "call": "tl.arange",
+      "generated_line": 45,
+      "generated_column": 68
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 50,
+      "end_line": 50,
+      "call": "tl.cdiv",
+      "generated_line": 62,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 51,
+      "end_line": 51,
+      "call": "tl.cdiv",
+      "generated_line": 63,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems/src/flag_gems/ops/group_gemm.py",
+      "line": 55,
+      "end_line": 55,
+      "call": "tl.minimum",
+      "generated_line": 66,
+      "generated_column": 30
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 151,
+      "end_line": 151,
+      "call": "core.full",
+      "generated_line": 75,
+      "generated_column": 11
+    }
+  ]
+}

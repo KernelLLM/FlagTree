@@ -1,0 +1,368 @@
+{
+  "reference_hash": "f992c1168b04941b39b1e40ec064ad06fa10f32717e03291eafaf9ef997a6679",
+  "helper_hash": "b0cc7a376fae475a54a624352c5f0d47007b582aaa4a6392dad821553c4b4518",
+  "mapped_sites": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 89,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 94,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 119,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 120,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    }
+  ],
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 70,
+      "end_line": 70,
+      "call": "range",
+      "generated_line": 22,
+      "generated_column": 19
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 61,
+      "end_line": 61,
+      "call": "tl.program_id",
+      "generated_line": 14,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 62,
+      "end_line": 62,
+      "call": "tl.program_id",
+      "generated_line": 15,
+      "generated_column": 30
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 63,
+      "end_line": 63,
+      "call": "tl.load",
+      "generated_line": 16,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 116,
+      "end_line": 116,
+      "call": "tl.static_range",
+      "generated_line": 59,
+      "generated_column": 22
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 65,
+      "end_line": 65,
+      "call": "tl.load",
+      "generated_line": 18,
+      "generated_column": 34
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 74,
+      "end_line": 76,
+      "call": "tl.load",
+      "generated_line": 26,
+      "generated_column": 38
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 87,
+      "end_line": 87,
+      "call": "tl.static_range",
+      "generated_line": 32,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 96,
+      "end_line": 96,
+      "call": "tl.static_range",
+      "generated_line": 41,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 113,
+      "end_line": 113,
+      "call": "tl.store",
+      "generated_line": 57,
+      "generated_column": 12
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 115,
+      "end_line": 115,
+      "call": "(token_data + nope_dim).to",
+      "generated_line": 58,
+      "generated_column": 32
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 120,
+      "end_line": 120,
+      "call": "tl.store",
+      "generated_line": 63,
+      "generated_column": 12
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 94,
+      "end_line": 94,
+      "call": "tl.store",
+      "generated_line": 39,
+      "generated_column": 16
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 103,
+      "end_line": 103,
+      "call": "tl.store",
+      "generated_line": 48,
+      "generated_column": 16
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 108,
+      "end_line": 108,
+      "call": "tl.load",
+      "generated_line": 52,
+      "generated_column": 32
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 109,
+      "end_line": 109,
+      "call": "x_u8.to(tl.float8e4nv, bitcast=True).to",
+      "generated_line": 53,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 110,
+      "end_line": 110,
+      "call": "tl.load",
+      "generated_line": 54,
+      "generated_column": 35
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 111,
+      "end_line": 111,
+      "call": "tl.exp2",
+      "generated_line": 55,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 113,
+      "end_line": 113,
+      "call": "x.to",
+      "generated_line": 57,
+      "generated_column": 71
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 115,
+      "end_line": 115,
+      "call": "tl.pointer_type",
+      "generated_line": 58,
+      "generated_column": 89
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 119,
+      "end_line": 119,
+      "call": "tl.load",
+      "generated_line": 62,
+      "generated_column": 32
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 77,
+      "end_line": 77,
+      "call": "physical_block.to",
+      "generated_line": 27,
+      "generated_column": 64
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 89,
+      "end_line": 89,
+      "call": "tl.load",
+      "generated_line": 34,
+      "generated_column": 36
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 90,
+      "end_line": 90,
+      "call": "x_u8.to(tl.float8e4nv, bitcast=True).to",
+      "generated_line": 35,
+      "generated_column": 37
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 91,
+      "end_line": 91,
+      "call": "tl.load",
+      "generated_line": 36,
+      "generated_column": 39
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 92,
+      "end_line": 92,
+      "call": "tl.exp2",
+      "generated_line": 37,
+      "generated_column": 37
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 94,
+      "end_line": 94,
+      "call": "x.to",
+      "generated_line": 39,
+      "generated_column": 75
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 98,
+      "end_line": 98,
+      "call": "tl.load",
+      "generated_line": 43,
+      "generated_column": 36
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 99,
+      "end_line": 99,
+      "call": "x_u8.to(tl.float8e4nv, bitcast=True).to",
+      "generated_line": 44,
+      "generated_column": 37
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 100,
+      "end_line": 100,
+      "call": "tl.load",
+      "generated_line": 45,
+      "generated_column": 39
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 101,
+      "end_line": 101,
+      "call": "tl.exp2",
+      "generated_line": 46,
+      "generated_column": 37
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 103,
+      "end_line": 103,
+      "call": "x.to",
+      "generated_line": 48,
+      "generated_column": 75
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 106,
+      "end_line": 106,
+      "call": "tl.arange",
+      "generated_line": 50,
+      "generated_column": 86
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 117,
+      "end_line": 117,
+      "call": "tl.arange",
+      "generated_line": 60,
+      "generated_column": 57
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 88,
+      "end_line": 88,
+      "call": "tl.arange",
+      "generated_line": 33,
+      "generated_column": 90
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 97,
+      "end_line": 97,
+      "call": "tl.arange",
+      "generated_line": 42,
+      "generated_column": 90
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 109,
+      "end_line": 109,
+      "call": "x_u8.to",
+      "generated_line": 53,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 111,
+      "end_line": 111,
+      "call": "encoded.to",
+      "generated_line": 55,
+      "generated_column": 41
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 90,
+      "end_line": 90,
+      "call": "x_u8.to",
+      "generated_line": 35,
+      "generated_column": 37
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 92,
+      "end_line": 92,
+      "call": "encoded.to",
+      "generated_line": 37,
+      "generated_column": 45
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 99,
+      "end_line": 99,
+      "call": "x_u8.to",
+      "generated_line": 44,
+      "generated_column": 37
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group5_20260913/dequantize_and_gather_k_cache/original/operator.py",
+      "line": 101,
+      "end_line": 101,
+      "call": "encoded.to",
+      "generated_line": 46,
+      "generated_column": 45
+    }
+  ]
+}

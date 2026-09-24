@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "operator": "fp8_fp4_paged_mqa_logits",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+  "sources": [
+    "hard81/group5/fp8_fp4_paged_mqa_logits",
+    "hard81/group5/fp8_fp4_paged_mqa_logits",
+    "hard81/full05/fp8_fp4_paged_mqa_logits"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "fp8_fp4_paged_mqa_logits/tle_source/operator.py",
+      "source": "hard81/group5/fp8_fp4_paged_mqa_logits/original/operator.py",
+      "sha256": "eb81d1ae1389a64b3d7bc501b005135b98153b93497a38de2c2ee3e7db782579"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "fp8_fp4_paged_mqa_logits/gluon_baseline/kernel.py",
+      "source": "hard81/group5/fp8_fp4_paged_mqa_logits/gluon_baseline/kernel.py",
+      "sha256": "0d070021e8c3e84a0780f1deab4973e961c87ee55aa6c6dfbb2fed2d15ae0f69"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "fp8_fp4_paged_mqa_logits/gluon_baseline/metadata.json",
+      "source": "hard81/group5/fp8_fp4_paged_mqa_logits/gluon_baseline/metadata.json",
+      "sha256": "56eb846ff7618326a4df9ece77c5ae7afd53afad2d5deaa71b617592f9f0c594"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "fp8_fp4_paged_mqa_logits/gluon_baseline/runtime.metadata.json",
+      "source": "hard81/group5/fp8_fp4_paged_mqa_logits/gluon_baseline/runtime.metadata.json",
+      "sha256": "35906c3cd8b5fe371a683505675ccda75c9952fcb3007c3d48adbfad2d10ff4f"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "fp8_fp4_paged_mqa_logits/gluon_optimized/full05/kernel.py",
+      "source": "hard81/full05/fp8_fp4_paged_mqa_logits/gluon_optimized/kernel.py",
+      "sha256": "0ac1d356db6619bc804a02bbe389c6325c2cce316f87e19740745b6388543c47"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "operator": "mv",
+  "library": "FlagGems",
+  "github_path": "https://github.com/FlagOpen/FlagGems/blob/main/src/flag_gems/ops/mv.py",
+  "sources": [
+    "hard81/group6/mv",
+    "hard81/group6/mv"
+  ],
+  "multiple_sources": false,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "mv/tle_source/mv.py",
+      "source": "hard81/group6/mv/original/mv.py",
+      "sha256": "dd31bc55f0112ce3a6819bfc7585c5447ec16a4bdc8e1f462e5742c225e85494"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mv/gluon_baseline/__init__.py",
+      "source": "hard81/group6/mv/gluon_baseline/__init__.py",
+      "sha256": "7b7359c75660ed2d2986a40274e9e82c976831d52324671f5ee921f53473de53"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mv/gluon_baseline/mv_kernel_dbcdfd7e06_c6b3e2adcd4a.py",
+      "source": "hard81/group6/mv/gluon_baseline/mv_kernel_dbcdfd7e06_c6b3e2adcd4a.py",
+      "sha256": "3bf44d88c3cc2cd4de21c8daa49d212e4ce8448c6eb473bb86f885e386118eec"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mv/gluon_optimized/final/mv_bn1_col_w1.py",
+      "source": "hard81/group6/mv/gluon_optimized/final/mv_bn1_col_w1.py",
+      "sha256": "3f1cda1b6712657a2ccf00e1222f99b7b292b83aab9de9e36de4ae2b6160174d"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mv/gluon_optimized/final/mv_exact_bn16_bm128_w4.py",
+      "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn16_bm128_w4.py",
+      "sha256": "c1649269674da7d20468196044f7f85cf3774a3f69869add67e2fa7431ee1d93"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mv/gluon_optimized/final/mv_exact_bn16_bm256_w8.py",
+      "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn16_bm256_w8.py",
+      "sha256": "2b54a625e47759395b35e135647f503a75491d8e5f2a8ddf9661c981d984d22f"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mv/gluon_optimized/final/mv_exact_bn16_bm64_w4.py",
+      "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn16_bm64_w4.py",
+      "sha256": "fa8326036d719cfcdea450683e9eb970de4d52c6e3908f0bfce20d160e4d10d2"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mv/gluon_optimized/final/mv_exact_bn2_bm256_w4.py",
+      "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn2_bm256_w4.py",
+      "sha256": "4b907b52375e37b858824cc8a5a3bfd1fbedde0713fb200cc1ab342cf1baf5d2"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mv/gluon_optimized/final/mv_exact_bn8_bm256_w8.py",
+      "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn8_bm256_w8.py",
+      "sha256": "389996abc3bb7c7755fe2cd302f4efe239b46cf3d9e223af026dfc21dbbe5ad2"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

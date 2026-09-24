@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "operator": "fused_inv_rope_fp8_quant",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+  "sources": [
+    "hard81/group1/fused_inv_rope_fp8_quant",
+    "hard81/group1/fused_inv_rope_fp8_quant",
+    "hard81/full05/fused_inv_rope_fp8_quant"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "fused_inv_rope_fp8_quant/tle_source/fused_inv_rope_fp8_quant.py",
+      "source": "hard81/group1/fused_inv_rope_fp8_quant/original/fused_inv_rope_fp8_quant.py",
+      "sha256": "e190d13c4a702c07ac1b1cb9a6d5f51c8df5ee85dbbda9da973206ca483d889d"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "fused_inv_rope_fp8_quant/gluon_baseline/export-metadata.json",
+      "source": "hard81/group1/fused_inv_rope_fp8_quant/gluon_baseline/export-metadata.json",
+      "sha256": "dc846666dc609905f500947f906d853cfa45cca75adaf7055794c35547c8e613"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "fused_inv_rope_fp8_quant/gluon_baseline/kernel.py",
+      "source": "hard81/group1/fused_inv_rope_fp8_quant/gluon_baseline/kernel.py",
+      "sha256": "03a0d23ce88f94ad36225b0fe5dba2891142d6f9f6b4f5fc0eb10b9fa2062687"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "fused_inv_rope_fp8_quant/gluon_optimized/full05/final/large.py",
+      "source": "hard81/full05/fused_inv_rope_fp8_quant/gluon_optimized/final/large.py",
+      "sha256": "8dd2c2763d4db6d330a5fc46614e67231ab418cb6f7d6e1afd631ec4df3a3f69"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "fused_inv_rope_fp8_quant/gluon_optimized/full05/final/policy.py",
+      "source": "hard81/full05/fused_inv_rope_fp8_quant/gluon_optimized/final/policy.py",
+      "sha256": "fbf293307f6abb2559dabf6d503f3061eae11a77575243c8a40a605d8d6ed2c6"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "fused_inv_rope_fp8_quant/gluon_optimized/full05/final/small.py",
+      "source": "hard81/full05/fused_inv_rope_fp8_quant/gluon_optimized/final/small.py",
+      "sha256": "a923e45fd24f26c9b6f26d2c39c7ad05bbc2da37d8837895ad4a5e1366f2bf5f"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

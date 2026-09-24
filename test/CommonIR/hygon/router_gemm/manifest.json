@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "operator": "router_gemm",
+  "library": "FlagGems",
+  "github_path": "https://github.com/FlagOpen/FlagGems/blob/main/src/flag_gems/ops/router_gemm.py",
+  "sources": [
+    "hard81/group2/router_gemm",
+    "hard81/group2/router_gemm"
+  ],
+  "multiple_sources": false,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "router_gemm/tle_source/generated/mm.py",
+      "source": "hard81/group2/router_gemm/original/generated/mm.py",
+      "sha256": "d37eb3ca6511b79340f2c199428873baf7d1e704f34146e154c61c1801aa8d89"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-dac291f31ab8a83f.json",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-dac291f31ab8a83f.json",
+      "sha256": "89689beef04a6cb4e09934c9698528562cfe0beccac6732b0fb9a0ef8152d665"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-dac291f31ab8a83f.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-dac291f31ab8a83f.py",
+      "sha256": "dbfba81ceb6f9f84be3462d373cf965e0d2c7fc2f8b788a0240e8b90e993107a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m1024-n256-k7168-61c0e18a23da-b1e042afc6e9b312.json",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m1024-n256-k7168-61c0e18a23da-b1e042afc6e9b312.json",
+      "sha256": "5adf6e0911d97e499af1737d14797f4eb59465fe9825375a29e42ded48a880a0"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m1024-n256-k7168-61c0e18a23da-b1e042afc6e9b312.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m1024-n256-k7168-61c0e18a23da-b1e042afc6e9b312.py",
+      "sha256": "8a8b16c3932252fd65de7139eb007642d97ee8a93c15c034ffe5a9a590035ebc"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m128-n256-k7168-d6be54e7a96e-290e439708e84ea7.json",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m128-n256-k7168-d6be54e7a96e-290e439708e84ea7.json",
+      "sha256": "551f1d9d67cb59f52acf4757d42f7a7e9d8185f285fa675ae3117815b29a457a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m128-n256-k7168-d6be54e7a96e-290e439708e84ea7.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m128-n256-k7168-d6be54e7a96e-290e439708e84ea7.py",
+      "sha256": "cbb1a2d123883b9a76ed98b0e5073c1a08ac0791eec54ee95929133798fb4be4"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m16-n256-k7168-91efb3819721-409a50ed425e3c59.json",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m16-n256-k7168-91efb3819721-409a50ed425e3c59.json",
+      "sha256": "0aab80681c7e314968eca36e2affec2ac3c64eb91c921169aea71212d00b24c7"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m16-n256-k7168-91efb3819721-409a50ed425e3c59.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m16-n256-k7168-91efb3819721-409a50ed425e3c59.py",
+      "sha256": "2a67c91d758261b1f36dd58bc7db9324a425b6fb1a29ea45398fb74497b2c918"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m256-n256-k7168-a6f349652ff2-290e439708e84ea7.json",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m256-n256-k7168-a6f349652ff2-290e439708e84ea7.json",
+      "sha256": "5ad6091e5fce43536fc810a690ac04bc81d3b2254422e9cf605f26cae208ef35"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m256-n256-k7168-a6f349652ff2-290e439708e84ea7.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m256-n256-k7168-a6f349652ff2-290e439708e84ea7.py",
+      "sha256": "d07d28bbac6641b92fa7b6f08d96ed710b88a9fc27503a0c79e6b78b0703b002"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m32-n256-k7168-25ec8b6abf8f-f9642f52c37804a7.json",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m32-n256-k7168-25ec8b6abf8f-f9642f52c37804a7.json",
+      "sha256": "d09f59baa7f051a31661fd90a2764826d29ea13b1feef89234c2e1ed30bb5a1f"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m32-n256-k7168-25ec8b6abf8f-f9642f52c37804a7.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m32-n256-k7168-25ec8b6abf8f-f9642f52c37804a7.py",
+      "sha256": "8fa60e2b4d002c39a8deb544a40fb7a3c8efa64d583c34c350d05d4aa1f69169"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m512-n256-k7168-d520122fb141-290e439708e84ea7.json",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m512-n256-k7168-d520122fb141-290e439708e84ea7.json",
+      "sha256": "39544b9a232fb4d0bba0d6ebb7a875eca13195f6d153efd332b0927dcb3b1fe2"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m512-n256-k7168-d520122fb141-290e439708e84ea7.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m512-n256-k7168-d520122fb141-290e439708e84ea7.py",
+      "sha256": "3724c153181ac2625c4f974ba72dd5ab3988bf8b566dbadd6948f96e5dbadf74"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m64-n256-k7168-ff9727c42e3a-52008239d1c1b92a.json",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m64-n256-k7168-ff9727c42e3a-52008239d1c1b92a.json",
+      "sha256": "52a07ac1b81097c3da5dd789ff4284936fd821cd9bafc96c1a8ae31a3cedeca9"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m64-n256-k7168-ff9727c42e3a-52008239d1c1b92a.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m64-n256-k7168-ff9727c42e3a-52008239d1c1b92a.py",
+      "sha256": "21627f47f51d6a13d46fa51fdb40c09cf4439365e89feab5b83a92e1a7cf5eaf"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m8-n256-k7168-563ef27b411c-ffbf7b2a1b396975.json",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m8-n256-k7168-563ef27b411c-ffbf7b2a1b396975.json",
+      "sha256": "35c3522907dcaa87587291b59ca665794ed2dc69ec262e099fba8419802e25b5"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router-gemm-m8-n256-k7168-563ef27b411c-ffbf7b2a1b396975.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m8-n256-k7168-563ef27b411c-ffbf7b2a1b396975.py",
+      "sha256": "0bee24b68a563990cc3f2c9aca73f7a1411893c94e136854dc98736abbf781d2"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "router_gemm/gluon_baseline/router_gemm_tle_equivalent.py",
+      "source": "hard81/group2/router_gemm/gluon_baseline/router_gemm_tle_equivalent.py",
+      "sha256": "8e90c32e2792542f14b0f56b4ec92f1088e1f4b64b0a613f52c8bb03e43671de"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-h2_direct_kvector_coupled.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-h2_direct_kvector_coupled.py",
+      "sha256": "b99f9e02ce605c36d77784b961dfa647787001bf36869831f0df6a72e0b0f024"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router-gemm-m1024-n256-k7168-61c0e18a23da-h4_m1024_nwave_kvector.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m1024-n256-k7168-61c0e18a23da-h4_m1024_nwave_kvector.py",
+      "sha256": "9ea4e452353034790d91251f97a2d20d9518e960929954f781e23775904b2e98"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router-gemm-m128-n256-k7168-d6be54e7a96e-h2_direct_kvector_coupled.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m128-n256-k7168-d6be54e7a96e-h2_direct_kvector_coupled.py",
+      "sha256": "649eaf33ff916f2ac7e46d5bb2487a736c48239d02fb74d1a2c059d1b593ca86"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router-gemm-m16-n256-k7168-91efb3819721-h2_direct_kvector_coupled.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m16-n256-k7168-91efb3819721-h2_direct_kvector_coupled.py",
+      "sha256": "ca90dafd2e5a584b5fec805aa85972510f37a10c3ee00f95fe6f07f12c64ac18"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router-gemm-m256-n256-k7168-a6f349652ff2-h2_direct_kvector_coupled.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m256-n256-k7168-a6f349652ff2-h2_direct_kvector_coupled.py",
+      "sha256": "7170e557ec793dfa5745481fc1ce55ce4956c2f6438c8582007c7330453b0ae0"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router-gemm-m32-n256-k7168-25ec8b6abf8f-h2_direct_kvector_coupled.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m32-n256-k7168-25ec8b6abf8f-h2_direct_kvector_coupled.py",
+      "sha256": "8a154b33ee877627470baff82ff940b64eebed95483a92e9334567b2d8d6fbd8"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router-gemm-m512-n256-k7168-d520122fb141-h2_direct_kvector_coupled.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m512-n256-k7168-d520122fb141-h2_direct_kvector_coupled.py",
+      "sha256": "9d2e5a8d41de18ee07347f1f2d954384222f45c98e62261a2b47b737d64b9918"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router-gemm-m64-n256-k7168-ff9727c42e3a-h2_direct_kvector_coupled.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m64-n256-k7168-ff9727c42e3a-h2_direct_kvector_coupled.py",
+      "sha256": "bad76e4c1da3507c08010391e0d4e12032af3e3e8556eca7763af404033841f7"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router-gemm-m8-n256-k7168-563ef27b411c-h2_direct_kvector_coupled.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m8-n256-k7168-563ef27b411c-h2_direct_kvector_coupled.py",
+      "sha256": "bdc19d691cfa7ee7ca60b905305690ed64f461f6170450361221a69bf4531eff"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "router_gemm/gluon_optimized/router_gemm_optimized.py",
+      "source": "hard81/group2/router_gemm/gluon_optimized/router_gemm_optimized.py",
+      "sha256": "80de834d7eef46e885041799a4c90d2c92207465c76466405b33b558638deb7a"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

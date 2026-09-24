@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "operator": "rms_norm",
+  "library": "FlagGems",
+  "github_path": "https://github.com/FlagOpen/FlagGems/blob/main/src/flag_gems/ops/rms_norm.py",
+  "sources": [
+    "hard81/group6/rms_norm",
+    "hard81/group6/rms_norm"
+  ],
+  "multiple_sources": false,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "rms_norm/tle_source/rms_norm.py",
+      "source": "hard81/group6/rms_norm/original/rms_norm.py",
+      "sha256": "58407466be597c05442b3288c95abb2c33e47f0f6b98cff624b2f2e8a00823e3"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/__init__.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/__init__.py",
+      "sha256": "5a464800c800e9ae5f4cd5d788600c7dc4c1337263486960fcf11ec153bb7f24"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_grad_dw_kernel_7efa9d58a9_9821b985d821.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_grad_dw_kernel_7efa9d58a9_9821b985d821.py",
+      "sha256": "4704dca9824314c2422eaaf1556c2a774dcc257f21bc2d6a43a327d50a5fb2c2"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_grad_dx_kernel_99b74d3bae_248f54e5234a.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_grad_dx_kernel_99b74d3bae_248f54e5234a.py",
+      "sha256": "b2ace6faea8c48420ae36b40b73d1bd51afeef0d15cce7a9baf4f7c82d2b3f69"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_kernel_0aaa02d6c8_4a682d6d42c7.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_kernel_0aaa02d6c8_4a682d6d42c7.py",
+      "sha256": "8d361b74346dc2b4cb3fea48324b98ef8d5e5a556804af5c777b9ad735ec32e0"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t1024_w16.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t1024_w16.py",
+      "sha256": "cef9c8606accc2d76fa7e75f9b1b71defd52b2a289fe38d306751c89f860cdcc"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t1024_w4.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t1024_w4.py",
+      "sha256": "c0fdd32e8f1fbcb295b7b1113f0cfd90a2fb4f4c96a55149c5e24d2179b7d378"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t1024_w8.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t1024_w8.py",
+      "sha256": "00609b985783f5686f3e7d43fddd8ab8a943d9a85b731d429f801de34ec69036"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t2048_w16.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t2048_w16.py",
+      "sha256": "c1177cccfaad6e127a565fb048b3bc08ab55525da12a300d8a87d164928f8cd7"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t2048_w4.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t2048_w4.py",
+      "sha256": "9420eb70ffca33da28fc093e376adf33cd13ebf74935424af5c4206e1576a76c"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t2048_w8.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t2048_w8.py",
+      "sha256": "b2f5cb3940e7ea19fa4de03088ea412e1183fe09b7f5d4dee3e0011f4cf85065"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t4096_w16.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t4096_w16.py",
+      "sha256": "bc989032565c6ed83552887ffbff72f373c28c93f84a797ddc542f6d47f2d5d2"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t4096_w4.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t4096_w4.py",
+      "sha256": "547625cbfcd5153141dde3084242310286ad6b209596ebe5c993f077dd067d2f"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t4096_w8.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t4096_w8.py",
+      "sha256": "2a264d0932d09413820209f72e3a4d4ea491e6b83a48213984d7ab8245b5e0cf"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t8192_w16.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t8192_w16.py",
+      "sha256": "a496d8250c3043a634b706176199a4ed033b5f5cefbf6bff90ce42338b111bee"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t8192_w4.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t8192_w4.py",
+      "sha256": "bebdf5b8400138b9bbbdbd091ca51af028b6d0b3c4d144f3b90ee704b372a84d"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rms_norm/gluon_baseline/rms_norm_loop_t8192_w8.py",
+      "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t8192_w8.py",
+      "sha256": "916aa6f56afde118000041de49930f9f1937f79e07129b73cb9c82fa7e4c2e23"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "rms_norm/gluon_optimized/optimized_rms_norm.py",
+      "source": "hard81/group6/rms_norm/gluon_optimized/optimized_rms_norm.py",
+      "sha256": "6e56b2cc44709e4e0ee94e5908532aad83664beae4a67ab1410522daedb3746c"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

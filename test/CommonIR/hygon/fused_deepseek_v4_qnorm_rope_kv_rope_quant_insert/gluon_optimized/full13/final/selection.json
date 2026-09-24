@@ -1,0 +1,17 @@
+{
+  "candidate": "quant2d_w1",
+  "source": "../candidates/quant2d_w1.py",
+  "layout": {
+    "shape": [8, 64],
+    "size_per_thread": [1, 8],
+    "threads_per_warp": [8, 8],
+    "warps_per_cta": [1, 1],
+    "order": [1, 0]
+  },
+  "launch": {
+    "num_warps": 1,
+    "num_stages": 2,
+    "waves_per_eu": 1
+  },
+  "reason": "Best measured balance: two total reductions and lower instruction count; smaller quant batches reduced VGPR but were slower."
+}

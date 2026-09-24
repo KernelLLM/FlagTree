@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "operator": "mhc_bwd",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/mhc_bwd.py",
+  "sources": [
+    "hard81/group8/mhc_bwd",
+    "hard81/group8/mhc_bwd"
+  ],
+  "multiple_sources": false,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "mhc_bwd/tle_source/mhc_bwd.py",
+      "source": "hard81/group8/mhc_bwd/original/mhc_bwd.py",
+      "sha256": "d94921fc706df2297ce093976be1635b69cffeeda77b0a00df7bc476b95dd633"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_bwd/gluon_baseline/mhc_bwd_kernel_n4.json",
+      "source": "hard81/group8/mhc_bwd/gluon_baseline/mhc_bwd_kernel_n4.json",
+      "sha256": "d26dac9e907db6404065f23c9814c7e56715805188eb934c87ea85bf71927f62"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "mhc_bwd/gluon_baseline/mhc_bwd_kernel_n4.py",
+      "source": "hard81/group8/mhc_bwd/gluon_baseline/mhc_bwd_kernel_n4.py",
+      "sha256": "7d2a45e7835d093d124ef728f429129f26aa5d644fdefe62fba5c3a810196d32"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mhc_bwd/gluon_optimized/final-layout.json",
+      "source": "hard81/group8/mhc_bwd/gluon_optimized/final-layout.json",
+      "sha256": "3ab028510470176f2061cdeb85966ceea5d15c683c1dd3dd3a41abd952149686"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mhc_bwd/gluon_optimized/final.py",
+      "source": "hard81/group8/mhc_bwd/gluon_optimized/final.py",
+      "sha256": "0a7973e8fd0996ddb4a197f93d15cda5df23ce8398d7793cfd41d782f492ef41"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "mhc_bwd/gluon_optimized/manifest.json",
+      "source": "hard81/group8/mhc_bwd/gluon_optimized/manifest.json",
+      "sha256": "4361c738559e173bcec58597e6e433be026a98b5c34da3d869d4fa878476f2a1"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

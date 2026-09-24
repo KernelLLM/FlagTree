@@ -1,0 +1,10 @@
+{
+  "source": "final.py",
+  "equivalent_source": "b64_w1_s1.py",
+  "block_s": 64,
+  "num_warps": 1,
+  "num_stages": 2,
+  "waves_per_eu": 1,
+  "layout": [[1], [64], [1], [0]],
+  "applies_to": [256, 1024, 4096, 65536]
+}

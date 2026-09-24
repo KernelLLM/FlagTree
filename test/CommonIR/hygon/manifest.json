@@ -1,0 +1,2446 @@
+{
+  "schema_version": 1,
+  "output_root": "/home/li/dcu/op_gluon",
+  "source_root": "/home/li/dcu/hard81",
+  "operators": [
+    {
+      "schema_version": 1,
+      "operator": "add_rms_norm",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/add_rms_norm.py",
+      "sources": [
+        "hard81/group6/add_rms_norm",
+        "hard81/group6/add_rms_norm"
+      ],
+      "multiple_sources": false,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "add_rms_norm/tle_source/add_rms_norm.py",
+          "source": "hard81/group6/add_rms_norm/original/add_rms_norm.py",
+          "sha256": "979a118b11953a18e4a8aaa6810535f4f60ad2480958a7f2fafddd12ae413030"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/__init__.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/__init__.py",
+          "sha256": "0a6fea65f18dfd9319a07f20007bf492000980cfcb408f2288375118c9147698"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/add_rms_norm_kernel_053039aa3c_082617045006.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/add_rms_norm_kernel_053039aa3c_082617045006.py",
+          "sha256": "62b62229da46c62756f38979d7c76003e80041a384600e5bbf5efe17083309cd"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/loop_m1_n8192_bfloat16_t8192_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m1_n8192_bfloat16_t8192_w4.py",
+          "sha256": "2a4f314b424d81cb903c32ec3cfef201c0fba7fc1d60675c613217fdb6347554"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/loop_m1_n8192_float16_t8192_w8.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m1_n8192_float16_t8192_w8.py",
+          "sha256": "a9134b60314a1d50d5ffa5865eae7f7afb28a8b88c604e6a9b25f3438da64eb1"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/loop_m200_n40999_bfloat16_t1024_w16.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m200_n40999_bfloat16_t1024_w16.py",
+          "sha256": "dc35459292e00563d727621ed5e75f509a039ee619851584da71af8a1a0677d3"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/loop_m32_n16384_bfloat16_t8192_w8.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m32_n16384_bfloat16_t8192_w8.py",
+          "sha256": "fd5895c33ef174bf831acad7eb53927f52c82cd1a970fdb2ff8620a3f8f1327e"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/loop_m32_n16384_float16_t4096_w8.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m32_n16384_float16_t4096_w8.py",
+          "sha256": "f13badd083057cb0afd7ce6e66a9a4a7c7b177a270d7252e29662c7b31e7f104"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/loop_m32_n40999_float32_t1024_w16.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/loop_m32_n40999_float32_t1024_w16.py",
+          "sha256": "06b817edbdcfae700eb2e9b1838eba128d90db8b55fab0ce1e31cce559a1a2fa"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m128_n128_bfloat16_t128_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m128_n128_bfloat16_t128_w4.py",
+          "sha256": "0e5c7a6f97d009f35fd0bcdf5d6ca3fa0993dc7e3ddb747d262051fe9d9b3bb5"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m128_n128_float16_t128_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m128_n128_float16_t128_w4.py",
+          "sha256": "dfe2923d33af746baaf07a713819f29078bedf51eadb5af7eafddf8ee0aff236"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m128_n128_float32_t128_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m128_n128_float32_t128_w4.py",
+          "sha256": "3c0c40e339cfd8cc1785c370789fe4ac356a45174d83c39788aed45e490b6af4"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m16_n4096_float32_t4096_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m16_n4096_float32_t4096_w4.py",
+          "sha256": "0a356931bbab7ec935049e2201080264940a31b3285cb2b2029a5acb871ae56c"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m1_n1024_bfloat16_t1024_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m1_n1024_bfloat16_t1024_w4.py",
+          "sha256": "f11823958078fcd3b338c3d7ab0da08afc1627aec99facd354ca59ce75f9733a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m1_n1024_float16_t1024_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m1_n1024_float16_t1024_w4.py",
+          "sha256": "100519bbb134401e347a0637c6bcffe595853506cbd517f70f4317875543b0e2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m1_n128_bfloat16_t128_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m1_n128_bfloat16_t128_w4.py",
+          "sha256": "cad3067f48e0a1eb714712b6e4b4b3901b1521169414e50f06f39e943f916341"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m256_n1024_bfloat16_t1024_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m256_n1024_bfloat16_t1024_w4.py",
+          "sha256": "eb7233e3c2f928fe5a1c8c3b1bc55d6bba779ce248701721b6129fc03bd92818"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m256_n1024_float16_t1024_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m256_n1024_float16_t1024_w4.py",
+          "sha256": "bd9ed84bc5c7339d5d28f6e7af4c58b33faa20252a9650a374f84e1116202a6d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m2_n32_float16_t32_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m2_n32_float16_t32_w4.py",
+          "sha256": "27ed29dfb65e1158f9767aa624fc3433daed56c25419a83a4734010bf43583ca"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m32_n2048_bfloat16_t2048_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m32_n2048_bfloat16_t2048_w4.py",
+          "sha256": "0b06289c70a8d5f698dd0cbe4b23ed68933f2d171af333ad2a12a4fdc58ba842"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m32_n2048_float16_t2048_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m32_n2048_float16_t2048_w4.py",
+          "sha256": "23659a1a39ce7fe3f6f237c4d9109b9b1f96e81a556665f2276922e179260d0b"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m32_n2048_float32_t2048_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m32_n2048_float32_t2048_w4.py",
+          "sha256": "b828ea0df9a34267cb1793748cc50c87e4bf015a478afef8076b4e6ed20eaab2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m512_n512_bfloat16_t512_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m512_n512_bfloat16_t512_w4.py",
+          "sha256": "f6152aadd950e434299618bc5fd654b5585d7f33e36d55992414da8eceac7669"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m64_n1024_bfloat16_t1024_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n1024_bfloat16_t1024_w4.py",
+          "sha256": "1057a916d713da32b28029f7a99772c3c4eb67c0baa460b7a72a4ff9895f2767"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m64_n1024_float16_t1024_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n1024_float16_t1024_w4.py",
+          "sha256": "4bbc233e591482f3a367174b6fb59ea0c4be0f789c80c84e370caa12b6ee149c"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m64_n1024_float32_t1024_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n1024_float32_t1024_w4.py",
+          "sha256": "c10944bdd9c39f55d1971c06e5b5d9a43a76901eb2407faf9cb694afdd155e47"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m64_n4096_bfloat16_t4096_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n4096_bfloat16_t4096_w4.py",
+          "sha256": "2bf36515b3a00de5b135665941fa19a8d833f6be0f4d95bdbae3be772fe39a84"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m64_n4096_float16_t4096_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n4096_float16_t4096_w4.py",
+          "sha256": "3fcc737f4fff86231d1f2308954ba4c69f2200f766c57ecf24c99ceee4945f9e"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m64_n512_bfloat16_t512_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n512_bfloat16_t512_w4.py",
+          "sha256": "da43a0276bf302352a8adf9de48b37ae57fd2b4e8dc0874d6fb29d6176509dff"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m64_n512_float16_t512_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n512_float16_t512_w4.py",
+          "sha256": "7500e9844611d36128533f29db63153d074e114f4dc58e3f2cfe04037bee054f"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "add_rms_norm/gluon_baseline/small_m64_n512_float32_t512_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_baseline/small_m64_n512_float32_t512_w4.py",
+          "sha256": "15a6c4feaaef2d51c2057809ee8e19f4730128d0f7a0fe8269caf5fab52f58ba"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t1024_w16_s1.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t1024_w16_s1.py",
+          "sha256": "7b22f9c997f6d82b7b1f0303cf56094848ee0ac245c7dbbc02a56f9278350f72"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t1024_w8_s1.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t1024_w8_s1.py",
+          "sha256": "92a0aa0be4ed1264005830ed6343efd6951353ef426834c229e5f6bd7c5c553d"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t8192_w8_s8.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_loop_t8192_w8_s8.py",
+          "sha256": "2c8b97a527786f70f0cea23b29971b3bba86e8abe2c45bd6819d9847a62bb578"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s1.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s1.py",
+          "sha256": "6dc92ebb07cc558f35518c5d8da69921b63a2dcac6e022d5767d4f7711e8c1b9"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s4.py",
+          "sha256": "b1d504f77e6df39319d1d79edf4217adbc6ab2237ba3609dc14ad5483c18bfc8"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s8.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w1_s8.py",
+          "sha256": "516617b973d51e6facc037ba689fa8c5cb0ad1ccd2506b7727ad5ad5b0c75af5"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w4_s2.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w4_s2.py",
+          "sha256": "12a0c693f981277cda489623101cf31d9d78fa77c50bbffaea9c2546f124f3c4"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w4_s4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w4_s4.py",
+          "sha256": "6b3988bd57b4f66497c1af9678da111daeb00de8fc7391d8f94f14584857d594"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w8_s2.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w8_s2.py",
+          "sha256": "69d6a2e68113f7825f74d76d08937673397f98cd31d3a26268d18654ba7e7ef7"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/add_rms_norm_w8_s4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/add_rms_norm_w8_s4.py",
+          "sha256": "c856fdaf051bc0d1f909ccbfae3a89b20e4e86e0ca4e2c7fd96c97538728626f"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/loop_m32_n16384_bfloat16_t8192_w8.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/loop_m32_n16384_bfloat16_t8192_w8.py",
+          "sha256": "fd5895c33ef174bf831acad7eb53927f52c82cd1a970fdb2ff8620a3f8f1327e"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/loop_m32_n16384_float16_t4096_w8.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/loop_m32_n16384_float16_t4096_w8.py",
+          "sha256": "f13badd083057cb0afd7ce6e66a9a4a7c7b177a270d7252e29662c7b31e7f104"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/selection.json",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/selection.json",
+          "sha256": "19be3b3f3be4071f26b819706bfc723e1c9367143bb7e96cc36e028e11edad93"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/small_m64_n4096_bfloat16_t4096_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/small_m64_n4096_bfloat16_t4096_w4.py",
+          "sha256": "2bf36515b3a00de5b135665941fa19a8d833f6be0f4d95bdbae3be772fe39a84"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "add_rms_norm/gluon_optimized/final/small_m64_n512_bfloat16_t512_w4.py",
+          "source": "hard81/group6/add_rms_norm/gluon_optimized/final/small_m64_n512_bfloat16_t512_w4.py",
+          "sha256": "da43a0276bf302352a8adf9de48b37ae57fd2b4e8dc0874d6fb29d6176509dff"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "dequantize_and_gather_k_cache",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/dequantize_and_gather_k_cache.py",
+      "sources": [
+        "hard81/group5/dequantize_and_gather_k_cache",
+        "hard81/group5/dequantize_and_gather_k_cache",
+        "hard81/full13/dequantize_and_gather_k_cache"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "dequantize_and_gather_k_cache/tle_source/operator.py",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/original/operator.py",
+          "sha256": "01e0f3d819dab162002e6f58a79d4c10f9a64d0095dd766ff2c2eedefd1c7e8a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "dequantize_and_gather_k_cache/gluon_baseline/kernel.py",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/kernel.py",
+          "sha256": "86036f73f1b08fee8fd05d1aecdb53a19d853d95661ebe2506e055b634181ece"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "dequantize_and_gather_k_cache/gluon_baseline/no_gather_lens.export.json",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/no_gather_lens.export.json",
+          "sha256": "f017285d9757538ac53762d3a6b0d6829775f9bfc6f000df6383b3e8f345cd52"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "dequantize_and_gather_k_cache/gluon_baseline/no_gather_lens.py",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/no_gather_lens.py",
+          "sha256": "64d6c2e82586b19cd5d77e9d529e6ccc500187f8312d7dabed9b8c0e2ea11be3"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "dequantize_and_gather_k_cache/gluon_baseline/official_448.export.json",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/official_448.export.json",
+          "sha256": "6ad104f5b05ab93e54f35f181a22820064fab4b9812111f5a2211a2244f55687"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "dequantize_and_gather_k_cache/gluon_baseline/official_448.py",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/official_448.py",
+          "sha256": "fb0d7434d25f9d705fca32f32216897c736970b841f54b34e817a898760779a7"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "dequantize_and_gather_k_cache/gluon_baseline/small_aligned.export.json",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/small_aligned.export.json",
+          "sha256": "df392bfc00f4f61efc126cfd65e124a922bb1edec0689a63d6ad763749b5ded1"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "dequantize_and_gather_k_cache/gluon_baseline/small_aligned.py",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/small_aligned.py",
+          "sha256": "9a25f6f62231a80fc2d2e761a1f935cde4ba8377729fc8b64f3bb372e8d0d7b3"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "dequantize_and_gather_k_cache/gluon_baseline/tail_96.export.json",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/tail_96.export.json",
+          "sha256": "c451033e175432ce779c82172d61f086da01a35f0e1e6878aae32be0961d021e"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "dequantize_and_gather_k_cache/gluon_baseline/tail_96.py",
+          "source": "hard81/group5/dequantize_and_gather_k_cache/gluon_baseline/tail_96.py",
+          "sha256": "32a08376884710e0f50aec46bce7a9ed6d94bd46eff45355e7f7eceed8443de1"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/final_kernel.py",
+          "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/final_kernel.py",
+          "sha256": "d4fd9ab3d43d495c652bc7c2ddbdb449f7e8d95cba8efd2add9f6cf58122899f"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/no_gather_lens.py",
+          "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/no_gather_lens.py",
+          "sha256": "b7079946bc8da792cf6da6690bb9be4ea77cd7b0aa8fa56c624f97464508b697"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/official_448.py",
+          "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/official_448.py",
+          "sha256": "e3e7698f4f251c2e66c5c6a6af73a4d0bd6a7cf7d501287ef4132558c096a1b0"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/small_aligned.py",
+          "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/small_aligned.py",
+          "sha256": "0be96e65c67440c10371d2bc1aa5f1bdc92f2bc43eab31d24534087a6584c788"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "dequantize_and_gather_k_cache/gluon_optimized/full13/tail_96.py",
+          "source": "hard81/full13/dequantize_and_gather_k_cache/gluon_optimized/tail_96.py",
+          "sha256": "26994ea3b6e4b9dfaaa33c185daec3ad6d41fecac6156db1026cdd7b99e15aec"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "fp8_fp4_paged_mqa_logits",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "sources": [
+        "hard81/group5/fp8_fp4_paged_mqa_logits",
+        "hard81/group5/fp8_fp4_paged_mqa_logits",
+        "hard81/full05/fp8_fp4_paged_mqa_logits"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "fp8_fp4_paged_mqa_logits/tle_source/operator.py",
+          "source": "hard81/group5/fp8_fp4_paged_mqa_logits/original/operator.py",
+          "sha256": "eb81d1ae1389a64b3d7bc501b005135b98153b93497a38de2c2ee3e7db782579"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "fp8_fp4_paged_mqa_logits/gluon_baseline/kernel.py",
+          "source": "hard81/group5/fp8_fp4_paged_mqa_logits/gluon_baseline/kernel.py",
+          "sha256": "0d070021e8c3e84a0780f1deab4973e961c87ee55aa6c6dfbb2fed2d15ae0f69"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "fp8_fp4_paged_mqa_logits/gluon_baseline/metadata.json",
+          "source": "hard81/group5/fp8_fp4_paged_mqa_logits/gluon_baseline/metadata.json",
+          "sha256": "56eb846ff7618326a4df9ece77c5ae7afd53afad2d5deaa71b617592f9f0c594"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "fp8_fp4_paged_mqa_logits/gluon_baseline/runtime.metadata.json",
+          "source": "hard81/group5/fp8_fp4_paged_mqa_logits/gluon_baseline/runtime.metadata.json",
+          "sha256": "35906c3cd8b5fe371a683505675ccda75c9952fcb3007c3d48adbfad2d10ff4f"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "fp8_fp4_paged_mqa_logits/gluon_optimized/full05/kernel.py",
+          "source": "hard81/full05/fp8_fp4_paged_mqa_logits/gluon_optimized/kernel.py",
+          "sha256": "0ac1d356db6619bc804a02bbe389c6325c2cce316f87e19740745b6388543c47"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "fused_deepseek_v4_qnorm_rope_kv_rope_insert",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/fused_deepseek_v4_qnorm_rope_kv_rope_insert.py",
+      "sources": [
+        "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_insert",
+        "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_insert",
+        "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_insert"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "fused_deepseek_v4_qnorm_rope_kv_rope_insert/tle_source/fused_deepseek_v4_qnorm_rope_kv_rope_insert.py",
+          "source": "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_insert/original/fused_deepseek_v4_qnorm_rope_kv_rope_insert.py",
+          "sha256": "0dee7c547fbc9f715b6d8e36740bae18ba87b186bfcf2b89f5ac10c0e82afb28"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_baseline/kernel.py",
+          "source": "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_baseline/kernel.py",
+          "sha256": "6d8329da379b1db3b3a09a4c5b1fda5385a1634309471e57a8132025445b8e3b"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_optimized/full13/final/kernel.py",
+          "source": "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_optimized/final/kernel.py",
+          "sha256": "c8aef9b9f7965cddd10d4060dd1b895b102285c74df62c17c6114487c7fe127e"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_optimized/full13/final/launch.py",
+          "source": "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_insert/gluon_optimized/final/launch.py",
+          "sha256": "da14d0bb74e8a83c5f15536e07edd15a0f4055a5a084c80a6a55dcbfa11e05bf"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert.py",
+      "sources": [
+        "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert",
+        "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert",
+        "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/tle_source/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert.py",
+          "source": "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/original/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert.py",
+          "sha256": "3f27cce67bb968937a86e027e5190748359ca67cc4695968a18802162ac421b2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_baseline/kernel.py",
+          "source": "hard81/group1/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_baseline/kernel.py",
+          "sha256": "5abe4e574f18d9c31a019711bcc8fbcc0213b11f1a1c9c225c818a328452b076"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_optimized/full13/final/kernel.py",
+          "source": "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_optimized/final/kernel.py",
+          "sha256": "71b7b56a939cc3185ce6ac8ee2ab1ae136f2245e6d483e10201aadefbc3d90d4"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_optimized/full13/final/selection.json",
+          "source": "hard81/full13/fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert/gluon_optimized/final/selection.json",
+          "sha256": "c748e7aabb41a639b670f0999cc5796ff94a5ca7f1162f57e949e463323bca8d"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "fused_inv_rope_fp8_quant",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/fused_inv_rope_fp8_quant.py",
+      "sources": [
+        "hard81/group1/fused_inv_rope_fp8_quant",
+        "hard81/group1/fused_inv_rope_fp8_quant",
+        "hard81/full05/fused_inv_rope_fp8_quant"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "fused_inv_rope_fp8_quant/tle_source/fused_inv_rope_fp8_quant.py",
+          "source": "hard81/group1/fused_inv_rope_fp8_quant/original/fused_inv_rope_fp8_quant.py",
+          "sha256": "e190d13c4a702c07ac1b1cb9a6d5f51c8df5ee85dbbda9da973206ca483d889d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "fused_inv_rope_fp8_quant/gluon_baseline/export-metadata.json",
+          "source": "hard81/group1/fused_inv_rope_fp8_quant/gluon_baseline/export-metadata.json",
+          "sha256": "dc846666dc609905f500947f906d853cfa45cca75adaf7055794c35547c8e613"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "fused_inv_rope_fp8_quant/gluon_baseline/kernel.py",
+          "source": "hard81/group1/fused_inv_rope_fp8_quant/gluon_baseline/kernel.py",
+          "sha256": "03a0d23ce88f94ad36225b0fe5dba2891142d6f9f6b4f5fc0eb10b9fa2062687"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "fused_inv_rope_fp8_quant/gluon_optimized/full05/final/large.py",
+          "source": "hard81/full05/fused_inv_rope_fp8_quant/gluon_optimized/final/large.py",
+          "sha256": "8dd2c2763d4db6d330a5fc46614e67231ab418cb6f7d6e1afd631ec4df3a3f69"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "fused_inv_rope_fp8_quant/gluon_optimized/full05/final/policy.py",
+          "source": "hard81/full05/fused_inv_rope_fp8_quant/gluon_optimized/final/policy.py",
+          "sha256": "fbf293307f6abb2559dabf6d503f3061eae11a77575243c8a40a605d8d6ed2c6"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "fused_inv_rope_fp8_quant/gluon_optimized/full05/final/small.py",
+          "source": "hard81/full05/fused_inv_rope_fp8_quant/gluon_optimized/final/small.py",
+          "sha256": "a923e45fd24f26c9b6f26d2c39c7ad05bbc2da37d8837895ad4a5e1366f2bf5f"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "group_mm",
+      "library": "FlagGems",
+      "github_path": "https://github.com/FlagOpen/FlagGems/blob/main/src/flag_gems/ops/group_mm.py",
+      "sources": [
+        "hard81/group2/group_mm",
+        "hard81/group2/group_mm"
+      ],
+      "multiple_sources": false,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "group_mm/tle_source/generated/group_gemm.py",
+          "source": "hard81/group2/group_mm/original/generated/group_gemm.py",
+          "sha256": "7642ac0ac7aa8df0721422e607994460aead866b7fd633a7ed360ad8ad371492"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n2560-k2048-balanced_aligned-7fc34643a19b-389b7cbd61ce3ce0.json",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n2560-k2048-balanced_aligned-7fc34643a19b-389b7cbd61ce3ce0.json",
+          "sha256": "c693fc8b31d8a4758513d0dc0876c292eff256ff978c0c971f62a4cdd9091867"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n2560-k2048-balanced_aligned-7fc34643a19b-389b7cbd61ce3ce0.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n2560-k2048-balanced_aligned-7fc34643a19b-389b7cbd61ce3ce0.py",
+          "sha256": "9ac746990eea069e07d5bef9ff14c86dde56341ae49a123db3f614db09401e6b"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n2560-k2048-balanced_ragged-0505ec5f13c5-389b7cbd61ce3ce0.json",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n2560-k2048-balanced_ragged-0505ec5f13c5-389b7cbd61ce3ce0.json",
+          "sha256": "2877857a70f9d4ad8cb95ac096595617c1e3d5771f18b19fdf3a9d9f763a68c4"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n2560-k2048-balanced_ragged-0505ec5f13c5-389b7cbd61ce3ce0.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n2560-k2048-balanced_ragged-0505ec5f13c5-389b7cbd61ce3ce0.py",
+          "sha256": "eb59644f366bb8685cb734c09b69719e7f73d90e31b5e321fa5546b3d299a1c4"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n2560-k2048-skewed-adfb6a2e27e8-8be59bc9e86eb722.json",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n2560-k2048-skewed-adfb6a2e27e8-8be59bc9e86eb722.json",
+          "sha256": "d3f0be1c030436cebbfd339f69335bc5aa0809202e892f34a8fec42ea3cc28aa"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n2560-k2048-skewed-adfb6a2e27e8-8be59bc9e86eb722.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n2560-k2048-skewed-adfb6a2e27e8-8be59bc9e86eb722.py",
+          "sha256": "a46bbdea8627d94e7fd1f53a766d570a8241e0036645e62719297d0265fceca2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n512-k2048-balanced_aligned-ae5aa836c30a-ba4cd8ef8d750d01.json",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n512-k2048-balanced_aligned-ae5aa836c30a-ba4cd8ef8d750d01.json",
+          "sha256": "93396fa71ad20aee815d5a5c4f8a46649d7abb90d98c3e6856d6ac42c06bc61d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n512-k2048-balanced_aligned-ae5aa836c30a-ba4cd8ef8d750d01.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n512-k2048-balanced_aligned-ae5aa836c30a-ba4cd8ef8d750d01.py",
+          "sha256": "9f8288ba65bf65d3fba91cbcb8d301874455543c17759311430bb76acee41609"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n512-k2048-balanced_ragged-2c1968681a5c-ba4cd8ef8d750d01.json",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n512-k2048-balanced_ragged-2c1968681a5c-ba4cd8ef8d750d01.json",
+          "sha256": "2f38b497f0358fc57cf693b99b20114ce77d0c001bfd0f17418a22932c4e6b17"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n512-k2048-balanced_ragged-2c1968681a5c-ba4cd8ef8d750d01.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n512-k2048-balanced_ragged-2c1968681a5c-ba4cd8ef8d750d01.py",
+          "sha256": "6cdc42258418cbef35de65680c5016aa275d49382fb5524510ba38044b7f64a2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n512-k2048-skewed-7c646d48171b-976d98b3232dac0d.json",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n512-k2048-skewed-7c646d48171b-976d98b3232dac0d.json",
+          "sha256": "2fe144fca9e869a2bdf38826d2872cc68f7c6f02bca7944e444d1a1378fcc5b5"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g16-n512-k2048-skewed-7c646d48171b-976d98b3232dac0d.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g16-n512-k2048-skewed-7c646d48171b-976d98b3232dac0d.py",
+          "sha256": "d0d8a90ba57f58024030ced8b11d603406f5cd6c41e58b44f7705346f0e792ce"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g64-n2048-k128-balanced_aligned-d9c570a5a285-47db0bfd88b023e7.json",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g64-n2048-k128-balanced_aligned-d9c570a5a285-47db0bfd88b023e7.json",
+          "sha256": "377ec66f6f6710d48911435c0080b38ad25f01dd69d910449554c559b49cd957"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g64-n2048-k128-balanced_aligned-d9c570a5a285-47db0bfd88b023e7.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g64-n2048-k128-balanced_aligned-d9c570a5a285-47db0bfd88b023e7.py",
+          "sha256": "e7067b533b708a8987638b3f269057af966fbd421c21e1adfe407f1eb52d7a74"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g64-n2048-k128-balanced_ragged-b190359c592f-09d70c99770ecc58.json",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g64-n2048-k128-balanced_ragged-b190359c592f-09d70c99770ecc58.json",
+          "sha256": "7cbae7d962612fc70824442be95d38fad4863eff8386ec4839891984f514bb8d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g64-n2048-k128-balanced_ragged-b190359c592f-09d70c99770ecc58.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g64-n2048-k128-balanced_ragged-b190359c592f-09d70c99770ecc58.py",
+          "sha256": "99ba2a3ac442ea23b0ff834b493b897dda408aa5870edcfe5fc41a23f266f971"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g64-n2048-k128-skewed-c1ab3258f3b1-3ad76a683621fef9.json",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g64-n2048-k128-skewed-c1ab3258f3b1-3ad76a683621fef9.json",
+          "sha256": "9a4e317e6ddd1946e3516f181d6da7697a74835e731df6f112d78d82020a052c"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group-mm-g64-n2048-k128-skewed-c1ab3258f3b1-3ad76a683621fef9.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group-mm-g64-n2048-k128-skewed-c1ab3258f3b1-3ad76a683621fef9.py",
+          "sha256": "1c79b3639163bd86db964e617756e08a2a06a523a8eb2f9d509bc2be80a7ef20"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "group_mm/gluon_baseline/group_mm_tle_equivalent.py",
+          "source": "hard81/group2/group_mm/gluon_baseline/group_mm_tle_equivalent.py",
+          "sha256": "b3bcefb346b92329e0ee94c27d016448cc37a1b2c6124c02b755a2bc08fd6e36"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group-mm-g16-n2560-k2048-balanced_aligned-7fc34643a19b-h3_full_v8.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group-mm-g16-n2560-k2048-balanced_aligned-7fc34643a19b-h3_full_v8.py",
+          "sha256": "188ae52c8f5f0e3f12e02a7ec5ce8780c4a577a1a8f3e89fb4229b8252d0a09d"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group-mm-g16-n2560-k2048-balanced_ragged-0505ec5f13c5-h3_full_v8.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group-mm-g16-n2560-k2048-balanced_ragged-0505ec5f13c5-h3_full_v8.py",
+          "sha256": "aed31385d0102729892be8ad2d21644837f6e50574f86844c5bb33624353d408"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group-mm-g16-n2560-k2048-skewed-adfb6a2e27e8-h3_full_v8.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group-mm-g16-n2560-k2048-skewed-adfb6a2e27e8-h3_full_v8.py",
+          "sha256": "2d1d54f2bd02e056c760fd4226c5c337d0c3730e4eb054db1a226182e884d687"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group-mm-g16-n512-k2048-balanced_aligned-ae5aa836c30a-h3_full_v8.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group-mm-g16-n512-k2048-balanced_aligned-ae5aa836c30a-h3_full_v8.py",
+          "sha256": "cb8c05f960ed7a324d830d9951f1a7378cfa668b879e0c97ee27fff27b2862d2"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group-mm-g16-n512-k2048-balanced_ragged-2c1968681a5c-h3_full_v8.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group-mm-g16-n512-k2048-balanced_ragged-2c1968681a5c-h3_full_v8.py",
+          "sha256": "8bc7165fe3bc137890ea2a0f0dc3ca9f49d05764c1d4e73e156eb76150b1c88f"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group-mm-g16-n512-k2048-skewed-7c646d48171b-h3_full_v8.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group-mm-g16-n512-k2048-skewed-7c646d48171b-h3_full_v8.py",
+          "sha256": "9ca531a7eac18910b8c1cd3fb41dab5b65d40cf4717677cef62aaf5ee55c591c"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group-mm-g64-n2048-k128-balanced_aligned-d9c570a5a285-h3_full_v8.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group-mm-g64-n2048-k128-balanced_aligned-d9c570a5a285-h3_full_v8.py",
+          "sha256": "6a045d0d39c3713e2d4de88431cf54f7b956b805a0d26c001f88440f9a42c83e"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group-mm-g64-n2048-k128-balanced_ragged-b190359c592f-h3_full_v8.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group-mm-g64-n2048-k128-balanced_ragged-b190359c592f-h3_full_v8.py",
+          "sha256": "c6c689e39918812b8f27feb8ce81006d9aa2c51ddfeee47e89aaa530dc2435d1"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group-mm-g64-n2048-k128-skewed-c1ab3258f3b1-h3_full_v8.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group-mm-g64-n2048-k128-skewed-c1ab3258f3b1-h3_full_v8.py",
+          "sha256": "f99d9e8d08df1940e4ca56c9c0b940941a669623a65d4c53fa2172912d34f586"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "group_mm/gluon_optimized/group_mm_optimized.py",
+          "source": "hard81/group2/group_mm/gluon_optimized/group_mm_optimized.py",
+          "sha256": "44f3f654bd643f2ed4970a505728c8779b4ed93a1194d16f1909a56fe9354182"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "hc_head_fused_kernel",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/hc_head_fused_kernel.py",
+      "sources": [
+        "hard81/group8/hc_head_fused_kernel",
+        "hard81/group8/hc_head_fused_kernel",
+        "hard81/full18/hc_head_fused_kernel"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "hc_head_fused_kernel/tle_source/hc_head_fused_kernel.py",
+          "source": "hard81/group8/hc_head_fused_kernel/original/hc_head_fused_kernel.py",
+          "sha256": "e10c26ed717888c6b5bb31b2bb506e74d8dd8ca07a18f2a03a8425e9f11e0f33"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_head_fused_kernel/gluon_baseline/h1280_hc2_b1024_w4_s2_weuNone.py",
+          "source": "hard81/group8/hc_head_fused_kernel/gluon_baseline/h1280_hc2_b1024_w4_s2_weuNone.py",
+          "sha256": "66653026380524c076ceef0d859f8e8f91637777ae5350cf355e7a6bd7a17878"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_head_fused_kernel/gluon_baseline/h1280_hc4_b2048_w8_s2_weuNone.py",
+          "source": "hard81/group8/hc_head_fused_kernel/gluon_baseline/h1280_hc4_b2048_w8_s2_weuNone.py",
+          "sha256": "a06b50d122f2b7d9f9f6338a0da6f8e09285c0ebd71b4262e0a6d06544fa2e16"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_head_fused_kernel/gluon_baseline/h2560_hc2_b1024_w4_s2_weuNone.py",
+          "source": "hard81/group8/hc_head_fused_kernel/gluon_baseline/h2560_hc2_b1024_w4_s2_weuNone.py",
+          "sha256": "8d15699177dea9be4c351eacbc781f21e325efffad3cb79bcbd14e807088b469"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_head_fused_kernel/gluon_baseline/h2560_hc4_b1024_w8_s2_weuNone.py",
+          "source": "hard81/group8/hc_head_fused_kernel/gluon_baseline/h2560_hc4_b1024_w8_s2_weuNone.py",
+          "sha256": "db4fca29a86a428d13031feb6dc8e00111b59fab20e598704ba1310389deead6"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_head_fused_kernel/gluon_baseline/h4096_hc2_b2048_w8_s3_weuNone.py",
+          "source": "hard81/group8/hc_head_fused_kernel/gluon_baseline/h4096_hc2_b2048_w8_s3_weuNone.py",
+          "sha256": "3d2f68367c0acf962412c388f1eea08e8032a46c7f1d1bd87beaf9ad96063387"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_head_fused_kernel/gluon_baseline/h4096_hc4_b1024_w8_s2_weuNone.py",
+          "source": "hard81/group8/hc_head_fused_kernel/gluon_baseline/h4096_hc4_b1024_w8_s2_weuNone.py",
+          "sha256": "bdbd854804ad6e9d8095f7e16e0e372fb23ae58a1fbcba8c85a848d1676046da"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_head_fused_kernel/gluon_baseline/h7168_hc4_b1024_w8_s2_weuNone.py",
+          "source": "hard81/group8/hc_head_fused_kernel/gluon_baseline/h7168_hc4_b1024_w8_s2_weuNone.py",
+          "sha256": "6ac103bfd67f8c9c8ae95556318c3c11df4ac7d4d80523f53ff3db094b85db79"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case00_baseline_b2048_w8.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case00_baseline_b2048_w8.py",
+          "sha256": "14e06da9348c5cf24355a9eaa0917bebac9e56a01fa649429d029ee7a56cfbea"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case01_b512_w4_sp2_b512_w4.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case01_b512_w4_sp2_b512_w4.py",
+          "sha256": "2062c5be043a3b79bf91c9e9b0cfdfbafda717376540e2d485f3375c7f3e2381"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case02_b2048_w8_sp4_b2048_w8.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case02_b2048_w8_sp4_b2048_w8.py",
+          "sha256": "e7b5ac4cfde45ad1002ee5a7d2d56275290ab4c932a2e2224a612740d46d843b"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case03_b2048_w8_sp4_b2048_w8.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case03_b2048_w8_sp4_b2048_w8.py",
+          "sha256": "6fe331937634b7fa0ac522fbe9707b9e1aef15f42a6f8a8acd9b50c9d741d1a4"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case04_b512_w2_sp4_b512_w2.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case04_b512_w2_sp4_b512_w2.py",
+          "sha256": "df19571d55839f7db4aa092ea68c313b7faea25d6726a025d76f57bbf2d84b14"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case05_b512_w2_sp4_b512_w2.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case05_b512_w2_sp4_b512_w2.py",
+          "sha256": "b92a66b60310c586488ca7cbdfd163b4e7e41ddb7f9376dc93e986a0fb1450d3"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case06_b512_w2_sp4_b512_w2.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case06_b512_w2_sp4_b512_w2.py",
+          "sha256": "df19571d55839f7db4aa092ea68c313b7faea25d6726a025d76f57bbf2d84b14"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case07_b512_w2_sp4_b512_w2.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case07_b512_w2_sp4_b512_w2.py",
+          "sha256": "b92a66b60310c586488ca7cbdfd163b4e7e41ddb7f9376dc93e986a0fb1450d3"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case08_b512_w2_sp4_b512_w2.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case08_b512_w2_sp4_b512_w2.py",
+          "sha256": "6490ae5ee9ba250324f3de11c172ca8595c593da78da065fe1afe6b71f4b7595"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case09_b1024_w4_sp4_b1024_w4.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case09_b1024_w4_sp4_b1024_w4.py",
+          "sha256": "e0d6da2a7a525a40d94960e6a7b0af0abc02d17469ead047581911e57712195d"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case10_w2_b1024_w2.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case10_w2_b1024_w2.py",
+          "sha256": "53472cda6d09854bbdca66a097486ec54b25198bd47e1bc2cbd2010b2008a901"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case11_b512_w2_sp4_b512_w2.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case11_b512_w2_sp4_b512_w2.py",
+          "sha256": "bc600bea44db1baf9fec3f62e9af456dd9b886fca759c69adcf91658387f2fa9"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case12_baseline_b2048_w8.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case12_baseline_b2048_w8.py",
+          "sha256": "5bd8c25baff71aadc575b95ee10db976296d65a15397cfe31220dd52bd683574"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case13_b2048_w8_sp4_b2048_w8.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case13_b2048_w8_sp4_b2048_w8.py",
+          "sha256": "e7b5ac4cfde45ad1002ee5a7d2d56275290ab4c932a2e2224a612740d46d843b"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case14_baseline_b2048_w8.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case14_baseline_b2048_w8.py",
+          "sha256": "5bd8c25baff71aadc575b95ee10db976296d65a15397cfe31220dd52bd683574"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_head_fused_kernel/gluon_optimized/full18/final/case15_b2048_w8_sp4_b2048_w8.py",
+          "source": "hard81/full18/hc_head_fused_kernel/gluon_optimized/final/case15_b2048_w8_sp4_b2048_w8.py",
+          "sha256": "e7b5ac4cfde45ad1002ee5a7d2d56275290ab4c932a2e2224a612740d46d843b"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "hc_split_sinkhorn_forward",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/hc_split_sinkhorn_forward.py",
+      "sources": [
+        "hard81/group8/hc_split_sinkhorn_forward",
+        "hard81/group8/hc_split_sinkhorn_forward",
+        "hard81/full18/hc_split_sinkhorn_forward"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "gluon_baseline",
+          "path": "hc_split_sinkhorn_forward/gluon_baseline/generic_t128_hc2_b1_w1.py",
+          "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/generic_t128_hc2_b1_w1.py",
+          "sha256": "e076a0197866cf9b3ee04388cc1ceedd3d461a37aa54e920984db9eba4e2e431"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_split_sinkhorn_forward/gluon_baseline/generic_t16384_hc2_b1_w1.py",
+          "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/generic_t16384_hc2_b1_w1.py",
+          "sha256": "f1a1df7c933f9cdfa8781da1a580c8f78b97e491d4704d969f29b8fdf1c80a93"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_split_sinkhorn_forward/gluon_baseline/generic_t2048_hc2_b1_w1.py",
+          "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/generic_t2048_hc2_b1_w1.py",
+          "sha256": "99d90ff2b5e168e670b05cdb57602cc0cf5d6398b9bdeb3af493e8b0a079c00b"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_split_sinkhorn_forward/gluon_baseline/generic_t65536_hc2_b1_w1.py",
+          "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/generic_t65536_hc2_b1_w1.py",
+          "sha256": "2ccf824b4f0ce00e3c26ef52ad9bfc0b36c1889fda90e516376b5ae7c826d4eb"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t128_hc4_b16_w1.py",
+          "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t128_hc4_b16_w1.py",
+          "sha256": "d3edb782a40a9624283cbf4352165b592448aebde7b61a8b230521ee71290f50"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t16384_hc4_b128_w4.py",
+          "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t16384_hc4_b128_w4.py",
+          "sha256": "62157228a97ce56f7ed6a23dd2b8e91e99d4e5dd309c62715da6d64b42da1644"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t2048_hc4_b32_w1.py",
+          "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t2048_hc4_b32_w1.py",
+          "sha256": "43229d1f87fcee2f337f3354b00de4f5eeeaa3a90c537740d2d285103fa597ea"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t65536_hc4_b256_w8.py",
+          "source": "hard81/group8/hc_split_sinkhorn_forward/gluon_baseline/hcmult_4_t65536_hc4_b256_w8.py",
+          "sha256": "a3c75c22f8e2e69d5911120baa315188e62c0ceaccbaf868e784782379c3115b"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case00_hcmult_4_t128_hc4_b16_w1_b16_w1.py",
+          "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case00_hcmult_4_t128_hc4_b16_w1_b16_w1.py",
+          "sha256": "d3edb782a40a9624283cbf4352165b592448aebde7b61a8b230521ee71290f50"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case01_hcmult_4_t2048_hc4_b32_w1_b32_w1.py",
+          "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case01_hcmult_4_t2048_hc4_b32_w1_b32_w1.py",
+          "sha256": "43229d1f87fcee2f337f3354b00de4f5eeeaa3a90c537740d2d285103fa597ea"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case02_case02_b64_sp1_w1_b64_w1.py",
+          "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case02_case02_b64_sp1_w1_b64_w1.py",
+          "sha256": "93f6baa328ac2bec6ac5940600cb435274e8f4d220af28e9efc51cac906d1398"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case03_case03_b64_sp1_w1_b64_w1.py",
+          "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case03_case03_b64_sp1_w1_b64_w1.py",
+          "sha256": "88ed13c17aeb100d3fe8d9fe856151a544b1e3c4e74572865334900851cfbd2c"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case04_generic_t128_hc2_b1_w1_baseline.py",
+          "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case04_generic_t128_hc2_b1_w1_baseline.py",
+          "sha256": "e076a0197866cf9b3ee04388cc1ceedd3d461a37aa54e920984db9eba4e2e431"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case05_generic_t2048_hc2_b1_w1_baseline.py",
+          "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case05_generic_t2048_hc2_b1_w1_baseline.py",
+          "sha256": "99d90ff2b5e168e670b05cdb57602cc0cf5d6398b9bdeb3af493e8b0a079c00b"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case06_generic_t16384_hc2_b1_w1_baseline.py",
+          "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case06_generic_t16384_hc2_b1_w1_baseline.py",
+          "sha256": "f1a1df7c933f9cdfa8781da1a580c8f78b97e491d4704d969f29b8fdf1c80a93"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "hc_split_sinkhorn_forward/gluon_optimized/full18/final/case07_generic_t65536_hc2_b1_w1_baseline.py",
+          "source": "hard81/full18/hc_split_sinkhorn_forward/gluon_optimized/final/case07_generic_t65536_hc2_b1_w1_baseline.py",
+          "sha256": "2ccf824b4f0ce00e3c26ef52ad9bfc0b36c1889fda90e516376b5ae7c826d4eb"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "lightning_indexer",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/lightning_indexer.py",
+      "sources": [
+        "hard81/group5/lightning_indexer",
+        "hard81/group5/lightning_indexer",
+        "hard81/full05/lightning_indexer"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "lightning_indexer/tle_source/operator.py",
+          "source": "hard81/group5/lightning_indexer/original/operator.py",
+          "sha256": "16ef376eabce2909fbfcc3dcac78809132e619d573448b225ca63ce2f2731257"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "lightning_indexer/gluon_baseline/kernel.py",
+          "source": "hard81/group5/lightning_indexer/gluon_baseline/kernel.py",
+          "sha256": "29244ace18afd50cd496239187eb5f5026a1aa7d85c8124d4ae78868bba6e903"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "lightning_indexer/gluon_baseline/metadata.json",
+          "source": "hard81/group5/lightning_indexer/gluon_baseline/metadata.json",
+          "sha256": "4dd8404c0f46ecb3e31386869a8488d393e0513900184ab321bf0c3c93b1aabb"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "lightning_indexer/gluon_baseline/runtime.metadata.json",
+          "source": "hard81/group5/lightning_indexer/gluon_baseline/runtime.metadata.json",
+          "sha256": "29ef73f99922579347ffb5ff36fad3af97157b75d59cadb615526016caaec8e5"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "lightning_indexer/gluon_optimized/full05/kernel.py",
+          "source": "hard81/full05/lightning_indexer/gluon_optimized/kernel.py",
+          "sha256": "5f3d3bce7270c8aad95034c5a5b511b91db87c5f93837a5c307c652b8fb5bdb8"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "lightning_indexer/gluon_optimized/full05/metadata.json",
+          "source": "hard81/full05/lightning_indexer/gluon_optimized/metadata.json",
+          "sha256": "3ad39d6f85ed9760f28c2aeb43012d85a1f691997dd7c91d21a3da4e1699aa47"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "megamoe",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/megamoe.py",
+      "sources": [
+        "hard81/group2/megamoe",
+        "hard81/group2/megamoe",
+        "hard81/full09/megamoe"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l1_kernel-9acd31da9c33b400.json",
+          "source": "hard81/group2/megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l1_kernel-9acd31da9c33b400.json",
+          "sha256": "55162982548d390750e9337bdd27bb1c1874c9e7d2d6bc2e10de78efbd10f594"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l1_kernel-9acd31da9c33b400.py",
+          "source": "hard81/group2/megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l1_kernel-9acd31da9c33b400.py",
+          "sha256": "066c940babb9f02657cfc450d761de57e6c8f5b31e9a595673c1b4e0836a6b8d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l2_kernel-3f64c6a6e7a0aa2a.json",
+          "source": "hard81/group2/megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l2_kernel-3f64c6a6e7a0aa2a.json",
+          "sha256": "dab9ec14b35f388fae9791ba1bd5410ceff82bfb4bdeffcd3d934cbdee78e12a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l2_kernel-3f64c6a6e7a0aa2a.py",
+          "source": "hard81/group2/megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l2_kernel-3f64c6a6e7a0aa2a.py",
+          "sha256": "8d36340613c86c925bc79bdebdecc15283c1c7f3d417e669f1246ee9896b1327"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l1_kernel-5cb970117bbb46ee.json",
+          "source": "hard81/group2/megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l1_kernel-5cb970117bbb46ee.json",
+          "sha256": "fc01830f70b90af43f84552fc3ada0987c24c860d4a48181209bcaef0e7faedb"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l1_kernel-5cb970117bbb46ee.py",
+          "source": "hard81/group2/megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l1_kernel-5cb970117bbb46ee.py",
+          "sha256": "12a38c392e5a8db6eac285e61b3178cc5cc8b37b8dc7b14b19a71939df1549dc"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l2_kernel-590137d8f2e23261.json",
+          "source": "hard81/group2/megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l2_kernel-590137d8f2e23261.json",
+          "sha256": "32466aef680c61cabbceba239fc0ce9dd945313af5f6a6b0d56e36b0b52ac46c"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l2_kernel-590137d8f2e23261.py",
+          "source": "hard81/group2/megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l2_kernel-590137d8f2e23261.py",
+          "sha256": "64ead53c0a8725cf1894aa160c209fe49fdaa88e14c9d6c8e21d2642def3cb2a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l1_kernel-6c8710021f52cea5.json",
+          "source": "hard81/group2/megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l1_kernel-6c8710021f52cea5.json",
+          "sha256": "7dbd7b42163765bb680e37d4732c51ce337f5a9a857a643eadb3001044f46aa3"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l1_kernel-6c8710021f52cea5.py",
+          "source": "hard81/group2/megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l1_kernel-6c8710021f52cea5.py",
+          "sha256": "20cf1e25e75f83038700b39a0e029d471d41bd5ff6ad85099749c25fb23740b3"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l2_kernel-7fd75ed60f67a85c.json",
+          "source": "hard81/group2/megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l2_kernel-7fd75ed60f67a85c.json",
+          "sha256": "e3e207aaaa6c8f4e19d6a8b82fe17b0c0791410303961c1c1e4ca74974c742c5"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l2_kernel-7fd75ed60f67a85c.py",
+          "source": "hard81/group2/megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l2_kernel-7fd75ed60f67a85c.py",
+          "sha256": "7b4b41761e948d6c153e149cd5a1d2657a03b88f4bd9af51fd2f764319f8045e"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "megamoe/gluon_optimized/full09/h1_provenance.json",
+          "source": "hard81/full09/megamoe/gluon_optimized/h1_provenance.json",
+          "sha256": "7f9b8396f967747a8c708aa4af01cf2f7b58fbb528611e23bd8de2f8fc1e934d"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "megamoe/gluon_optimized/full09/megamoe_dispatch.py",
+          "source": "hard81/full09/megamoe/gluon_optimized/megamoe_dispatch.py",
+          "sha256": "63be25e74ef88fc0001ae305814f8809019a1641b677d995484976d350d73c0f"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "megamoe/gluon_optimized/full09/megamoe_h1_l1_reduction_first.py",
+          "source": "hard81/full09/megamoe/gluon_optimized/megamoe_h1_l1_reduction_first.py",
+          "sha256": "eac9ec730d624f66ceaba7aa3cf80bd4d7ce43d9932a4a2cd57360d7c2daf81f"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "megamoe/gluon_optimized/full09/megamoe_h1_l2_reduction_first.py",
+          "source": "hard81/full09/megamoe/gluon_optimized/megamoe_h1_l2_reduction_first.py",
+          "sha256": "5d0277c316962b0c956d38c9175f5b9f9f2187d6693669aa50958bd0eb76e1ba"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "mhc_bwd",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/mhc_bwd.py",
+      "sources": [
+        "hard81/group8/mhc_bwd",
+        "hard81/group8/mhc_bwd"
+      ],
+      "multiple_sources": false,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "mhc_bwd/tle_source/mhc_bwd.py",
+          "source": "hard81/group8/mhc_bwd/original/mhc_bwd.py",
+          "sha256": "d94921fc706df2297ce093976be1635b69cffeeda77b0a00df7bc476b95dd633"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_bwd/gluon_baseline/mhc_bwd_kernel_n4.json",
+          "source": "hard81/group8/mhc_bwd/gluon_baseline/mhc_bwd_kernel_n4.json",
+          "sha256": "d26dac9e907db6404065f23c9814c7e56715805188eb934c87ea85bf71927f62"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_bwd/gluon_baseline/mhc_bwd_kernel_n4.py",
+          "source": "hard81/group8/mhc_bwd/gluon_baseline/mhc_bwd_kernel_n4.py",
+          "sha256": "7d2a45e7835d093d124ef728f429129f26aa5d644fdefe62fba5c3a810196d32"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mhc_bwd/gluon_optimized/final-layout.json",
+          "source": "hard81/group8/mhc_bwd/gluon_optimized/final-layout.json",
+          "sha256": "3ab028510470176f2061cdeb85966ceea5d15c683c1dd3dd3a41abd952149686"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mhc_bwd/gluon_optimized/final.py",
+          "source": "hard81/group8/mhc_bwd/gluon_optimized/final.py",
+          "sha256": "0a7973e8fd0996ddb4a197f93d15cda5df23ce8398d7793cfd41d782f492ef41"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mhc_bwd/gluon_optimized/manifest.json",
+          "source": "hard81/group8/mhc_bwd/gluon_optimized/manifest.json",
+          "sha256": "4361c738559e173bcec58597e6e433be026a98b5c34da3d869d4fa878476f2a1"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "mhc_post",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/mhc_post.py",
+      "sources": [
+        "hard81/group7/mhc_post",
+        "hard81/group7/mhc_post",
+        "hard81/group8/mhc_post"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "mhc_post/tle_source/mhc_post.py",
+          "source": "hard81/group7/mhc_post/original/mhc_post.py",
+          "sha256": "53347736261244be811831fc1fa8ae6c9098b54f9747b3603ce7ad32f427eec9"
+        },
+        {
+          "section": "tle_source",
+          "path": "mhc_post/tle_source/generated/mhc_post.py",
+          "source": "hard81/group7/mhc_post/original/generated/mhc_post.py",
+          "sha256": "53347736261244be811831fc1fa8ae6c9098b54f9747b3603ce7ad32f427eec9"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/04e9b251c93c13fd.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/04e9b251c93c13fd.json",
+          "sha256": "97ae15d1349edf0c0571691fdb9087d2ddcdbdfc41c34837cb05f0ccc3f1ab09"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/04e9b251c93c13fd.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/04e9b251c93c13fd.py",
+          "sha256": "c277ef7fedb47f5daa11f767917467685632d726e6c7b2d20d9b5214aeb66a0e"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/080d32ecef755bbb.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/080d32ecef755bbb.json",
+          "sha256": "3bb0830018004a8783ca68571ca6978d4ef3408ad56f5655fa9dabf0c6ed7beb"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/080d32ecef755bbb.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/080d32ecef755bbb.py",
+          "sha256": "93debe8631470555c1ae14cbaaaf2e31b24d5954954e9de5b11b425de5598ceb"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/0ea5d147f4e26e3b.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/0ea5d147f4e26e3b.json",
+          "sha256": "4aa1c45cf7a9630503cbef29d7c6392a8df6fff671b9fff4e03b078e8bd967a1"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/0ea5d147f4e26e3b.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/0ea5d147f4e26e3b.py",
+          "sha256": "e1cf1024333d4b0d85e4164ec185226c8effeae377ad7d4480626416787a5dd5"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/13289487e7915e95.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/13289487e7915e95.json",
+          "sha256": "8e0d753527e15552db5235202a780e200a136e650a5576395c2e0e81bb6f8fd3"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/13289487e7915e95.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/13289487e7915e95.py",
+          "sha256": "5e49ae7b92ef1d384a0a29d32d539d92083d911fee2b2ab828ca6ce8cea1316d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/19bc4070d3502f52.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/19bc4070d3502f52.json",
+          "sha256": "204e59bc1169ec34802fda7afd5c09801f0109fd9b55aa3c4c0cd1d0b96e4479"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/19bc4070d3502f52.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/19bc4070d3502f52.py",
+          "sha256": "3d9581fef54176256037abf4afa39b7bb59e9369cd0a200351624b282c141321"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/1fbde74081bc0a3d.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/1fbde74081bc0a3d.json",
+          "sha256": "e421923365c1215031e51ca0e09d360f57bc6ad0b1a1fe3f0d10234deb47fc34"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/1fbde74081bc0a3d.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/1fbde74081bc0a3d.py",
+          "sha256": "6ac008fdb9566a01334a42f1fc2e2a70e5f94c04a52160d19c9f61fc1f11e3e7"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/330fc41009bc8c56.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/330fc41009bc8c56.json",
+          "sha256": "c64f0ae63af812f22b7723d002f80f4cd97d36a8beae38997528a87f0b4b6bc9"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/330fc41009bc8c56.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/330fc41009bc8c56.py",
+          "sha256": "716df92ab8c805fb72dd5ef6a7e04a962b60df209c2c9733611b739c7eb281e7"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/5c003919aa8594ee.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/5c003919aa8594ee.json",
+          "sha256": "6c1a5de2bb446f9cdb32d28f1646c540821fea7a808ead78cd9ff4983c253dc8"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/5c003919aa8594ee.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/5c003919aa8594ee.py",
+          "sha256": "4d6cbfd1c3cc524dcf311f5ae5d42c1c3e2e644def832659d404205552f62e26"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/5dd8ed755e9a8317.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/5dd8ed755e9a8317.json",
+          "sha256": "62cb19fd164c92ad22d8121d6d49726ecd425ab6a9e86f49073d7db662591879"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/5dd8ed755e9a8317.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/5dd8ed755e9a8317.py",
+          "sha256": "e70c41cf4f61d3399b1ef2c7903c87df5be6039bf8897ee79e3d98e31096e3c6"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/75004f938a36a80a.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/75004f938a36a80a.json",
+          "sha256": "ae7ec5357770d0773f09e36a13880f4bd76bac737882349c81245f01bfe56c3f"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/75004f938a36a80a.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/75004f938a36a80a.py",
+          "sha256": "cb7e1c89e8c0eaec5785992ae658a3ece95fb9a631777503c1a9f223b6378d4a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/75979b57c0183a18.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/75979b57c0183a18.json",
+          "sha256": "a3b850d6e8ff97c335b64847b5caa060d0dbb5c6be8be4e5c06b10ba7da5fe85"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/75979b57c0183a18.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/75979b57c0183a18.py",
+          "sha256": "16f4205f0f67ef98620fc16d5d0c72e303a9c18a96ef0b150dd37d2782c7461a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/7698ca5804ac856c.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/7698ca5804ac856c.json",
+          "sha256": "8e02632ec6f743a03748e2ccb998082002557a6df1ba9e9cd56f8169294db8f4"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/7698ca5804ac856c.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/7698ca5804ac856c.py",
+          "sha256": "3b7edebee26f6308a119e87c34edd59e26d7ad23613092a69abe96289cc8e7f2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/84cad2e25356defd.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/84cad2e25356defd.json",
+          "sha256": "4cc2ec9e69101e42699cc445efd1c1de8712cf3abff51cd2a83c8a7290e72c3c"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/84cad2e25356defd.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/84cad2e25356defd.py",
+          "sha256": "598a0cd072383d93ffa89b8e699898db86d443cb8ebd57eeda786249a647206d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/927675d1787863bf.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/927675d1787863bf.json",
+          "sha256": "3af086a7316e960b2f86bc9a31d0db4c8f56cf59c169793467bed281e90980b4"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/927675d1787863bf.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/927675d1787863bf.py",
+          "sha256": "bacec88b9660627bba7fae7c7984628dbd42d8125bf877375b6d0d602674d451"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/a33403f8de9b1592.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/a33403f8de9b1592.json",
+          "sha256": "29b2af4615c961826a257377f629ab3d9e82c9d96ffe74dbc0c3e8bbc54e4ceb"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/a33403f8de9b1592.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/a33403f8de9b1592.py",
+          "sha256": "fc445d2a05efc7c20b5fab78c027c815ca3030844e215e3516a4cd02d7d0c1ea"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/a97dc70eaf2ce0aa.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/a97dc70eaf2ce0aa.json",
+          "sha256": "96bb0c3328fcac4dcd42f137ba7cada867efcce4b343af84609615b42be45bea"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/a97dc70eaf2ce0aa.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/a97dc70eaf2ce0aa.py",
+          "sha256": "21696abfb91eb7b48f60f7b4f7fd616be299b3dd6ba43cb8f56fd86c29f76a00"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/acd27e3ce3a2c63e.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/acd27e3ce3a2c63e.json",
+          "sha256": "7494df00965a2422c1182b18942479bfb1f0f9e4e9a31ee0ceab13f86e9af13d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/acd27e3ce3a2c63e.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/acd27e3ce3a2c63e.py",
+          "sha256": "ecf75cc1096c911da22582be5872703006f597cdacce579112187fcbf12e913b"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/b9552f3e19dc066d.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/b9552f3e19dc066d.json",
+          "sha256": "2fefc8d89da67c5e152e1a7faa0b028e08d5190996afe553b1f7f0ca83bbe14c"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/b9552f3e19dc066d.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/b9552f3e19dc066d.py",
+          "sha256": "7b67bb8ccba61886feb8e34d5b2e28a587f9fd8fe3bb3471aab600c9fc8cae3b"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/bd05d4ab6a119636.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/bd05d4ab6a119636.json",
+          "sha256": "931d41f4fd4d776be6f80b4df4a078d86103746bf8436137be89a0fc3d60f805"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/bd05d4ab6a119636.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/bd05d4ab6a119636.py",
+          "sha256": "81ec1db90e74ed83d3cb92f2041c7bc2b83b4bf87a2f40dca377326cf610dd54"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/cc0bf038cde5fd66.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/cc0bf038cde5fd66.json",
+          "sha256": "30ff1fd18504cb22fb4570d567811f868a61b26acb158b3889ef486e221b9b03"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/cc0bf038cde5fd66.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/cc0bf038cde5fd66.py",
+          "sha256": "113b1acdded1a4f4638f649a106267dfc376c0e37aec7836fbbbc181a1ce6649"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/cd3f0771e7376ee6.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/cd3f0771e7376ee6.json",
+          "sha256": "8843efb4105cf41bf3b5adba873a72794bfa35f2966a3d81825bc2277a6744c4"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/cd3f0771e7376ee6.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/cd3f0771e7376ee6.py",
+          "sha256": "d676d56e181db862c8355eac56e34b40988ad4bf4bd9760d5a5ad362aa038200"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/e25762db0316e221.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/e25762db0316e221.json",
+          "sha256": "560f462b7797684fcef93517a397aa06e867f3c67b1bd069c473564ae45793a8"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/e25762db0316e221.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/e25762db0316e221.py",
+          "sha256": "36e771161b8b3dc6da12087fe386b273f5ba8ece49f0896be1f7746009550acc"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/e43b68644d29a96f.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/e43b68644d29a96f.json",
+          "sha256": "e5ae15e89f79a4cb6a58de2815e5cf85a02520322d13a81a733eda77c459ebcb"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/e43b68644d29a96f.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/e43b68644d29a96f.py",
+          "sha256": "95b9c5ca29b0978a766fd504d9550388b988e8c25c81b19d29009def3269f570"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/e82c3d82899754b2.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/e82c3d82899754b2.json",
+          "sha256": "7bd219a198021a321252c810e6cf87808567f3a3d809da7750b92806bf0d16ad"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/e82c3d82899754b2.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/e82c3d82899754b2.py",
+          "sha256": "356eb95a6490dcc60de6f4e78a466d8c944a90402527bcf2dc017a409adb7770"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/ec44db9a5a8452ba.json",
+          "source": "hard81/group7/mhc_post/gluon_baseline/ec44db9a5a8452ba.json",
+          "sha256": "9d16b1bff30603edecda9bdb99dd06d7b67cc453034340e5f7e81f96630e461b"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/ec44db9a5a8452ba.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/ec44db9a5a8452ba.py",
+          "sha256": "e5fd1942e637356ec707715a0ab81864b2ecadcda11c4406a8518b830853c450"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_post/gluon_baseline/run.py",
+          "source": "hard81/group7/mhc_post/gluon_baseline/run.py",
+          "sha256": "f3c30db06d51a6da8ff6a619f38e52907e0abb787734acecffa7bbcb1d5558e0"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mhc_post/gluon_optimized/group8/080d32ecef755bbb-4e8c4d8358ac.py",
+          "source": "hard81/group8/mhc_post/gluon_optimized/080d32ecef755bbb-4e8c4d8358ac.py",
+          "sha256": "d490589d78315a1b09de83831dfab53751da1a751e92362893976701fe547baa"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mhc_post/gluon_optimized/group8/080d32ecef755bbb-f80ac411a63b.py",
+          "source": "hard81/group8/mhc_post/gluon_optimized/080d32ecef755bbb-f80ac411a63b.py",
+          "sha256": "5514f3bd828d476e929201646fd4a22342fa98c104f716bb0c0590fa6cbf37c7"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Two final winning HC=2 layout representatives retained: BlockedLayout([4],[64],[8],[0]) and BlockedLayout([8],[64],[8],[0]); all mutation candidates removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "mhc_pre",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/mhc_pre.py",
+      "sources": [
+        "hard81/group7/mhc_pre",
+        "hard81/group7/mhc_pre",
+        "hard81/group8/mhc_pre"
+      ],
+      "multiple_sources": true,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "mhc_pre/tle_source/mhc_pre.py",
+          "source": "hard81/group7/mhc_pre/original/mhc_pre.py",
+          "sha256": "e1a32f89c8696c19b9978fdfdb21ef8985b87c75692a200efb9eb69bdfdb3aca"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/__init__.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/__init__.py",
+          "sha256": "e82654f9f34d2a2088cf4b56d3f68342ca57bfd149dd17650a042cbc049c8914"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_3e23ace3ae4e.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_3e23ace3ae4e.py",
+          "sha256": "4f89c2bdbe359a2c4bcdd72ecb60a6c10300b58426ba0f468cd3de9d84de8c33"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_6043b9edc5ab.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_6043b9edc5ab.py",
+          "sha256": "05140bce6feb62769dfade550c2e1e84c2023881b7a10c60b799ea39a7f2c975"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_6cc900d4b492.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_6cc900d4b492.py",
+          "sha256": "10e3e6ab25b5962b420c59fefef90fcfbe41aa643df1893ce9f3bf360ed66f86"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_8cca9c3e4a16.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_8cca9c3e4a16.py",
+          "sha256": "2d77d0010a5f24fee58c31a0f8938e6de8d62717e43cf17607d3d9d9742539ae"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_d485f56398e2.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_d485f56398e2.py",
+          "sha256": "88d09f8933d7eb1c05051cad4e4c7105bcf7d3a59645df807670f3f3d334d29e"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_daa7fe6a29ee.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/mhc_pre_generic_kernel_ea80d5c81e_daa7fe6a29ee.py",
+          "sha256": "4d04c4c4b09c4e8b89c9eeb4da01991f88508ea52dd686941c00a199b908cf8a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/official/h1280_b1024_w4_s1_weuNone.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/official/h1280_b1024_w4_s1_weuNone.py",
+          "sha256": "711a8bde53f009ab52f6a903fc53c145fc3ab351c06543c0d82044eedb87b681"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/official/h2560_b1024_w4_s1_weuNone.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/official/h2560_b1024_w4_s1_weuNone.py",
+          "sha256": "8beb789fd1aaac46d939a73e410fea876157c8086ba3356151879fd369ea1188"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mhc_pre/gluon_baseline/official/h4096_b1024_w4_s1_weuNone.py",
+          "source": "hard81/group7/mhc_pre/gluon_baseline/official/h4096_b1024_w4_s1_weuNone.py",
+          "sha256": "9590d26f4ac3d3606e45c293111f5d9cbdfd19b04e349b9bfa6b9e3ed7757874"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mhc_pre/gluon_optimized/group8/final/b1024_w1_s16.py",
+          "source": "hard81/group8/mhc_pre/gluon_optimized/final/b1024_w1_s16.py",
+          "sha256": "74478870a25df968f4b8ae18fea0f7235502ce45dfa051d39e4086133049b501"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mhc_pre/gluon_optimized/group8/final/b1024_w2_s8.py",
+          "source": "hard81/group8/mhc_pre/gluon_optimized/final/b1024_w2_s8.py",
+          "sha256": "4eaafb06038ef0ab8645eca98ee6ae69496e8687138c5e5e2437865358522d5b"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mhc_pre/gluon_optimized/group8/final/b512_w1_s8.py",
+          "source": "hard81/group8/mhc_pre/gluon_optimized/final/b512_w1_s8.py",
+          "sha256": "0843e070eac2fd29319da01533bd5d2eee4ee0f861ed02111cf59d97867c12bd"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mhc_pre/gluon_optimized/group8/final/selection.json",
+          "source": "hard81/group8/mhc_pre/gluon_optimized/final/selection.json",
+          "sha256": "431ecce27784b2b52345c595be61e1380d3f9601c77f464bfb55a79ee8a31946"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "moe_sum",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/moe_sum.py",
+      "sources": [
+        "hard81/group2/moe_sum",
+        "hard81/group2/moe_sum"
+      ],
+      "multiple_sources": false,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "moe_sum/tle_source/generated/moe_sum.py",
+          "source": "hard81/group2/moe_sum/original/generated/moe_sum.py",
+          "sha256": "e47d822662548f92be15facb3d9890893e091170154a7047412ca2eab961257e"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/0b78aaf6457c173d.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/0b78aaf6457c173d.json",
+          "sha256": "cf928e4403a69a5a13949a9b2f6563ee8e0f5ae4c0ee0ec6575696af717c9376"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/0b78aaf6457c173d.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/0b78aaf6457c173d.py",
+          "sha256": "57033d02575d92929802418d473c4f664dd081d6fc7e35e93704a1d413e8655d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/11a8097850666dbd.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/11a8097850666dbd.json",
+          "sha256": "663714acb34ab5f90c71ccc818cb6020831ee5494079d22461b7300815392356"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/11a8097850666dbd.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/11a8097850666dbd.py",
+          "sha256": "677f8a334c3f708a6d347e6e7ecbe7d9e88297fd1993caff4864384e9c428783"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/4cf695068aee2594.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/4cf695068aee2594.json",
+          "sha256": "7af0eec69775d04b73b35d436b7371f11ce941a687bb8fbe98576c244badbdc1"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/4cf695068aee2594.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/4cf695068aee2594.py",
+          "sha256": "3a2046008c0b5b0288f1408f3551432c383a8d450d1857cb6e2acd0f3c2c62d1"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/60fb32b88ae9f9ef.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/60fb32b88ae9f9ef.json",
+          "sha256": "78a5bb3033a11e9eb034e96729643d32c505ee6308bf515c6dd1aa5d375b4702"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/60fb32b88ae9f9ef.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/60fb32b88ae9f9ef.py",
+          "sha256": "a97271f89a8d9ddebadd190bba0e26c4c574fa451fcd97eec6a3276b018ce0c9"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/7bc8fa15647e4fdf.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/7bc8fa15647e4fdf.json",
+          "sha256": "39ea982bd763a5d278cfbd65133fa246409176ff244c5baf93b5c9c1c5693d77"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/7bc8fa15647e4fdf.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/7bc8fa15647e4fdf.py",
+          "sha256": "5cd84ed4ed5b78fdec39547c77d840fe66eecc8e47d06ea85efd14afd07874fc"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/952e08ee79bff86e.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/952e08ee79bff86e.json",
+          "sha256": "6cfcfef19d4fba94f3adb7f3c173ea209b64617b33d4d29811c6f86a9cf6a0e3"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/952e08ee79bff86e.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/952e08ee79bff86e.py",
+          "sha256": "15889c669d31fa43b8fecdf9cbe6d0790a52465d430ef164bd1111bd3f66c2d1"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/a46cbc4b54a191bb.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/a46cbc4b54a191bb.json",
+          "sha256": "92c0f0579eb972cc417b44f0ed97749c8b1ca85a563d80f209d02aab0aa00f04"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/a46cbc4b54a191bb.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/a46cbc4b54a191bb.py",
+          "sha256": "c56ead426f1b04f673c88b37cd465ba45701374a95e3f4a1a5164a37fcb7ad9f"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/a81aa054c3429fa5.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/a81aa054c3429fa5.json",
+          "sha256": "c45fa072b041a15b5a0f394cd37cd0e2efcaf18ed1e34e6f8411d41a5d738a32"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/a81aa054c3429fa5.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/a81aa054c3429fa5.py",
+          "sha256": "023b84bc3b1ac6292b1427147726c0a4fb9ef7aa689c44d27ad666ac8a768fcb"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/a9a0bed6c4eb28fb.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/a9a0bed6c4eb28fb.json",
+          "sha256": "4d31f54065838479ee1de4683d8c84a87de88135c2f765b5019d16e6a8a158bf"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/a9a0bed6c4eb28fb.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/a9a0bed6c4eb28fb.py",
+          "sha256": "7a57623e1d1d3ac7e0462b59baae6cace0033bcb9a76824453cac4b248eb11cc"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/ca039646a9147eca.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/ca039646a9147eca.json",
+          "sha256": "09152ddcb0a21648223b643f4badcfe384c3f48a68707987ec7c8f832f186f1a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/ca039646a9147eca.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/ca039646a9147eca.py",
+          "sha256": "ac330041cbe839520b81f84f5617434e69d4342e2ec351e664985e1503cc694a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/e431049f075f05d1.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/e431049f075f05d1.json",
+          "sha256": "01bdc8d7f3d9e15ccfcc1cdbf4f2271cbfee00d5766609feb00056738f725798"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/e431049f075f05d1.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/e431049f075f05d1.py",
+          "sha256": "74ac7b48980105e6aed087835a4c1773ba55590ac24485fff78a24bc8e75c302"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/e62e847a5d0885c5.json",
+          "source": "hard81/group2/moe_sum/gluon_baseline/e62e847a5d0885c5.json",
+          "sha256": "7299dc19f75367ae9cf47c09adb91464c2c76bd036d8b5d4bdc676eadefd4703"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/e62e847a5d0885c5.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/e62e847a5d0885c5.py",
+          "sha256": "3bfb89cf6ced6d8c1e74de85804d0815ed4dba8b8a3f260c4f244453a4ccda09"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "moe_sum/gluon_baseline/moe_sum_tle_equivalent.py",
+          "source": "hard81/group2/moe_sum/gluon_baseline/moe_sum_tle_equivalent.py",
+          "sha256": "1fb34b15d09662c3b2a14193f343243f69527158d9b740383de443da21d04213"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "moe_sum/gluon_optimized/moe_sum_optimized.py",
+          "source": "hard81/group2/moe_sum/gluon_optimized/moe_sum_optimized.py",
+          "sha256": "fc4f2ce4137e20ff170baf774623efdeb57409ffc5386a83f913969950a9005a"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "mv",
+      "library": "FlagGems",
+      "github_path": "https://github.com/FlagOpen/FlagGems/blob/main/src/flag_gems/ops/mv.py",
+      "sources": [
+        "hard81/group6/mv",
+        "hard81/group6/mv"
+      ],
+      "multiple_sources": false,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "mv/tle_source/mv.py",
+          "source": "hard81/group6/mv/original/mv.py",
+          "sha256": "dd31bc55f0112ce3a6819bfc7585c5447ec16a4bdc8e1f462e5742c225e85494"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mv/gluon_baseline/__init__.py",
+          "source": "hard81/group6/mv/gluon_baseline/__init__.py",
+          "sha256": "7b7359c75660ed2d2986a40274e9e82c976831d52324671f5ee921f53473de53"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "mv/gluon_baseline/mv_kernel_dbcdfd7e06_c6b3e2adcd4a.py",
+          "source": "hard81/group6/mv/gluon_baseline/mv_kernel_dbcdfd7e06_c6b3e2adcd4a.py",
+          "sha256": "3bf44d88c3cc2cd4de21c8daa49d212e4ce8448c6eb473bb86f885e386118eec"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mv/gluon_optimized/final/mv_bn1_col_w1.py",
+          "source": "hard81/group6/mv/gluon_optimized/final/mv_bn1_col_w1.py",
+          "sha256": "3f1cda1b6712657a2ccf00e1222f99b7b292b83aab9de9e36de4ae2b6160174d"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mv/gluon_optimized/final/mv_exact_bn16_bm128_w4.py",
+          "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn16_bm128_w4.py",
+          "sha256": "c1649269674da7d20468196044f7f85cf3774a3f69869add67e2fa7431ee1d93"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mv/gluon_optimized/final/mv_exact_bn16_bm256_w8.py",
+          "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn16_bm256_w8.py",
+          "sha256": "2b54a625e47759395b35e135647f503a75491d8e5f2a8ddf9661c981d984d22f"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mv/gluon_optimized/final/mv_exact_bn16_bm64_w4.py",
+          "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn16_bm64_w4.py",
+          "sha256": "fa8326036d719cfcdea450683e9eb970de4d52c6e3908f0bfce20d160e4d10d2"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mv/gluon_optimized/final/mv_exact_bn2_bm256_w4.py",
+          "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn2_bm256_w4.py",
+          "sha256": "4b907b52375e37b858824cc8a5a3bfd1fbedde0713fb200cc1ab342cf1baf5d2"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "mv/gluon_optimized/final/mv_exact_bn8_bm256_w8.py",
+          "source": "hard81/group6/mv/gluon_optimized/final/mv_exact_bn8_bm256_w8.py",
+          "sha256": "389996abc3bb7c7755fe2cd302f4efe239b46cf3d9e223af026dfc21dbbe5ad2"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "rms_norm",
+      "library": "FlagGems",
+      "github_path": "https://github.com/FlagOpen/FlagGems/blob/main/src/flag_gems/ops/rms_norm.py",
+      "sources": [
+        "hard81/group6/rms_norm",
+        "hard81/group6/rms_norm"
+      ],
+      "multiple_sources": false,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "rms_norm/tle_source/rms_norm.py",
+          "source": "hard81/group6/rms_norm/original/rms_norm.py",
+          "sha256": "58407466be597c05442b3288c95abb2c33e47f0f6b98cff624b2f2e8a00823e3"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/__init__.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/__init__.py",
+          "sha256": "5a464800c800e9ae5f4cd5d788600c7dc4c1337263486960fcf11ec153bb7f24"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_grad_dw_kernel_7efa9d58a9_9821b985d821.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_grad_dw_kernel_7efa9d58a9_9821b985d821.py",
+          "sha256": "4704dca9824314c2422eaaf1556c2a774dcc257f21bc2d6a43a327d50a5fb2c2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_grad_dx_kernel_99b74d3bae_248f54e5234a.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_grad_dx_kernel_99b74d3bae_248f54e5234a.py",
+          "sha256": "b2ace6faea8c48420ae36b40b73d1bd51afeef0d15cce7a9baf4f7c82d2b3f69"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_kernel_0aaa02d6c8_4a682d6d42c7.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_kernel_0aaa02d6c8_4a682d6d42c7.py",
+          "sha256": "8d361b74346dc2b4cb3fea48324b98ef8d5e5a556804af5c777b9ad735ec32e0"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t1024_w16.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t1024_w16.py",
+          "sha256": "cef9c8606accc2d76fa7e75f9b1b71defd52b2a289fe38d306751c89f860cdcc"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t1024_w4.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t1024_w4.py",
+          "sha256": "c0fdd32e8f1fbcb295b7b1113f0cfd90a2fb4f4c96a55149c5e24d2179b7d378"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t1024_w8.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t1024_w8.py",
+          "sha256": "00609b985783f5686f3e7d43fddd8ab8a943d9a85b731d429f801de34ec69036"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t2048_w16.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t2048_w16.py",
+          "sha256": "c1177cccfaad6e127a565fb048b3bc08ab55525da12a300d8a87d164928f8cd7"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t2048_w4.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t2048_w4.py",
+          "sha256": "9420eb70ffca33da28fc093e376adf33cd13ebf74935424af5c4206e1576a76c"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t2048_w8.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t2048_w8.py",
+          "sha256": "b2f5cb3940e7ea19fa4de03088ea412e1183fe09b7f5d4dee3e0011f4cf85065"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t4096_w16.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t4096_w16.py",
+          "sha256": "bc989032565c6ed83552887ffbff72f373c28c93f84a797ddc542f6d47f2d5d2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t4096_w4.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t4096_w4.py",
+          "sha256": "547625cbfcd5153141dde3084242310286ad6b209596ebe5c993f077dd067d2f"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t4096_w8.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t4096_w8.py",
+          "sha256": "2a264d0932d09413820209f72e3a4d4ea491e6b83a48213984d7ab8245b5e0cf"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t8192_w16.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t8192_w16.py",
+          "sha256": "a496d8250c3043a634b706176199a4ed033b5f5cefbf6bff90ce42338b111bee"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t8192_w4.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t8192_w4.py",
+          "sha256": "bebdf5b8400138b9bbbdbd091ca51af028b6d0b3c4d144f3b90ee704b372a84d"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm/gluon_baseline/rms_norm_loop_t8192_w8.py",
+          "source": "hard81/group6/rms_norm/gluon_baseline/rms_norm_loop_t8192_w8.py",
+          "sha256": "916aa6f56afde118000041de49930f9f1937f79e07129b73cb9c82fa7e4c2e23"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "rms_norm/gluon_optimized/optimized_rms_norm.py",
+          "source": "hard81/group6/rms_norm/gluon_optimized/optimized_rms_norm.py",
+          "sha256": "6e56b2cc44709e4e0ee94e5908532aad83664beae4a67ab1410522daedb3746c"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "rms_norm_w8a16_fp8",
+      "library": "FlagGems",
+      "github_path": "https://github.com/FlagOpen/FlagGems/blob/main/src/flag_gems/ops/rms_norm_w8a16_fp8.py",
+      "sources": [
+        "hard81/group6/rms_norm_w8a16_fp8",
+        "hard81/group6/rms_norm_w8a16_fp8"
+      ],
+      "multiple_sources": false,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "rms_norm_w8a16_fp8/tle_source/rms_norm_w8a16_fp8.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/original/rms_norm_w8a16_fp8.py",
+          "sha256": "9b423754369bc9769e332186d7751b0485ba8c88ce187a60f1d6c65906526359"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm_w8a16_fp8/gluon_baseline/00_plain_m1_n4096_t4096_w4.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_baseline/00_plain_m1_n4096_t4096_w4.py",
+          "sha256": "b6fdb36d24b24695769c7d9204712adf70033120d129318a03323c1ac445fae1"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm_w8a16_fp8/gluon_baseline/01_grouped_m128_n4096_g32x128_w4.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_baseline/01_grouped_m128_n4096_g32x128_w4.py",
+          "sha256": "5476795ca200fbdf5300d0d00d05042be7ea804c577c62d349bc15fc2b2e1a0e"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm_w8a16_fp8/gluon_baseline/02_grouped_m512_n4096_g32x128_w8.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_baseline/02_grouped_m512_n4096_g32x128_w8.py",
+          "sha256": "1ba47c46049a80a0eeecae5f747afd73933332780076d7d4fc309c0ef7abbced"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm_w8a16_fp8/gluon_baseline/03_grouped_m64_n8192_g64x128_w4.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_baseline/03_grouped_m64_n8192_g64x128_w4.py",
+          "sha256": "b637e7bc23e49b48723fcb57f53d71813d16dc0c021594c7ea3fa88839591615"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm_w8a16_fp8/gluon_baseline/04_grouped_m1_n16384_g128x128_w4.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_baseline/04_grouped_m1_n16384_g128x128_w4.py",
+          "sha256": "563103ebc297bbe60f6cc7c739be4b422109a737e48339f3ccc4f21f214012e9"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm_w8a16_fp8/gluon_baseline/05_loop_m1_n32768_t8192_w16.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_baseline/05_loop_m1_n32768_t8192_w16.py",
+          "sha256": "31ee9bb3723f35cb15b02eb813822e73d7ad3944118d0d570ef8dcb44f41ff06"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm_w8a16_fp8/gluon_baseline/__init__.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_baseline/__init__.py",
+          "sha256": "874aa298cc4eb54c32dbbe1d4823fa32f72866cd06b0076d5ace2abe47a7fa73"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rms_norm_w8a16_fp8/gluon_baseline/rms_norm_fp8_w8a16_kernel_45672e5a08_6a47d273b8a8.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_baseline/rms_norm_fp8_w8a16_kernel_45672e5a08_6a47d273b8a8.py",
+          "sha256": "cbfb303c6f10d1d012abd9fff24039f2ae0db4c83e8d668b7a90b3bcf9473107"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "rms_norm_w8a16_fp8/gluon_optimized/final/05_loop_m1_n32768_t8192_w16.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_optimized/final/05_loop_m1_n32768_t8192_w16.py",
+          "sha256": "31ee9bb3723f35cb15b02eb813822e73d7ad3944118d0d570ef8dcb44f41ff06"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "rms_norm_w8a16_fp8/gluon_optimized/final/grouped_w4_compute.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_optimized/final/grouped_w4_compute.py",
+          "sha256": "5f01575895bbe9bb180c0cc248a301ae2da9cd3586d94e03ac9b71aa63d1d1b9"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "rms_norm_w8a16_fp8/gluon_optimized/final/grouped_w4_store.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_optimized/final/grouped_w4_store.py",
+          "sha256": "fd0cca0f5b5fb0b3282f75ec1204cacc56fcf17a783148b8b4950d72675ebe8a"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "rms_norm_w8a16_fp8/gluon_optimized/final/grouped_w8.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_optimized/final/grouped_w8.py",
+          "sha256": "f3fd8345d14fe7310d5f027ce838ed72ba1d388ea2a70a7383820b765ff62cec"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "rms_norm_w8a16_fp8/gluon_optimized/final/plain_w8_s8.py",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_optimized/final/plain_w8_s8.py",
+          "sha256": "68890590fb9c1a77fc3babdda48f96de7c4deb247292669f4c350e30305e744b"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "rms_norm_w8a16_fp8/gluon_optimized/final/selection.json",
+          "source": "hard81/group6/rms_norm_w8a16_fp8/gluon_optimized/final/selection.json",
+          "sha256": "642d7dcec2c05da3f2282940de992a8113acecce34982228e3c2096a0f3c8375"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "router_gemm",
+      "library": "FlagGems",
+      "github_path": "https://github.com/FlagOpen/FlagGems/blob/main/src/flag_gems/ops/router_gemm.py",
+      "sources": [
+        "hard81/group2/router_gemm",
+        "hard81/group2/router_gemm"
+      ],
+      "multiple_sources": false,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "router_gemm/tle_source/generated/mm.py",
+          "source": "hard81/group2/router_gemm/original/generated/mm.py",
+          "sha256": "d37eb3ca6511b79340f2c199428873baf7d1e704f34146e154c61c1801aa8d89"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-dac291f31ab8a83f.json",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-dac291f31ab8a83f.json",
+          "sha256": "89689beef04a6cb4e09934c9698528562cfe0beccac6732b0fb9a0ef8152d665"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-dac291f31ab8a83f.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-dac291f31ab8a83f.py",
+          "sha256": "dbfba81ceb6f9f84be3462d373cf965e0d2c7fc2f8b788a0240e8b90e993107a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m1024-n256-k7168-61c0e18a23da-b1e042afc6e9b312.json",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m1024-n256-k7168-61c0e18a23da-b1e042afc6e9b312.json",
+          "sha256": "5adf6e0911d97e499af1737d14797f4eb59465fe9825375a29e42ded48a880a0"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m1024-n256-k7168-61c0e18a23da-b1e042afc6e9b312.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m1024-n256-k7168-61c0e18a23da-b1e042afc6e9b312.py",
+          "sha256": "8a8b16c3932252fd65de7139eb007642d97ee8a93c15c034ffe5a9a590035ebc"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m128-n256-k7168-d6be54e7a96e-290e439708e84ea7.json",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m128-n256-k7168-d6be54e7a96e-290e439708e84ea7.json",
+          "sha256": "551f1d9d67cb59f52acf4757d42f7a7e9d8185f285fa675ae3117815b29a457a"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m128-n256-k7168-d6be54e7a96e-290e439708e84ea7.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m128-n256-k7168-d6be54e7a96e-290e439708e84ea7.py",
+          "sha256": "cbb1a2d123883b9a76ed98b0e5073c1a08ac0791eec54ee95929133798fb4be4"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m16-n256-k7168-91efb3819721-409a50ed425e3c59.json",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m16-n256-k7168-91efb3819721-409a50ed425e3c59.json",
+          "sha256": "0aab80681c7e314968eca36e2affec2ac3c64eb91c921169aea71212d00b24c7"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m16-n256-k7168-91efb3819721-409a50ed425e3c59.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m16-n256-k7168-91efb3819721-409a50ed425e3c59.py",
+          "sha256": "2a67c91d758261b1f36dd58bc7db9324a425b6fb1a29ea45398fb74497b2c918"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m256-n256-k7168-a6f349652ff2-290e439708e84ea7.json",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m256-n256-k7168-a6f349652ff2-290e439708e84ea7.json",
+          "sha256": "5ad6091e5fce43536fc810a690ac04bc81d3b2254422e9cf605f26cae208ef35"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m256-n256-k7168-a6f349652ff2-290e439708e84ea7.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m256-n256-k7168-a6f349652ff2-290e439708e84ea7.py",
+          "sha256": "d07d28bbac6641b92fa7b6f08d96ed710b88a9fc27503a0c79e6b78b0703b002"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m32-n256-k7168-25ec8b6abf8f-f9642f52c37804a7.json",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m32-n256-k7168-25ec8b6abf8f-f9642f52c37804a7.json",
+          "sha256": "d09f59baa7f051a31661fd90a2764826d29ea13b1feef89234c2e1ed30bb5a1f"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m32-n256-k7168-25ec8b6abf8f-f9642f52c37804a7.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m32-n256-k7168-25ec8b6abf8f-f9642f52c37804a7.py",
+          "sha256": "8fa60e2b4d002c39a8deb544a40fb7a3c8efa64d583c34c350d05d4aa1f69169"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m512-n256-k7168-d520122fb141-290e439708e84ea7.json",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m512-n256-k7168-d520122fb141-290e439708e84ea7.json",
+          "sha256": "39544b9a232fb4d0bba0d6ebb7a875eca13195f6d153efd332b0927dcb3b1fe2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m512-n256-k7168-d520122fb141-290e439708e84ea7.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m512-n256-k7168-d520122fb141-290e439708e84ea7.py",
+          "sha256": "3724c153181ac2625c4f974ba72dd5ab3988bf8b566dbadd6948f96e5dbadf74"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m64-n256-k7168-ff9727c42e3a-52008239d1c1b92a.json",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m64-n256-k7168-ff9727c42e3a-52008239d1c1b92a.json",
+          "sha256": "52a07ac1b81097c3da5dd789ff4284936fd821cd9bafc96c1a8ae31a3cedeca9"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m64-n256-k7168-ff9727c42e3a-52008239d1c1b92a.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m64-n256-k7168-ff9727c42e3a-52008239d1c1b92a.py",
+          "sha256": "21627f47f51d6a13d46fa51fdb40c09cf4439365e89feab5b83a92e1a7cf5eaf"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m8-n256-k7168-563ef27b411c-ffbf7b2a1b396975.json",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m8-n256-k7168-563ef27b411c-ffbf7b2a1b396975.json",
+          "sha256": "35c3522907dcaa87587291b59ca665794ed2dc69ec262e099fba8419802e25b5"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router-gemm-m8-n256-k7168-563ef27b411c-ffbf7b2a1b396975.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router-gemm-m8-n256-k7168-563ef27b411c-ffbf7b2a1b396975.py",
+          "sha256": "0bee24b68a563990cc3f2c9aca73f7a1411893c94e136854dc98736abbf781d2"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "router_gemm/gluon_baseline/router_gemm_tle_equivalent.py",
+          "source": "hard81/group2/router_gemm/gluon_baseline/router_gemm_tle_equivalent.py",
+          "sha256": "8e90c32e2792542f14b0f56b4ec92f1088e1f4b64b0a613f52c8bb03e43671de"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-h2_direct_kvector_coupled.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m1-n256-k7168-e9e4c0f8d9ca-h2_direct_kvector_coupled.py",
+          "sha256": "b99f9e02ce605c36d77784b961dfa647787001bf36869831f0df6a72e0b0f024"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router-gemm-m1024-n256-k7168-61c0e18a23da-h4_m1024_nwave_kvector.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m1024-n256-k7168-61c0e18a23da-h4_m1024_nwave_kvector.py",
+          "sha256": "9ea4e452353034790d91251f97a2d20d9518e960929954f781e23775904b2e98"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router-gemm-m128-n256-k7168-d6be54e7a96e-h2_direct_kvector_coupled.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m128-n256-k7168-d6be54e7a96e-h2_direct_kvector_coupled.py",
+          "sha256": "649eaf33ff916f2ac7e46d5bb2487a736c48239d02fb74d1a2c059d1b593ca86"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router-gemm-m16-n256-k7168-91efb3819721-h2_direct_kvector_coupled.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m16-n256-k7168-91efb3819721-h2_direct_kvector_coupled.py",
+          "sha256": "ca90dafd2e5a584b5fec805aa85972510f37a10c3ee00f95fe6f07f12c64ac18"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router-gemm-m256-n256-k7168-a6f349652ff2-h2_direct_kvector_coupled.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m256-n256-k7168-a6f349652ff2-h2_direct_kvector_coupled.py",
+          "sha256": "7170e557ec793dfa5745481fc1ce55ce4956c2f6438c8582007c7330453b0ae0"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router-gemm-m32-n256-k7168-25ec8b6abf8f-h2_direct_kvector_coupled.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m32-n256-k7168-25ec8b6abf8f-h2_direct_kvector_coupled.py",
+          "sha256": "8a154b33ee877627470baff82ff940b64eebed95483a92e9334567b2d8d6fbd8"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router-gemm-m512-n256-k7168-d520122fb141-h2_direct_kvector_coupled.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m512-n256-k7168-d520122fb141-h2_direct_kvector_coupled.py",
+          "sha256": "9d2e5a8d41de18ee07347f1f2d954384222f45c98e62261a2b47b737d64b9918"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router-gemm-m64-n256-k7168-ff9727c42e3a-h2_direct_kvector_coupled.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m64-n256-k7168-ff9727c42e3a-h2_direct_kvector_coupled.py",
+          "sha256": "bad76e4c1da3507c08010391e0d4e12032af3e3e8556eca7763af404033841f7"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router-gemm-m8-n256-k7168-563ef27b411c-h2_direct_kvector_coupled.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router-gemm-m8-n256-k7168-563ef27b411c-h2_direct_kvector_coupled.py",
+          "sha256": "bdc19d691cfa7ee7ca60b905305690ed64f461f6170450361221a69bf4531eff"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "router_gemm/gluon_optimized/router_gemm_optimized.py",
+          "source": "hard81/group2/router_gemm/gluon_optimized/router_gemm_optimized.py",
+          "sha256": "80de834d7eef46e885041799a4c90d2c92207465c76466405b33b558638deb7a"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    },
+    {
+      "schema_version": 1,
+      "operator": "rwkv_ka_fusion",
+      "library": "FlagGems-vllm",
+      "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/rwkv_ka_fusion.py",
+      "sources": [
+        "hard81/group9/rwkv_ka_fusion",
+        "hard81/group9/rwkv_ka_fusion"
+      ],
+      "multiple_sources": false,
+      "files": [
+        {
+          "section": "tle_source",
+          "path": "rwkv_ka_fusion/tle_source/rwkv_ka_fusion.py",
+          "source": "hard81/group9/rwkv_ka_fusion/original/rwkv_ka_fusion.py",
+          "sha256": "a6aa84a9a3436de2d8ca83e5e1815226744de825ea98669fb9145c94c039f003"
+        },
+        {
+          "section": "gluon_optimized",
+          "path": "rwkv_ka_fusion/gluon_optimized/one_wave/rwkv_ka_fusion_kernel_one_wave.py",
+          "source": "hard81/group9/rwkv_ka_fusion/optimized_gluon/one_wave/rwkv_ka_fusion_kernel_one_wave.py",
+          "sha256": "f6f8ca554b74c488d85818469649509797e382d95a97d40c6cd6d4f2c9edb5ee"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rwkv_ka_fusion/gluon_baseline/rwkv_ka_fusion_kernel_baseline.py",
+          "source": "hard81/group9/rwkv_ka_fusion/gluon/baseline/rwkv_ka_fusion_kernel_baseline.py",
+          "sha256": "a008c213addf2a2fa32ed2da116d6d2e2f44c47e450221f12d3364ce64d101cc"
+        },
+        {
+          "section": "gluon_baseline",
+          "path": "rwkv_ka_fusion/gluon_baseline/translation_manifest.json",
+          "source": "hard81/group9/rwkv_ka_fusion/gluon/baseline/translation_manifest.json",
+          "sha256": "34bd440c6f9edaf8e4b84ea10290fc91d1ae3608f7600f4c011b350bf45686e3"
+        }
+      ],
+      "missing": [],
+      "notes": "",
+      "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+    }
+  ],
+  "operator_count": 20,
+  "file_count": 351
+}

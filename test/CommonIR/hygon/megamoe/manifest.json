@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "operator": "megamoe",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/megamoe.py",
+  "sources": [
+    "hard81/group2/megamoe",
+    "hard81/group2/megamoe",
+    "hard81/full09/megamoe"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l1_kernel-9acd31da9c33b400.json",
+      "source": "hard81/group2/megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l1_kernel-9acd31da9c33b400.json",
+      "sha256": "55162982548d390750e9337bdd27bb1c1874c9e7d2d6bc2e10de78efbd10f594"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l1_kernel-9acd31da9c33b400.py",
+      "source": "hard81/group2/megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l1_kernel-9acd31da9c33b400.py",
+      "sha256": "066c940babb9f02657cfc450d761de57e6c8f5b31e9a595673c1b4e0836a6b8d"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l2_kernel-3f64c6a6e7a0aa2a.json",
+      "source": "hard81/group2/megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l2_kernel-3f64c6a6e7a0aa2a.json",
+      "sha256": "dab9ec14b35f388fae9791ba1bd5410ceff82bfb4bdeffcd3d934cbdee78e12a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l2_kernel-3f64c6a6e7a0aa2a.py",
+      "source": "hard81/group2/megamoe/gluon_baseline/deepseek-m16-h7168-i2048-e256-k8-ue8m0-_fp8_fp4_mega_moe_l2_kernel-3f64c6a6e7a0aa2a.py",
+      "sha256": "8d36340613c86c925bc79bdebdecc15283c1c7f3d417e669f1246ee9896b1327"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l1_kernel-5cb970117bbb46ee.json",
+      "source": "hard81/group2/megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l1_kernel-5cb970117bbb46ee.json",
+      "sha256": "fc01830f70b90af43f84552fc3ada0987c24c860d4a48181209bcaef0e7faedb"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l1_kernel-5cb970117bbb46ee.py",
+      "source": "hard81/group2/megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l1_kernel-5cb970117bbb46ee.py",
+      "sha256": "12a38c392e5a8db6eac285e61b3178cc5cc8b37b8dc7b14b19a71939df1549dc"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l2_kernel-590137d8f2e23261.json",
+      "source": "hard81/group2/megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l2_kernel-590137d8f2e23261.json",
+      "sha256": "32466aef680c61cabbceba239fc0ce9dd945313af5f6a6b0d56e36b0b52ac46c"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l2_kernel-590137d8f2e23261.py",
+      "source": "hard81/group2/megamoe/gluon_baseline/mixtral-m16-h4096-i14336-e8-k2-ue8m0-_fp8_fp4_mega_moe_l2_kernel-590137d8f2e23261.py",
+      "sha256": "64ead53c0a8725cf1894aa160c209fe49fdaa88e14c9d6c8e21d2642def3cb2a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l1_kernel-6c8710021f52cea5.json",
+      "source": "hard81/group2/megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l1_kernel-6c8710021f52cea5.json",
+      "sha256": "7dbd7b42163765bb680e37d4732c51ce337f5a9a857a643eadb3001044f46aa3"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l1_kernel-6c8710021f52cea5.py",
+      "source": "hard81/group2/megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l1_kernel-6c8710021f52cea5.py",
+      "sha256": "20cf1e25e75f83038700b39a0e029d471d41bd5ff6ad85099749c25fb23740b3"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l2_kernel-7fd75ed60f67a85c.json",
+      "source": "hard81/group2/megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l2_kernel-7fd75ed60f67a85c.json",
+      "sha256": "e3e207aaaa6c8f4e19d6a8b82fe17b0c0791410303961c1c1e4ca74974c742c5"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l2_kernel-7fd75ed60f67a85c.py",
+      "source": "hard81/group2/megamoe/gluon_baseline/toy-m1-h32-i32-e2-k1-ue8m0-_fp8_fp4_mega_moe_l2_kernel-7fd75ed60f67a85c.py",
+      "sha256": "7b4b41761e948d6c153e149cd5a1d2657a03b88f4bd9af51fd2f764319f8045e"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "megamoe/gluon_optimized/full09/h1_provenance.json",
+      "source": "hard81/full09/megamoe/gluon_optimized/h1_provenance.json",
+      "sha256": "7f9b8396f967747a8c708aa4af01cf2f7b58fbb528611e23bd8de2f8fc1e934d"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "megamoe/gluon_optimized/full09/megamoe_dispatch.py",
+      "source": "hard81/full09/megamoe/gluon_optimized/megamoe_dispatch.py",
+      "sha256": "63be25e74ef88fc0001ae305814f8809019a1641b677d995484976d350d73c0f"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "megamoe/gluon_optimized/full09/megamoe_h1_l1_reduction_first.py",
+      "source": "hard81/full09/megamoe/gluon_optimized/megamoe_h1_l1_reduction_first.py",
+      "sha256": "eac9ec730d624f66ceaba7aa3cf80bd4d7ce43d9932a4a2cd57360d7c2daf81f"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "megamoe/gluon_optimized/full09/megamoe_h1_l2_reduction_first.py",
+      "source": "hard81/full09/megamoe/gluon_optimized/megamoe_h1_l2_reduction_first.py",
+      "sha256": "5d0277c316962b0c956d38c9175f5b9f9f2187d6693669aa50958bd0eb76e1ba"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

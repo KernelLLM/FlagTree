@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "operator": "lightning_indexer",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/lightning_indexer.py",
+  "sources": [
+    "hard81/group5/lightning_indexer",
+    "hard81/group5/lightning_indexer",
+    "hard81/full05/lightning_indexer"
+  ],
+  "multiple_sources": true,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "lightning_indexer/tle_source/operator.py",
+      "source": "hard81/group5/lightning_indexer/original/operator.py",
+      "sha256": "16ef376eabce2909fbfcc3dcac78809132e619d573448b225ca63ce2f2731257"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "lightning_indexer/gluon_baseline/kernel.py",
+      "source": "hard81/group5/lightning_indexer/gluon_baseline/kernel.py",
+      "sha256": "29244ace18afd50cd496239187eb5f5026a1aa7d85c8124d4ae78868bba6e903"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "lightning_indexer/gluon_baseline/metadata.json",
+      "source": "hard81/group5/lightning_indexer/gluon_baseline/metadata.json",
+      "sha256": "4dd8404c0f46ecb3e31386869a8488d393e0513900184ab321bf0c3c93b1aabb"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "lightning_indexer/gluon_baseline/runtime.metadata.json",
+      "source": "hard81/group5/lightning_indexer/gluon_baseline/runtime.metadata.json",
+      "sha256": "29ef73f99922579347ffb5ff36fad3af97157b75d59cadb615526016caaec8e5"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "lightning_indexer/gluon_optimized/full05/kernel.py",
+      "source": "hard81/full05/lightning_indexer/gluon_optimized/kernel.py",
+      "sha256": "5f3d3bce7270c8aad95034c5a5b511b91db87c5f93837a5c307c652b8fb5bdb8"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "lightning_indexer/gluon_optimized/full05/metadata.json",
+      "source": "hard81/full05/lightning_indexer/gluon_optimized/metadata.json",
+      "sha256": "3ad39d6f85ed9760f28c2aeb43012d85a1f691997dd7c91d21a3da4e1699aa47"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

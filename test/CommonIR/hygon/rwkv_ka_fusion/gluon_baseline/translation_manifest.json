@@ -1,0 +1,224 @@
+{
+  "source_kernel": "rwkv_ka_fusion_kernel",
+  "ttgir": "remote_lowering/rwkv_ka_fusion_kernel_541fee77b8.ttgir",
+  "generated": "gluon/baseline/rwkv_ka_fusion_kernel_baseline.py",
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 24,
+      "end_line": 24,
+      "call": "range",
+      "generated_line": 16,
+      "generated_column": 13
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 22,
+      "end_line": 22,
+      "call": "tl.program_id",
+      "generated_line": 14,
+      "generated_column": 23
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 36,
+      "end_line": 36,
+      "call": "tl.store",
+      "generated_line": 28,
+      "generated_column": 8
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 39,
+      "end_line": 39,
+      "call": "tl.store",
+      "generated_line": 31,
+      "generated_column": 8
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 40,
+      "end_line": 40,
+      "call": "tl.store",
+      "generated_line": 32,
+      "generated_column": 8
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 26,
+      "end_line": 26,
+      "call": "tl.load",
+      "generated_line": 18,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 27,
+      "end_line": 27,
+      "call": "tl.load",
+      "generated_line": 19,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 29,
+      "end_line": 29,
+      "call": "tl.load",
+      "generated_line": 21,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 30,
+      "end_line": 30,
+      "call": "tl.load",
+      "generated_line": 22,
+      "generated_column": 26
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 33,
+      "end_line": 33,
+      "call": "tl.sum",
+      "generated_line": 25,
+      "generated_column": 32
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 34,
+      "end_line": 34,
+      "call": "tl.sqrt",
+      "generated_line": 26,
+      "generated_column": 31
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 25,
+      "end_line": 25,
+      "call": "tl.arange",
+      "generated_line": 17,
+      "generated_column": 91
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 28,
+      "end_line": 28,
+      "call": "tl.arange",
+      "generated_line": 20,
+      "generated_column": 68
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 33,
+      "end_line": 33,
+      "call": "kt2.to",
+      "generated_line": 25,
+      "generated_column": 68
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 37,
+      "end_line": 37,
+      "call": "a.to",
+      "generated_line": 29,
+      "generated_column": 51
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 311,
+      "end_line": 311,
+      "call": "_pick_sum_dtype",
+      "generated_line": 37,
+      "generated_column": 30
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 315,
+      "end_line": 315,
+      "call": "core.reduce",
+      "generated_line": 40,
+      "generated_column": 11
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 314,
+      "end_line": 314,
+      "call": "input.to",
+      "generated_line": 39,
+      "generated_column": 29
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 299,
+      "end_line": 299,
+      "call": "in_dtype.is_int_signed",
+      "generated_line": 48,
+      "generated_column": 7
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 301,
+      "end_line": 301,
+      "call": "in_dtype.is_int_unsigned",
+      "generated_line": 50,
+      "generated_column": 9
+    }
+  ],
+  "mappings": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 26,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 27,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 29,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 30,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 33,
+      "kind": "reduce",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 36,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 39,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group9_20260921/rwkv_ka_fusion/remote_capture.py",
+      "line": 40,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 315,
+      "kind": "reduce",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    }
+  ],
+  "helper_hash": "f2ca0831292f681ed665fd8fc4e7cd7a0eac68b42fbc6964b42c0e23d29d836d"
+}

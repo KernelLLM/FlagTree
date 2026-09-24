@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "operator": "rwkv_ka_fusion",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/rwkv_ka_fusion.py",
+  "sources": [
+    "hard81/group9/rwkv_ka_fusion",
+    "hard81/group9/rwkv_ka_fusion"
+  ],
+  "multiple_sources": false,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "rwkv_ka_fusion/tle_source/rwkv_ka_fusion.py",
+      "source": "hard81/group9/rwkv_ka_fusion/original/rwkv_ka_fusion.py",
+      "sha256": "a6aa84a9a3436de2d8ca83e5e1815226744de825ea98669fb9145c94c039f003"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "rwkv_ka_fusion/gluon_optimized/one_wave/rwkv_ka_fusion_kernel_one_wave.py",
+      "source": "hard81/group9/rwkv_ka_fusion/optimized_gluon/one_wave/rwkv_ka_fusion_kernel_one_wave.py",
+      "sha256": "f6f8ca554b74c488d85818469649509797e382d95a97d40c6cd6d4f2c9edb5ee"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rwkv_ka_fusion/gluon_baseline/rwkv_ka_fusion_kernel_baseline.py",
+      "source": "hard81/group9/rwkv_ka_fusion/gluon/baseline/rwkv_ka_fusion_kernel_baseline.py",
+      "sha256": "a008c213addf2a2fa32ed2da116d6d2e2f44c47e450221f12d3364ce64d101cc"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "rwkv_ka_fusion/gluon_baseline/translation_manifest.json",
+      "source": "hard81/group9/rwkv_ka_fusion/gluon/baseline/translation_manifest.json",
+      "sha256": "34bd440c6f9edaf8e4b84ea10290fc91d1ae3608f7600f4c011b350bf45686e3"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

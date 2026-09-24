@@ -1,0 +1,111 @@
+{
+  "policy": "per official (num_tokens, hidden_size) case, selected by median of three pairwise ROCtracer rounds",
+  "baseline": {
+    "block_h": 1024,
+    "num_warps": 4,
+    "size_per_thread": 4
+  },
+  "layouts": {
+    "b1024_w1_s16": {
+      "id": "b1024_w1_s16",
+      "source": "gluon_optimized/final/b1024_w1_s16.py",
+      "block_h": 1024,
+      "num_warps": 1,
+      "size_per_thread": 16,
+      "data_layout": "gl.BlockedLayout([16], [64], [1], [0])",
+      "reduction_layout": "gl.BlockedLayout([1], [64], [1], [0])"
+    },
+    "b1024_w2_s8": {
+      "id": "b1024_w2_s8",
+      "source": "gluon_optimized/final/b1024_w2_s8.py",
+      "block_h": 1024,
+      "num_warps": 2,
+      "size_per_thread": 8,
+      "data_layout": "gl.BlockedLayout([8], [64], [2], [0])",
+      "reduction_layout": "gl.BlockedLayout([1], [64], [2], [0])"
+    },
+    "b512_w1_s8": {
+      "id": "b512_w1_s8",
+      "source": "gluon_optimized/final/b512_w1_s8.py",
+      "block_h": 512,
+      "num_warps": 1,
+      "size_per_thread": 8,
+      "data_layout": "gl.BlockedLayout([8], [64], [1], [0])",
+      "reduction_layout": "gl.BlockedLayout([1], [64], [1], [0])"
+    }
+  },
+  "cases": [
+    {
+      "num_tokens": 512,
+      "hidden_size": 1280,
+      "layout_id": "b512_w1_s8",
+      "shortlist_median_round_over_tle": 0.5686274509803867
+    },
+    {
+      "num_tokens": 512,
+      "hidden_size": 2560,
+      "layout_id": "b1024_w1_s16",
+      "shortlist_median_round_over_tle": 0.6809269162210412
+    },
+    {
+      "num_tokens": 512,
+      "hidden_size": 4096,
+      "layout_id": "b1024_w1_s16",
+      "shortlist_median_round_over_tle": 0.7306501547987659
+    },
+    {
+      "num_tokens": 1024,
+      "hidden_size": 1280,
+      "layout_id": "b1024_w2_s8",
+      "shortlist_median_round_over_tle": 0.6211312700106716
+    },
+    {
+      "num_tokens": 1024,
+      "hidden_size": 2560,
+      "layout_id": "b1024_w2_s8",
+      "shortlist_median_round_over_tle": 0.6636113657195214
+    },
+    {
+      "num_tokens": 1024,
+      "hidden_size": 4096,
+      "layout_id": "b1024_w2_s8",
+      "shortlist_median_round_over_tle": 0.7341977309562392
+    },
+    {
+      "num_tokens": 2048,
+      "hidden_size": 1280,
+      "layout_id": "b512_w1_s8",
+      "shortlist_median_round_over_tle": 0.6043478260869557
+    },
+    {
+      "num_tokens": 2048,
+      "hidden_size": 2560,
+      "layout_id": "b1024_w1_s16",
+      "shortlist_median_round_over_tle": 0.5971830985915505
+    },
+    {
+      "num_tokens": 2048,
+      "hidden_size": 4096,
+      "layout_id": "b1024_w1_s16",
+      "shortlist_median_round_over_tle": 0.7664040075324031
+    },
+    {
+      "num_tokens": 8192,
+      "hidden_size": 1280,
+      "layout_id": "b512_w1_s8",
+      "shortlist_median_round_over_tle": 0.41419700818515953
+    },
+    {
+      "num_tokens": 8192,
+      "hidden_size": 2560,
+      "layout_id": "b512_w1_s8",
+      "shortlist_median_round_over_tle": 0.5227093690725435
+    },
+    {
+      "num_tokens": 8192,
+      "hidden_size": 4096,
+      "layout_id": "b512_w1_s8",
+      "shortlist_median_round_over_tle": 0.7179590448974554
+    }
+  ]
+}

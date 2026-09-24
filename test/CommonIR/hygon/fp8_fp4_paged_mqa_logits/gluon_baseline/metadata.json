@@ -1,0 +1,691 @@
+{
+  "run_id": "812406",
+  "helper_hash": "093efe07010b4be7513e9b5f8120e860da84667d307f44ea453d22cd1046bfde",
+  "optimizer": "1",
+  "pipeline": "1",
+  "buffer_ops": "1",
+  "original_source_sha256": "996e99a64f828e19ef1ffbf90ee3a3a0e0d352bb87a23dbdc9a9d420e823443b",
+  "original_module": "flaggems_vllm.ops.fp8_fp4_paged_mqa_logits",
+  "original_name": "_mqa_logits_kernel",
+  "original_file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+  "reference_hash": "6947810008b78fa621337fabbf005c8ceee067e838da5d65863a1680a820fa89",
+  "reference_metadata": {
+    "allow_flush_denorm": false,
+    "allowed_dot_input_precisions": [
+      "ieee"
+    ],
+    "arch": "gfx936",
+    "async_copy_use_single_buffer": true,
+    "backend_name": "hip",
+    "cluster_dims": [
+      1,
+      1,
+      1
+    ],
+    "debug": false,
+    "default_dot_input_precision": "ieee",
+    "deprecated_fp8_dot_operand_dtypes": [],
+    "enable_fp_fusion": true,
+    "extern_libs": [
+      [
+        "ocml",
+        "/opt/dtk/amdgcn/bitcode/ocml.bc"
+      ],
+      [
+        "ockl",
+        "/opt/dtk/amdgcn/bitcode/ockl.bc"
+      ],
+      [
+        "hip",
+        "/opt/dtk/amdgcn/bitcode/hip.bc"
+      ],
+      [
+        "opencl",
+        "/opt/dtk/amdgcn/bitcode/opencl.bc"
+      ]
+    ],
+    "hash": "6947810008b78fa621337fabbf005c8ceee067e838da5d65863a1680a820fa89",
+    "instrumentation_mode": "",
+    "kpack": 1,
+    "launch_cooperative_grid": false,
+    "matrix_instr_nonkdim": 0,
+    "max_num_imprecise_acc_default": 0,
+    "mmac_layout_force": -1,
+    "name": "_mqa_logits_kernel",
+    "num_ctas": 1,
+    "num_stages": 2,
+    "num_warps": 4,
+    "optimize_epilogue": false,
+    "profile_scratch_align": 1,
+    "profile_scratch_size": 0,
+    "sanitize_overflow": true,
+    "sched_latency": "none",
+    "schedule_hint": "none",
+    "shared": 8192,
+    "supported_fp8_dtypes": [
+      "fp8e4nv",
+      "fp8e5"
+    ],
+    "target": "GPUTarget(backend='hip', arch='gfx936', warp_size=64)",
+    "tensordesc_meta": [],
+    "triton_version": "3.6.0",
+    "use_nvshmem": false,
+    "warp_size": 64,
+    "wasp_enabled": false,
+    "wasp_num_load_warps": null,
+    "wasp_num_mma_warps": null,
+    "waves_per_eu": 1,
+    "wdra_enabled": false,
+    "wdra_num_load_regs": null,
+    "wdra_num_mma_regs_main": null,
+    "wdra_num_mma_regs_tail": null
+  },
+  "source": "kernels/case_29/_mqa_logits_kernel_3b76c6aa80_6947810008b7.py",
+  "layout_reference": {
+    "definitions": {
+      "#blocked": "#ttg.blocked<{sizePerThread = [1, 16], threadsPerWarp = [8, 8], warpsPerCTA = [4, 1], order = [1, 0]}>",
+      "#blocked1": "#ttg.blocked<{sizePerThread = [1], threadsPerWarp = [64], warpsPerCTA = [4], order = [0]}>",
+      "#linear": "#ttg.linear<{register = [[0, 1], [0, 2], [0, 16], [0, 32], [0, 64], [16, 0], [32, 0]], lane = [[1, 0], [2, 0], [4, 0], [8, 0], [0, 4], [0, 8]], warp = [[0, 0], [0, 0]], block = []}>",
+      "#mma": "#ttg.amd_mfma<{version = 3, warpsPerCTA = [4, 1], instrShape = [16, 16, 16], isTransposed = false, mmacLayout = 1}>",
+      "#shared": "#ttg.swizzled_shared<{vec = 4, perPhase = 1, maxPhase = 16, order = [1, 0]}>",
+      "#smem": "#ttg.shared_memory",
+      "#inline_5fea96a1360a": "#ttg.slice<{dim = 0, parent = #mma}>",
+      "#inline_6f538bf2624a": "#ttg.slice<{dim = 1, parent = #mma}>",
+      "#inline_07e665bef0da": "#ttg.slice<{dim = 1, parent = #blocked}>",
+      "#inline_25deac3e6723": "#ttg.slice<{dim = 0, parent = #blocked}>",
+      "#inline_0c2bcf95935d": "#ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>",
+      "#inline_83c097af48b4": "#ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>"
+    },
+    "operations": [
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_5fea96a1360a"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            77,
+            25
+          ]
+        ],
+        "ir": "%h_ids = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #mma}>> loc(#loc79)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_6f538bf2624a"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            77,
+            25
+          ]
+        ],
+        "ir": "%h_ids_2 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #mma}>> loc(#loc79)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            77,
+            25
+          ]
+        ],
+        "ir": "%h_ids_3 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #blocked1> loc(#loc79)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_07e665bef0da"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            81,
+            22
+          ]
+        ],
+        "ir": "%q_offsets = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #blocked}>> loc(#loc80)"
+      },
+      {
+        "kind": "arange",
+        "layouts": [
+          "#inline_25deac3e6723"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            81,
+            50
+          ]
+        ],
+        "ir": "%q_offsets_4 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 0, parent = #blocked}>> loc(#loc81)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            82,
+            19
+          ]
+        ],
+        "ir": "%q_u8_12 = hcug.buffer_load %Q_ptr[%q_u8_11] : tensor<64x128xi8, #blocked> loc(#loc83)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#inline_6f538bf2624a"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            86,
+            20
+          ]
+        ],
+        "ir": "%w_all_18 = tt.load %w_all_17 : tensor<64x!tt.ptr<f32>, #ttg.slice<{dim = 1, parent = #mma}>> loc(#loc86)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            105,
+            28
+          ]
+        ],
+        "ir": "%kv_u8_31 = hcug.buffer_load %KV_data_ptr[%kv_u8_30] : tensor<64x128xi8, #blocked> loc(#loc99)"
+      },
+      {
+        "kind": "convert_layout",
+        "layouts": [
+          "#blocked",
+          "#linear"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            109,
+            33
+          ]
+        ],
+        "ir": "%dots = ttg.convert_layout %kv_u8_31 : tensor<64x128xi8, #blocked> -> tensor<64x128xi8, #linear> loc(#loc100)"
+      },
+      {
+        "kind": "trans",
+        "layouts": [
+          "#linear",
+          "#inline_83c097af48b4"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            109,
+            42
+          ]
+        ],
+        "ir": "%dots_32 = tt.trans %kv_fp8 {order = array<i32: 1, 0>} : tensor<64x128xf8E4M3FN, #linear> -> tensor<128x64xf8E4M3FN, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>> loc(#loc102)"
+      },
+      {
+        "kind": "dot",
+        "layouts": [
+          "#inline_0c2bcf95935d",
+          "#inline_83c097af48b4",
+          "#mma"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            109,
+            33
+          ]
+        ],
+        "ir": "%dots_35 = tt.dot %q_fp8_33, %dots_34, %cst_0 : tensor<64x128xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 4}>> * tensor<128x64xf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 4}>> -> tensor<64x64xf32, #mma> loc(#loc100)",
+        "k_width": [
+          4,
+          4
+        ],
+        "result_dtype": "f32",
+        "operand_dtypes": [
+          "f16",
+          "f16"
+        ]
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#inline_5fea96a1360a"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            112,
+            33
+          ]
+        ],
+        "ir": "%scale_tile_39 = tt.load %scale_tile_38 : tensor<64x!tt.ptr<f32>, #ttg.slice<{dim = 0, parent = #mma}>> loc(#loc104)"
+      },
+      {
+        "kind": "reduce",
+        "layouts": [
+          "#mma",
+          "#inline_5fea96a1360a"
+        ],
+        "origins": [
+          [
+            "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+            315,
+            36
+          ],
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            117,
+            33
+          ]
+        ],
+        "ir": "%output_tile = \"tt.reduce\"(%weighted_44) <{axis = 0 : i32}> ({         ^bb0(%output_tile_47: f32 loc(callsite(#loc1 at #loc110)), %output_tile_48: f32 loc(callsite(#loc1 at #loc110))):           %output_tile_49 = arith.addf %output_tile_47, %output_tile_48 : f32 loc(#loc115)           tt.reduce.return %output_tile_49 : f32 loc(#loc113)         }) : (tensor<64x64xf32, #mma>) -> tensor<64xf32, #ttg.slice<{dim = 0, parent = #mma}>> loc(#loc113)"
+      },
+      {
+        "kind": "convert_layout",
+        "layouts": [
+          "#inline_5fea96a1360a",
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            121,
+            45
+          ]
+        ],
+        "ir": "%6 = ttg.convert_layout %output_tile : tensor<64xf32, #ttg.slice<{dim = 0, parent = #mma}>> -> tensor<64xf32, #blocked1> loc(#loc53)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked1"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+            121,
+            45
+          ]
+        ],
+        "ir": "hcug.buffer_store %6, %Output_ptr[%5], %valid_mask_46 : tensor<64xf32, #blocked1> loc(#loc53)"
+      }
+    ]
+  },
+  "mapped_sites": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 82,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1, 16], [8, 8], [4, 1], [1, 0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 86,
+      "kind": "load",
+      "layout": "gl.SliceLayout(1, __h81.AMDMFMALayout(version=3, instr_shape=[16, 16, 16], transposed=False, warps_per_cta=[4, 1], element_bitwidth=32, tiles_per_warp=None))"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 105,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1, 16], [8, 8], [4, 1], [1, 0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 109,
+      "kind": "dot",
+      "layout": "__h81.AMDMFMALayout(version=3, instr_shape=[16, 16, 16], transposed=False, warps_per_cta=[4, 1], element_bitwidth=32, tiles_per_warp=None)",
+      "k_width": [
+        4,
+        4
+      ],
+      "operand_dtypes": [
+        "f16",
+        "f16"
+      ],
+      "result_dtype": "f32"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 112,
+      "kind": "load",
+      "layout": "gl.SliceLayout(0, __h81.AMDMFMALayout(version=3, instr_shape=[16, 16, 16], transposed=False, warps_per_cta=[4, 1], element_bitwidth=32, tiles_per_warp=None))"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 117,
+      "kind": "reduce",
+      "layout": "__h81.AMDMFMALayout(version=3, instr_shape=[16, 16, 16], transposed=False, warps_per_cta=[4, 1], element_bitwidth=32, tiles_per_warp=None)"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 121,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 315,
+      "kind": "reduce",
+      "layout": "__h81.AMDMFMALayout(version=3, instr_shape=[16, 16, 16], transposed=False, warps_per_cta=[4, 1], element_bitwidth=32, tiles_per_warp=None)"
+    }
+  ],
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 93,
+      "end_line": 93,
+      "call": "range",
+      "generated_line": 37,
+      "generated_column": 19
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 61,
+      "end_line": 61,
+      "call": "tl.program_id",
+      "generated_line": 16,
+      "generated_column": 28
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 62,
+      "end_line": 62,
+      "call": "tl.program_id",
+      "generated_line": 17,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 67,
+      "end_line": 67,
+      "call": "tl.load",
+      "generated_line": 20,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 77,
+      "end_line": 77,
+      "call": "tl.arange",
+      "generated_line": 28,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 78,
+      "end_line": 78,
+      "call": "tl.arange",
+      "generated_line": 29,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 82,
+      "end_line": 82,
+      "call": "tl.load",
+      "generated_line": 31,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 83,
+      "end_line": 83,
+      "call": "q_u8.to",
+      "generated_line": 32,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 86,
+      "end_line": 86,
+      "call": "tl.load",
+      "generated_line": 33,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 88,
+      "end_line": 88,
+      "call": "tl.minimum",
+      "generated_line": 34,
+      "generated_column": 27
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 91,
+      "end_line": 91,
+      "call": "tl.arange",
+      "generated_line": 36,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 121,
+      "end_line": 121,
+      "call": "tl.store",
+      "generated_line": 55,
+      "generated_column": 12
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 86,
+      "end_line": 86,
+      "call": "tl.arange",
+      "generated_line": 33,
+      "generated_column": 64
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 98,
+      "end_line": 98,
+      "call": "tl.load",
+      "generated_line": 41,
+      "generated_column": 38
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 99,
+      "end_line": 99,
+      "call": "tl.maximum",
+      "generated_line": 42,
+      "generated_column": 38
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 100,
+      "end_line": 100,
+      "call": "tl.minimum",
+      "generated_line": 43,
+      "generated_column": 38
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 105,
+      "end_line": 105,
+      "call": "tl.load",
+      "generated_line": 46,
+      "generated_column": 33
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 106,
+      "end_line": 106,
+      "call": "kv_u8.to",
+      "generated_line": 47,
+      "generated_column": 34
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 109,
+      "end_line": 109,
+      "call": "tl.dot",
+      "generated_line": 48,
+      "generated_column": 32
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 112,
+      "end_line": 112,
+      "call": "tl.load",
+      "generated_line": 49,
+      "generated_column": 38
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 115,
+      "end_line": 115,
+      "call": "tl.maximum",
+      "generated_line": 50,
+      "generated_column": 34
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 117,
+      "end_line": 117,
+      "call": "tl.sum",
+      "generated_line": 52,
+      "generated_column": 39
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_20260907/src/FlagGems-vllm/src/flaggems_vllm/ops/fp8_fp4_paged_mqa_logits.py",
+      "line": 109,
+      "end_line": 109,
+      "call": "tl.trans",
+      "generated_line": 48,
+      "generated_column": 64
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 311,
+      "end_line": 311,
+      "call": "_pick_sum_dtype",
+      "generated_line": 60,
+      "generated_column": 30
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 315,
+      "end_line": 315,
+      "call": "core.reduce",
+      "generated_line": 63,
+      "generated_column": 11
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 314,
+      "end_line": 314,
+      "call": "input.to",
+      "generated_line": 62,
+      "generated_column": 29
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 299,
+      "end_line": 299,
+      "call": "in_dtype.is_int_signed",
+      "generated_line": 71,
+      "generated_column": 7
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 301,
+      "end_line": 301,
+      "call": "in_dtype.is_int_unsigned",
+      "generated_line": 73,
+      "generated_column": 9
+    }
+  ],
+  "gluon_source_sha256": "0d070021e8c3e84a0780f1deab4973e961c87ee55aa6c6dfbb2fed2d15ae0f69",
+  "gluon_metadata": {
+    "allow_flush_denorm": false,
+    "allowed_dot_input_precisions": [
+      "ieee"
+    ],
+    "arch": "gfx936",
+    "async_copy_use_single_buffer": true,
+    "backend_name": "hip",
+    "cluster_dims": [
+      1,
+      1,
+      1
+    ],
+    "debug": false,
+    "default_dot_input_precision": "ieee",
+    "deprecated_fp8_dot_operand_dtypes": [],
+    "enable_fp_fusion": true,
+    "extern_libs": [
+      [
+        "ocml",
+        "/opt/dtk/amdgcn/bitcode/ocml.bc"
+      ],
+      [
+        "ockl",
+        "/opt/dtk/amdgcn/bitcode/ockl.bc"
+      ],
+      [
+        "hip",
+        "/opt/dtk/amdgcn/bitcode/hip.bc"
+      ],
+      [
+        "opencl",
+        "/opt/dtk/amdgcn/bitcode/opencl.bc"
+      ]
+    ],
+    "hash": "c5b7a0c4e9343e1d3c75e6702f42f39e97c8664b348de6c7238e58009559ad5c",
+    "instrumentation_mode": "",
+    "kpack": 1,
+    "launch_cooperative_grid": false,
+    "matrix_instr_nonkdim": 0,
+    "max_num_imprecise_acc_default": 0,
+    "mmac_layout_force": -1,
+    "name": "_mqa_logits_kernel_3b76c6aa80",
+    "num_ctas": 1,
+    "num_stages": 2,
+    "num_warps": 4,
+    "optimize_epilogue": false,
+    "profile_scratch_align": 1,
+    "profile_scratch_size": 0,
+    "sanitize_overflow": true,
+    "sched_latency": "none",
+    "schedule_hint": "none",
+    "shared": 8192,
+    "supported_fp8_dtypes": [
+      "fp8e4nv",
+      "fp8e5"
+    ],
+    "target": "GPUTarget(backend='hip', arch='gfx936', warp_size=64)",
+    "tensordesc_meta": [],
+    "triton_version": "3.6.0",
+    "use_nvshmem": false,
+    "warp_size": 64,
+    "wasp_enabled": false,
+    "wasp_num_load_warps": null,
+    "wasp_num_mma_warps": null,
+    "waves_per_eu": 1,
+    "wdra_enabled": false,
+    "wdra_num_load_regs": null,
+    "wdra_num_mma_regs_main": null,
+    "wdra_num_mma_regs_tail": null
+  },
+  "compiled": true,
+  "executed": true
+}

@@ -1,0 +1,76 @@
+{
+  "cases": [
+    {
+      "case_id": 0,
+      "kind": "plain",
+      "shape": [
+        1,
+        4096
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "plain_w8_s8",
+      "source": "gluon_optimized/candidates/plain_w8_s8.py",
+      "archived_source": "gluon_optimized/final/plain_w8_s8.py"
+    },
+    {
+      "case_id": 1,
+      "kind": "grouped",
+      "shape": [
+        128,
+        4096
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "grouped_w4_store",
+      "source": "gluon_optimized/candidates/grouped_w4_store.py",
+      "archived_source": "gluon_optimized/final/grouped_w4_store.py"
+    },
+    {
+      "case_id": 2,
+      "kind": "grouped",
+      "shape": [
+        512,
+        4096
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "grouped_w4_compute",
+      "source": "gluon_optimized/candidates/grouped_w4_compute.py",
+      "archived_source": "gluon_optimized/final/grouped_w4_compute.py"
+    },
+    {
+      "case_id": 3,
+      "kind": "grouped",
+      "shape": [
+        64,
+        8192
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "grouped_w8",
+      "source": "gluon_optimized/candidates/grouped_w8.py",
+      "archived_source": "gluon_optimized/final/grouped_w8.py"
+    },
+    {
+      "case_id": 4,
+      "kind": "grouped",
+      "shape": [
+        1,
+        16384
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "grouped_w4_store",
+      "source": "gluon_optimized/candidates/grouped_w4_store.py",
+      "archived_source": "gluon_optimized/final/grouped_w4_store.py"
+    },
+    {
+      "case_id": 5,
+      "kind": "loop",
+      "shape": [
+        1,
+        32768
+      ],
+      "dtype": "bfloat16",
+      "layout_id": "baseline_retained",
+      "source": "gluon_baseline/05_loop_m1_n32768_t8192_w16.py",
+      "archived_source": "gluon_optimized/final/05_loop_m1_n32768_t8192_w16.py"
+    }
+  ]
+}

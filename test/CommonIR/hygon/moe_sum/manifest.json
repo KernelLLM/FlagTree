@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "operator": "moe_sum",
+  "library": "FlagGems-vllm",
+  "github_path": "https://github.com/flagos-ai/FlagGems-vLLM/blob/main/src/flaggems_vllm/ops/moe_sum.py",
+  "sources": [
+    "hard81/group2/moe_sum",
+    "hard81/group2/moe_sum"
+  ],
+  "multiple_sources": false,
+  "files": [
+    {
+      "section": "tle_source",
+      "path": "moe_sum/tle_source/generated/moe_sum.py",
+      "source": "hard81/group2/moe_sum/original/generated/moe_sum.py",
+      "sha256": "e47d822662548f92be15facb3d9890893e091170154a7047412ca2eab961257e"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/0b78aaf6457c173d.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/0b78aaf6457c173d.json",
+      "sha256": "cf928e4403a69a5a13949a9b2f6563ee8e0f5ae4c0ee0ec6575696af717c9376"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/0b78aaf6457c173d.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/0b78aaf6457c173d.py",
+      "sha256": "57033d02575d92929802418d473c4f664dd081d6fc7e35e93704a1d413e8655d"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/11a8097850666dbd.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/11a8097850666dbd.json",
+      "sha256": "663714acb34ab5f90c71ccc818cb6020831ee5494079d22461b7300815392356"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/11a8097850666dbd.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/11a8097850666dbd.py",
+      "sha256": "677f8a334c3f708a6d347e6e7ecbe7d9e88297fd1993caff4864384e9c428783"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/4cf695068aee2594.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/4cf695068aee2594.json",
+      "sha256": "7af0eec69775d04b73b35d436b7371f11ce941a687bb8fbe98576c244badbdc1"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/4cf695068aee2594.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/4cf695068aee2594.py",
+      "sha256": "3a2046008c0b5b0288f1408f3551432c383a8d450d1857cb6e2acd0f3c2c62d1"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/60fb32b88ae9f9ef.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/60fb32b88ae9f9ef.json",
+      "sha256": "78a5bb3033a11e9eb034e96729643d32c505ee6308bf515c6dd1aa5d375b4702"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/60fb32b88ae9f9ef.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/60fb32b88ae9f9ef.py",
+      "sha256": "a97271f89a8d9ddebadd190bba0e26c4c574fa451fcd97eec6a3276b018ce0c9"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/7bc8fa15647e4fdf.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/7bc8fa15647e4fdf.json",
+      "sha256": "39ea982bd763a5d278cfbd65133fa246409176ff244c5baf93b5c9c1c5693d77"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/7bc8fa15647e4fdf.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/7bc8fa15647e4fdf.py",
+      "sha256": "5cd84ed4ed5b78fdec39547c77d840fe66eecc8e47d06ea85efd14afd07874fc"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/952e08ee79bff86e.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/952e08ee79bff86e.json",
+      "sha256": "6cfcfef19d4fba94f3adb7f3c173ea209b64617b33d4d29811c6f86a9cf6a0e3"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/952e08ee79bff86e.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/952e08ee79bff86e.py",
+      "sha256": "15889c669d31fa43b8fecdf9cbe6d0790a52465d430ef164bd1111bd3f66c2d1"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/a46cbc4b54a191bb.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/a46cbc4b54a191bb.json",
+      "sha256": "92c0f0579eb972cc417b44f0ed97749c8b1ca85a563d80f209d02aab0aa00f04"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/a46cbc4b54a191bb.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/a46cbc4b54a191bb.py",
+      "sha256": "c56ead426f1b04f673c88b37cd465ba45701374a95e3f4a1a5164a37fcb7ad9f"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/a81aa054c3429fa5.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/a81aa054c3429fa5.json",
+      "sha256": "c45fa072b041a15b5a0f394cd37cd0e2efcaf18ed1e34e6f8411d41a5d738a32"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/a81aa054c3429fa5.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/a81aa054c3429fa5.py",
+      "sha256": "023b84bc3b1ac6292b1427147726c0a4fb9ef7aa689c44d27ad666ac8a768fcb"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/a9a0bed6c4eb28fb.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/a9a0bed6c4eb28fb.json",
+      "sha256": "4d31f54065838479ee1de4683d8c84a87de88135c2f765b5019d16e6a8a158bf"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/a9a0bed6c4eb28fb.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/a9a0bed6c4eb28fb.py",
+      "sha256": "7a57623e1d1d3ac7e0462b59baae6cace0033bcb9a76824453cac4b248eb11cc"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/ca039646a9147eca.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/ca039646a9147eca.json",
+      "sha256": "09152ddcb0a21648223b643f4badcfe384c3f48a68707987ec7c8f832f186f1a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/ca039646a9147eca.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/ca039646a9147eca.py",
+      "sha256": "ac330041cbe839520b81f84f5617434e69d4342e2ec351e664985e1503cc694a"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/e431049f075f05d1.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/e431049f075f05d1.json",
+      "sha256": "01bdc8d7f3d9e15ccfcc1cdbf4f2271cbfee00d5766609feb00056738f725798"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/e431049f075f05d1.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/e431049f075f05d1.py",
+      "sha256": "74ac7b48980105e6aed087835a4c1773ba55590ac24485fff78a24bc8e75c302"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/e62e847a5d0885c5.json",
+      "source": "hard81/group2/moe_sum/gluon_baseline/e62e847a5d0885c5.json",
+      "sha256": "7299dc19f75367ae9cf47c09adb91464c2c76bd036d8b5d4bdc676eadefd4703"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/e62e847a5d0885c5.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/e62e847a5d0885c5.py",
+      "sha256": "3bfb89cf6ced6d8c1e74de85804d0815ed4dba8b8a3f260c4f244453a4ccda09"
+    },
+    {
+      "section": "gluon_baseline",
+      "path": "moe_sum/gluon_baseline/moe_sum_tle_equivalent.py",
+      "source": "hard81/group2/moe_sum/gluon_baseline/moe_sum_tle_equivalent.py",
+      "sha256": "1fb34b15d09662c3b2a14193f343243f69527158d9b740383de443da21d04213"
+    },
+    {
+      "section": "gluon_optimized",
+      "path": "moe_sum/gluon_optimized/moe_sum_optimized.py",
+      "source": "hard81/group2/moe_sum/gluon_optimized/moe_sum_optimized.py",
+      "sha256": "fc4f2ce4137e20ff170baf774623efdeb57409ffc5386a83f913969950a9005a"
+    }
+  ],
+  "missing": [],
+  "notes": "",
+  "optimized_selection": "Final/dispatch-selected optimized Gluon only; redundant source layers, candidates, mutation metadata, and non-winning specializations removed."
+}

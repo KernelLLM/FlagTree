@@ -1,0 +1,92 @@
+{
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 57,
+      "end_line": 57,
+      "call": "range",
+      "generated_line": 23,
+      "generated_column": 22
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 63,
+      "end_line": 67,
+      "call": "tl.store",
+      "generated_line": 28,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 47,
+      "end_line": 47,
+      "call": "tl.program_id",
+      "generated_line": 14,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 48,
+      "end_line": 48,
+      "call": "tl.program_id",
+      "generated_line": 15,
+      "generated_column": 29
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 54,
+      "end_line": 54,
+      "call": "tl.zeros",
+      "generated_line": 21,
+      "generated_column": 23
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 50,
+      "end_line": 50,
+      "call": "tl.arange",
+      "generated_line": 17,
+      "generated_column": 64
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 59,
+      "end_line": 59,
+      "call": "tl.load",
+      "generated_line": 25,
+      "generated_column": 35
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 65,
+      "end_line": 65,
+      "call": "acc.to",
+      "generated_line": 28,
+      "generated_column": 47
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 151,
+      "end_line": 151,
+      "call": "core.full",
+      "generated_line": 34,
+      "generated_column": 11
+    }
+  ],
+  "mapped_sites": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 59,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [2], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group2_20260911/src/FlagGems-vllm/src/flaggems_vllm/ops/moe_sum.py",
+      "line": 63,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [2], [0])"
+    }
+  ],
+  "helper_hash": "64e253bc2ea2d0226c3aa239e6a8d880a9a88457caf7a1c38287b1279c838b63",
+  "reference_hash": "e431049f075f05d1741cee2d78293045fadd962d45c05bc731b2dedb31ced911"
+}

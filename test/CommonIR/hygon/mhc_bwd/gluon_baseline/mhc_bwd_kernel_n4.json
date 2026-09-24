@@ -1,0 +1,1476 @@
+{
+  "reference_hash": "4f05225856ec794b868573df11a93abef0a2d7c55927121e7a57d1772d1908fd",
+  "source_map": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 238,
+      "end_line": 238,
+      "call": "range",
+      "generated_line": 103,
+      "generated_column": 13
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 333,
+      "end_line": 333,
+      "call": "tl.store",
+      "generated_line": 157,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 334,
+      "end_line": 334,
+      "call": "tl.store",
+      "generated_line": 158,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 335,
+      "end_line": 335,
+      "call": "tl.store",
+      "generated_line": 159,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 336,
+      "end_line": 336,
+      "call": "tl.store",
+      "generated_line": 160,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 337,
+      "end_line": 337,
+      "call": "tl.store",
+      "generated_line": 161,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 338,
+      "end_line": 338,
+      "call": "tl.store",
+      "generated_line": 162,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 339,
+      "end_line": 339,
+      "call": "tl.store",
+      "generated_line": 163,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 340,
+      "end_line": 340,
+      "call": "tl.store",
+      "generated_line": 164,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 341,
+      "end_line": 341,
+      "call": "tl.store",
+      "generated_line": 165,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 342,
+      "end_line": 342,
+      "call": "tl.store",
+      "generated_line": 166,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 343,
+      "end_line": 343,
+      "call": "tl.store",
+      "generated_line": 167,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 344,
+      "end_line": 344,
+      "call": "tl.store",
+      "generated_line": 168,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 345,
+      "end_line": 345,
+      "call": "tl.store",
+      "generated_line": 169,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 346,
+      "end_line": 346,
+      "call": "tl.store",
+      "generated_line": 170,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 347,
+      "end_line": 347,
+      "call": "tl.store",
+      "generated_line": 171,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 348,
+      "end_line": 348,
+      "call": "tl.store",
+      "generated_line": 172,
+      "generated_column": 4
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 121,
+      "end_line": 121,
+      "call": "tl.program_id",
+      "generated_line": 15,
+      "generated_column": 23
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 130,
+      "end_line": 130,
+      "call": "tl.load",
+      "generated_line": 22,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 131,
+      "end_line": 131,
+      "call": "tl.load",
+      "generated_line": 23,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 132,
+      "end_line": 132,
+      "call": "tl.load",
+      "generated_line": 24,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 133,
+      "end_line": 133,
+      "call": "tl.load",
+      "generated_line": 25,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 134,
+      "end_line": 134,
+      "call": "tl.load",
+      "generated_line": 26,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 135,
+      "end_line": 135,
+      "call": "tl.load",
+      "generated_line": 27,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 136,
+      "end_line": 136,
+      "call": "tl.load",
+      "generated_line": 28,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 137,
+      "end_line": 137,
+      "call": "tl.load",
+      "generated_line": 29,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 138,
+      "end_line": 138,
+      "call": "tl.load",
+      "generated_line": 30,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 139,
+      "end_line": 139,
+      "call": "tl.load",
+      "generated_line": 31,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 140,
+      "end_line": 140,
+      "call": "tl.load",
+      "generated_line": 32,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 141,
+      "end_line": 141,
+      "call": "tl.load",
+      "generated_line": 33,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 142,
+      "end_line": 142,
+      "call": "tl.load",
+      "generated_line": 34,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 143,
+      "end_line": 143,
+      "call": "tl.load",
+      "generated_line": 35,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 144,
+      "end_line": 144,
+      "call": "tl.load",
+      "generated_line": 36,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 145,
+      "end_line": 145,
+      "call": "tl.load",
+      "generated_line": 37,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 148,
+      "end_line": 148,
+      "call": "tl.load",
+      "generated_line": 38,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 149,
+      "end_line": 149,
+      "call": "tl.load",
+      "generated_line": 39,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 150,
+      "end_line": 150,
+      "call": "tl.load",
+      "generated_line": 40,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 151,
+      "end_line": 151,
+      "call": "tl.load",
+      "generated_line": 41,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 152,
+      "end_line": 152,
+      "call": "tl.load",
+      "generated_line": 42,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 153,
+      "end_line": 153,
+      "call": "tl.load",
+      "generated_line": 43,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 154,
+      "end_line": 154,
+      "call": "tl.load",
+      "generated_line": 44,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 155,
+      "end_line": 155,
+      "call": "tl.load",
+      "generated_line": 45,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 156,
+      "end_line": 156,
+      "call": "tl.load",
+      "generated_line": 46,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 157,
+      "end_line": 157,
+      "call": "tl.load",
+      "generated_line": 47,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 158,
+      "end_line": 158,
+      "call": "tl.load",
+      "generated_line": 48,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 159,
+      "end_line": 159,
+      "call": "tl.load",
+      "generated_line": 49,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 160,
+      "end_line": 160,
+      "call": "tl.load",
+      "generated_line": 50,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 161,
+      "end_line": 161,
+      "call": "tl.load",
+      "generated_line": 51,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 162,
+      "end_line": 162,
+      "call": "tl.load",
+      "generated_line": 52,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 163,
+      "end_line": 163,
+      "call": "tl.load",
+      "generated_line": 53,
+      "generated_column": 25
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 196,
+      "end_line": 196,
+      "call": "tl.zeros_like",
+      "generated_line": 78,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 197,
+      "end_line": 197,
+      "call": "tl.zeros_like",
+      "generated_line": 79,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 198,
+      "end_line": 198,
+      "call": "tl.zeros_like",
+      "generated_line": 80,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 199,
+      "end_line": 199,
+      "call": "tl.zeros_like",
+      "generated_line": 81,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 200,
+      "end_line": 200,
+      "call": "tl.zeros_like",
+      "generated_line": 82,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 201,
+      "end_line": 201,
+      "call": "tl.zeros_like",
+      "generated_line": 83,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 202,
+      "end_line": 202,
+      "call": "tl.zeros_like",
+      "generated_line": 84,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 203,
+      "end_line": 203,
+      "call": "tl.zeros_like",
+      "generated_line": 85,
+      "generated_column": 24
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 123,
+      "end_line": 123,
+      "call": "tl.arange",
+      "generated_line": 17,
+      "generated_column": 58
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 162,
+      "end_line": 162,
+      "call": "zeros",
+      "generated_line": 178,
+      "generated_column": 11
+    },
+    {
+      "file": "/usr/local/lib/python3.10/dist-packages/triton/language/standard.py",
+      "line": 151,
+      "end_line": 151,
+      "call": "core.full",
+      "generated_line": 184,
+      "generated_column": 11
+    }
+  ],
+  "mapped_sites": [
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 130,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 131,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 132,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 133,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 134,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 135,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 136,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 137,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 138,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 139,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 140,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 141,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 142,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 143,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 144,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 145,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 148,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 149,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 150,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 151,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 152,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 153,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 154,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 155,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 156,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 157,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 158,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 159,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 160,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 161,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 162,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 163,
+      "kind": "load",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 333,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 334,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 335,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 336,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 337,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 338,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 339,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 340,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 341,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 342,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 343,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 344,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 345,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 346,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 347,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    },
+    {
+      "file": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+      "line": 348,
+      "kind": "store",
+      "layout": "gl.BlockedLayout([1], [64], [4], [0])"
+    }
+  ],
+  "layout_summary": {
+    "definitions": {
+      "#blocked": "#ttg.blocked<{sizePerThread = [1], threadsPerWarp = [64], warpsPerCTA = [4], order = [0]}>"
+    },
+    "operations": [
+      {
+        "kind": "arange",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            123,
+            43
+          ]
+        ],
+        "ir": "%seq_offsets = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #blocked> loc(#loc329)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            130,
+            19
+          ]
+        ],
+        "ir": "%R_00_23 = hcug.buffer_load %out_ptr[%R_00_22], %mask_19 : tensor<64xf32, #blocked> loc(#loc333)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            131,
+            19
+          ]
+        ],
+        "ir": "%R_01_25 = hcug.buffer_load %out_ptr[%R_01_24], %mask_19 : tensor<64xf32, #blocked> loc(#loc335)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            132,
+            19
+          ]
+        ],
+        "ir": "%R_02_27 = hcug.buffer_load %out_ptr[%R_02_26], %mask_19 : tensor<64xf32, #blocked> loc(#loc337)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            133,
+            19
+          ]
+        ],
+        "ir": "%R_03_29 = hcug.buffer_load %out_ptr[%R_03_28], %mask_19 : tensor<64xf32, #blocked> loc(#loc339)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            134,
+            19
+          ]
+        ],
+        "ir": "%R_10_31 = hcug.buffer_load %out_ptr[%R_10_30], %mask_19 : tensor<64xf32, #blocked> loc(#loc341)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            135,
+            19
+          ]
+        ],
+        "ir": "%R_11_33 = hcug.buffer_load %out_ptr[%R_11_32], %mask_19 : tensor<64xf32, #blocked> loc(#loc343)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            136,
+            19
+          ]
+        ],
+        "ir": "%R_12_35 = hcug.buffer_load %out_ptr[%R_12_34], %mask_19 : tensor<64xf32, #blocked> loc(#loc345)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            137,
+            19
+          ]
+        ],
+        "ir": "%R_13_37 = hcug.buffer_load %out_ptr[%R_13_36], %mask_19 : tensor<64xf32, #blocked> loc(#loc347)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            138,
+            19
+          ]
+        ],
+        "ir": "%R_20_39 = hcug.buffer_load %out_ptr[%R_20_38], %mask_19 : tensor<64xf32, #blocked> loc(#loc349)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            139,
+            19
+          ]
+        ],
+        "ir": "%R_21_41 = hcug.buffer_load %out_ptr[%R_21_40], %mask_19 : tensor<64xf32, #blocked> loc(#loc351)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            140,
+            19
+          ]
+        ],
+        "ir": "%R_22_43 = hcug.buffer_load %out_ptr[%R_22_42], %mask_19 : tensor<64xf32, #blocked> loc(#loc353)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            141,
+            19
+          ]
+        ],
+        "ir": "%R_23_45 = hcug.buffer_load %out_ptr[%R_23_44], %mask_19 : tensor<64xf32, #blocked> loc(#loc355)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            142,
+            19
+          ]
+        ],
+        "ir": "%R_30_47 = hcug.buffer_load %out_ptr[%R_30_46], %mask_19 : tensor<64xf32, #blocked> loc(#loc357)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            143,
+            19
+          ]
+        ],
+        "ir": "%R_31_49 = hcug.buffer_load %out_ptr[%R_31_48], %mask_19 : tensor<64xf32, #blocked> loc(#loc359)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            144,
+            19
+          ]
+        ],
+        "ir": "%R_32_51 = hcug.buffer_load %out_ptr[%R_32_50], %mask_19 : tensor<64xf32, #blocked> loc(#loc361)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            145,
+            19
+          ]
+        ],
+        "ir": "%R_33_53 = hcug.buffer_load %out_ptr[%R_33_52], %mask_19 : tensor<64xf32, #blocked> loc(#loc363)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            148,
+            20
+          ]
+        ],
+        "ir": "%dR_00 = hcug.buffer_load %dout_ptr[%R_00_22], %mask_19 : tensor<64xf32, #blocked> loc(#loc364)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            149,
+            20
+          ]
+        ],
+        "ir": "%dR_01 = hcug.buffer_load %dout_ptr[%R_01_24], %mask_19 : tensor<64xf32, #blocked> loc(#loc365)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            150,
+            20
+          ]
+        ],
+        "ir": "%dR_02 = hcug.buffer_load %dout_ptr[%R_02_26], %mask_19 : tensor<64xf32, #blocked> loc(#loc366)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            151,
+            20
+          ]
+        ],
+        "ir": "%dR_03 = hcug.buffer_load %dout_ptr[%R_03_28], %mask_19 : tensor<64xf32, #blocked> loc(#loc367)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            152,
+            20
+          ]
+        ],
+        "ir": "%dR_10 = hcug.buffer_load %dout_ptr[%R_10_30], %mask_19 : tensor<64xf32, #blocked> loc(#loc368)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            153,
+            20
+          ]
+        ],
+        "ir": "%dR_11 = hcug.buffer_load %dout_ptr[%R_11_32], %mask_19 : tensor<64xf32, #blocked> loc(#loc369)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            154,
+            20
+          ]
+        ],
+        "ir": "%dR_12 = hcug.buffer_load %dout_ptr[%R_12_34], %mask_19 : tensor<64xf32, #blocked> loc(#loc370)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            155,
+            20
+          ]
+        ],
+        "ir": "%dR_13 = hcug.buffer_load %dout_ptr[%R_13_36], %mask_19 : tensor<64xf32, #blocked> loc(#loc371)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            156,
+            20
+          ]
+        ],
+        "ir": "%dR_20 = hcug.buffer_load %dout_ptr[%R_20_38], %mask_19 : tensor<64xf32, #blocked> loc(#loc372)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            157,
+            20
+          ]
+        ],
+        "ir": "%dR_21 = hcug.buffer_load %dout_ptr[%R_21_40], %mask_19 : tensor<64xf32, #blocked> loc(#loc373)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            158,
+            20
+          ]
+        ],
+        "ir": "%dR_22 = hcug.buffer_load %dout_ptr[%R_22_42], %mask_19 : tensor<64xf32, #blocked> loc(#loc374)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            159,
+            20
+          ]
+        ],
+        "ir": "%dR_23 = hcug.buffer_load %dout_ptr[%R_23_44], %mask_19 : tensor<64xf32, #blocked> loc(#loc375)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            160,
+            20
+          ]
+        ],
+        "ir": "%dR_30 = hcug.buffer_load %dout_ptr[%R_30_46], %mask_19 : tensor<64xf32, #blocked> loc(#loc376)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            161,
+            20
+          ]
+        ],
+        "ir": "%dR_31 = hcug.buffer_load %dout_ptr[%R_31_48], %mask_19 : tensor<64xf32, #blocked> loc(#loc377)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            162,
+            20
+          ]
+        ],
+        "ir": "%dR_32 = hcug.buffer_load %dout_ptr[%R_32_50], %mask_19 : tensor<64xf32, #blocked> loc(#loc378)"
+      },
+      {
+        "kind": "load",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            163,
+            20
+          ]
+        ],
+        "ir": "%dR_33 = hcug.buffer_load %dout_ptr[%R_33_52], %mask_19 : tensor<64xf32, #blocked> loc(#loc379)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            333,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_00_86, %res_ptr[%R_00_22], %mask_19 : tensor<64xf32, #blocked> loc(#loc306)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            334,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_01_88, %res_ptr[%R_01_24], %mask_19 : tensor<64xf32, #blocked> loc(#loc307)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            335,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_02_90, %res_ptr[%R_02_26], %mask_19 : tensor<64xf32, #blocked> loc(#loc308)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            336,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_03_92, %res_ptr[%R_03_28], %mask_19 : tensor<64xf32, #blocked> loc(#loc309)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            337,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_10_94, %res_ptr[%R_10_30], %mask_19 : tensor<64xf32, #blocked> loc(#loc310)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            338,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_11_96, %res_ptr[%R_11_32], %mask_19 : tensor<64xf32, #blocked> loc(#loc311)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            339,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_12_98, %res_ptr[%R_12_34], %mask_19 : tensor<64xf32, #blocked> loc(#loc312)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            340,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_13_100, %res_ptr[%R_13_36], %mask_19 : tensor<64xf32, #blocked> loc(#loc313)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            341,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_20_102, %res_ptr[%R_20_38], %mask_19 : tensor<64xf32, #blocked> loc(#loc314)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            342,
+            37
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_21_104, %res_ptr[%R_21_40], %mask_19 : tensor<64xf32, #blocked> loc(#loc315)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            343,
+            38
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_22_106, %res_ptr[%R_22_42], %mask_19 : tensor<64xf32, #blocked> loc(#loc316)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            344,
+            38
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_23_108, %res_ptr[%R_23_44], %mask_19 : tensor<64xf32, #blocked> loc(#loc317)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            345,
+            38
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_30_110, %res_ptr[%R_30_46], %mask_19 : tensor<64xf32, #blocked> loc(#loc318)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            346,
+            38
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_31_112, %res_ptr[%R_31_48], %mask_19 : tensor<64xf32, #blocked> loc(#loc319)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            347,
+            38
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_32_114, %res_ptr[%R_32_50], %mask_19 : tensor<64xf32, #blocked> loc(#loc320)"
+      },
+      {
+        "kind": "store",
+        "layouts": [
+          "#blocked"
+        ],
+        "origins": [
+          [
+            "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/original/mhc_bwd.py",
+            348,
+            38
+          ]
+        ],
+        "ir": "hcug.buffer_store %res_33_116, %res_ptr[%R_33_52], %mask_19 : tensor<64xf32, #blocked> loc(#loc321)"
+      }
+    ]
+  }
+}

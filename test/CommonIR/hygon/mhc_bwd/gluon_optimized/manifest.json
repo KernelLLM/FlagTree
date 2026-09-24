@@ -1,0 +1,128 @@
+{
+  "b64_w1_s1": {
+    "source": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/gluon_optimized/b64_w1_s1.py",
+    "block_s": 64,
+    "num_warps": 1,
+    "size_per_thread": 1,
+    "warps_per_cta": 1,
+    "layout": [
+      [
+        1
+      ],
+      [
+        64
+      ],
+      [
+        1
+      ],
+      [
+        0
+      ]
+    ]
+  },
+  "b128_w2_s1": {
+    "source": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/gluon_optimized/b128_w2_s1.py",
+    "block_s": 128,
+    "num_warps": 2,
+    "size_per_thread": 1,
+    "warps_per_cta": 2,
+    "layout": [
+      [
+        1
+      ],
+      [
+        64
+      ],
+      [
+        2
+      ],
+      [
+        0
+      ]
+    ]
+  },
+  "b128_w1_s2": {
+    "source": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/gluon_optimized/b128_w1_s2.py",
+    "block_s": 128,
+    "num_warps": 1,
+    "size_per_thread": 2,
+    "warps_per_cta": 1,
+    "layout": [
+      [
+        2
+      ],
+      [
+        64
+      ],
+      [
+        1
+      ],
+      [
+        0
+      ]
+    ]
+  },
+  "b256_w4_s1": {
+    "source": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/gluon_optimized/b256_w4_s1.py",
+    "block_s": 256,
+    "num_warps": 4,
+    "size_per_thread": 1,
+    "warps_per_cta": 4,
+    "layout": [
+      [
+        1
+      ],
+      [
+        64
+      ],
+      [
+        4
+      ],
+      [
+        0
+      ]
+    ]
+  },
+  "b256_w2_s2": {
+    "source": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/gluon_optimized/b256_w2_s2.py",
+    "block_s": 256,
+    "num_warps": 2,
+    "size_per_thread": 2,
+    "warps_per_cta": 2,
+    "layout": [
+      [
+        2
+      ],
+      [
+        64
+      ],
+      [
+        2
+      ],
+      [
+        0
+      ]
+    ]
+  },
+  "b256_w1_s4": {
+    "source": "/public/home/scnethpc2653/lhd/env/projects/hard81_group8_20260914/mhc_bwd_run/gluon_optimized/b256_w1_s4.py",
+    "block_s": 256,
+    "num_warps": 1,
+    "size_per_thread": 4,
+    "warps_per_cta": 1,
+    "layout": [
+      [
+        4
+      ],
+      [
+        64
+      ],
+      [
+        1
+      ],
+      [
+        0
+      ]
+    ]
+  }
+}
