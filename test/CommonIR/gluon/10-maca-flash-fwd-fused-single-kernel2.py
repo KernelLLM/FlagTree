@@ -1,4 +1,10 @@
-"""C500 FlashAttention forward with guarded D128 M64/M128 specialization.
+"""C500 FlashAttention forward with automatic register layouts for D64/D128.
+
+The launch wrapper specializes the existing device body with the input head
+dimension. D64 uses the same algorithm with one D64 shared page and a 16 KiB
+arena; D128 uses two pages and a 32 KiB arena. The historical device function
+name is retained; BLOCK_D determines the actual computation dimension.
+The description below details the original D128 specialization.
 
 The kernel implements dense and causal D128 attention for BHSD tensors.  The
 causal FP16 specialization owns one M64 query tile and follows production
@@ -50,6 +56,7 @@ BM64 = 64
 BM128 = 128
 BN = 64
 D = 128
+SUPPORTED_HEAD_DIMS = (64, 128)
 NUM_WARPS = 4
 HEADS = 32
 LOG2E = 1.4426950408889634
@@ -264,9 +271,9 @@ def flash_fwd_hdim128_generic_kernel(
     qk_elements_mnk: gl.constexpr = [1, 2, 8]
     pv_elements_mnk: gl.constexpr = [1, 2, 8]
 
-    # Exactly 32 KiB for fp16/bf16. Q/O use buffer 0 in their epochs, while
+    # 16 KiB for D64, 32 KiB for D128 (fp16/bf16). Q/O reuse the arena, while
     # K and V use disjoint buffers 0 and 1 in the main-loop epoch.
-    # The M128 fallback keeps the established flat-D128 shared layout.
+    # The M128 path uses a flat [M, D] shared view.
     qkv_layout: gl.constexpr = compose_maca_shared_layout_for_operand(
         qk_elements_mnk,
         0,
@@ -275,7 +282,7 @@ def flash_fwd_hdim128_generic_kernel(
         16,
     )
     # Production M64 Q/O uses Cute Swizzle<3,3,3> independently in each D64
-    # page.  Reshaping [M,2,64] preserves
+    # page.  Reshaping [M,D/64,64] preserves
     #   page*4096 + m*64 + (((d64//8) ^ (m%8))*8 + d64%8).
     qo_d64_page_layout: gl.constexpr = gl.SwizzledSharedLayout(
         vec=8, per_phase=1, max_phase=8, order=[2, 0, 1]
@@ -287,7 +294,7 @@ def flash_fwd_hdim128_generic_kernel(
         [1, 0],
         16,
     )
-    # QK-B is [K128, N32].  MACA's shared-operand composition for tk=8,
+    # QK-B is [BLOCK_D, N32]. MACA's shared-operand composition for tk=8,
     # tn=2 and fp16 yields vec=8, perPhase=2, maxPhase=8 with K contiguous.
     tn_layout: gl.constexpr = compose_maca_shared_layout_for_operand(
         qk_elements_mnk,
@@ -561,9 +568,9 @@ def _validate_inputs(q, k, v):
     if q.ndim != 4:
         raise ValueError("Q must be a BHSD tensor")
     batch, heads, seqlen_q, head_dim = q.shape
-    if head_dim != D:
-        raise ValueError(f"head dimension must be {D}, got {head_dim}")
-    if k.ndim != 4 or k.shape[:2] != (batch, heads) or k.shape[3] != D:
+    if head_dim not in SUPPORTED_HEAD_DIMS:
+        raise ValueError(f"head dimension must be in {SUPPORTED_HEAD_DIMS}, got {head_dim}")
+    if k.ndim != 4 or k.shape[:2] != (batch, heads) or k.shape[3] != head_dim:
         raise ValueError(f"invalid K shape {tuple(k.shape)}")
     if v.shape != k.shape:
         raise ValueError("V must have the same shape as K")
@@ -582,6 +589,7 @@ def _validate_inputs(q, k, v):
 
 def launch_flash_fwd(q, k, v, out=None, lse=None, scale=None, causal=False):
     batch, heads, seqlen_q, seqlen_k = _validate_inputs(q, k, v)
+    head_dim = q.shape[-1]
     if out is None:
         out = torch.empty_like(q)
     if lse is None:
@@ -597,7 +605,7 @@ def launch_flash_fwd(q, k, v, out=None, lse=None, scale=None, causal=False):
     if not lse.is_contiguous():
         raise ValueError("LSE must be contiguous")
     if scale is None:
-        scale = 1.0 / math.sqrt(D)
+        scale = 1.0 / math.sqrt(head_dim)
 
     block_m = BM64 if causal and q.dtype == torch.float16 else BM128
     grid = (triton.cdiv(seqlen_q, block_m), batch * heads)
@@ -632,7 +640,7 @@ def launch_flash_fwd(q, k, v, out=None, lse=None, scale=None, causal=False):
         float(scale * LOG2E),
         BLOCK_M=block_m,
         BLOCK_N=BN,
-        BLOCK_D=D,
+        BLOCK_D=head_dim,
         CAUSAL=causal,
         # Mirrors C's Is_even_MN specialization.  Only proven full tiles can
         # select the dense noncausal load/score path without point masks.
