@@ -37,6 +37,9 @@ namespace triton {
 /// Creates a pass to convert CommonIR dialect to HIVM dialect.
 std::unique_ptr<OperationPass<ModuleOp>> createCommonIRToHIVMPass();
 
+/// Creates a pass that legalizes tv.ptr kernel arguments to memref<?xT, GM>.
+std::unique_ptr<OperationPass<ModuleOp>> createCommonIRTvPtrLegalizePass();
+
 #define GEN_PASS_REGISTRATION
 #include "ascend/include/CommonIRToHIVM/Passes.h.inc"
 

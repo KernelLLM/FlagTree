@@ -519,6 +519,10 @@ void init_triton_ascend_passes_ttir(py::module &&m) {
   });
 
 #ifdef __TLE_DSA__
+  m.def("add_commonir_tv_ptr_legalize", [](mlir::PassManager &pm) {
+    pm.addPass(mlir::triton::createCommonIRTvPtrLegalizePass());
+  });
+
   m.def("add_commonir_to_hivm", [](mlir::PassManager &pm) {
     pm.addPass(mlir::triton::createCommonIRToHIVMPass());
   });
