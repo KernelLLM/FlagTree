@@ -121,6 +121,7 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
         compile_on_910_95 = metadata["compile_on_910_95"]
         force_simt_template = metadata["force_simt_template"]
         enable_sync_block_lock = metadata["enable_sync_block_lock"]
+        use_commonir_tensor_view = metadata["use_commonir_tensor_view"]
         enable_mask_fallback_conversion = metadata["enable_mask_fallback_conversion"]
         optimize_dynamic_offset = metadata["optimize_dynamic_offset"]
         auto_blockify_size = metadata["auto_blockify_size"]
@@ -138,7 +139,10 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
             passes.common.add_cse(pm)
             passes.common.add_canonicalizer(pm)
 
-        # commonir: lower tile.* ops and inline unresolved !tile.buf signatures.
+        # commonir: legalize tv.ptr kernel arguments, then lower tile.* ops and
+        # inline unresolved !tile.buf signatures.
+        if use_commonir_tensor_view:
+            ascend.passes.ttir.add_commonir_tv_ptr_legalize(pm)
         ascend.passes.ttir.add_commonir_to_hivm(pm)
         passes.common.add_inliner(pm)
         passes.common.add_canonicalizer(pm)
@@ -152,8 +156,11 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=False):
         ascend.passes.ttir.add_triton_to_hfusion(pm)
         ascend.passes.ttir.add_triton_to_llvm(pm)
 
-        # Lower TensorView operations at the native bufferization boundary.
-        ascend.passes.ttir.add_tensor_view_lowering(pm)
+        # TensorView lowering. The commonir-to-hivm path consumes the tv.* ops
+        # directly; the native TensorViewLowering pass is the alternative tail.
+        # The two tails are mutually exclusive.
+        if not use_commonir_tensor_view:
+            ascend.passes.ttir.add_tensor_view_lowering(pm)
 
         ascend.passes.ttir.add_bubble_up_operation(pm)
         ascend.passes.ttir.add_triton_to_structure(pm, enable_mask_fallback_conversion, optimize_dynamic_offset)
@@ -959,6 +966,7 @@ class NPUOptions:
     force_simt_only: bool = False
     force_simt_template: bool = False
     enable_sync_block_lock: bool = False
+    use_commonir_tensor_view: bool = True
     # only take effect on the simt-only & simd-simt-mix scenarios
     shared_mem_dynamic_size: int = None
     # enable_bishengir_simt_optimization is passed as
