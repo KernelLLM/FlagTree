@@ -16,10 +16,6 @@ import triton.language.core as core
 from triton.language.standard import _log2, zeros_like
 
 
-_MIN_INT32 = tl.constexpr(torch.iinfo(torch.int32).min)
-_MAX_INT32 = tl.constexpr(torch.iinfo(torch.int32).max)
-
-
 @triton.jit
 def _compare_and_swap(x, indices, flip, stage: core.constexpr, n_dims: core.constexpr):
     n_outer: core.constexpr = x.numel >> n_dims
@@ -92,9 +88,9 @@ def _bitonic_merge(
         ]
         flip = core.reshape(
             core.broadcast_to(core.arange(0, 2)[None, :, None], shape), x.shape
-        )
+        ) != 0
     else:
-        flip = order
+        flip = order != 0
     for merge_stage in core.static_range(stage):
         x, indices = _compare_and_swap(
             x, indices, flip, merge_stage + (n_dims - stage), n_dims
@@ -127,7 +123,6 @@ def topk_tensor_view_kernel(
     offsets = tl.arange(0, BLOCK_SIZE)
     valid = offsets < cols
     pad_value = float("-inf") if DESCENDING else float("inf")
-    pad_index = _MIN_INT32 if DESCENDING else _MAX_INT32
 
     # No pointer is offset before it becomes a view.  Row selection is carried
     # entirely by the TensorView index tuple.
@@ -144,34 +139,46 @@ def topk_tensor_view_kernel(
         tile=[1, BLOCK_SIZE],
         sparse_dim=[1],
     )
-    value_tiles = tl.make_partition_view(
+    output_elements = rows * k
+    value_scatter = tl.make_gather_scatter_view(
         values_ptr,
-        shape=[rows, k],
-        strides=[k, 1],
-        tile=[1, BLOCK_SIZE],
+        shape=[output_elements],
+        strides=[1],
+        tile=[BLOCK_SIZE],
+        sparse_dim=[0],
     )
-    index_tiles = tl.make_partition_view(
+    index_scatter = tl.make_gather_scatter_view(
         indices_ptr,
-        shape=[rows, k],
-        strides=[k, 1],
-        tile=[1, BLOCK_SIZE],
+        shape=[output_elements],
+        strides=[1],
+        tile=[BLOCK_SIZE],
+        sparse_dim=[0],
     )
 
     values = tl.reshape(
         tl.load(input_tiles, index=(row, 0)), (BLOCK_SIZE,)
     )
     values = tl.where(valid, values, pad_value).to(tl.float32)
-    source_indices = tl.where(valid, offsets, pad_index).to(tl.int32)
+    source_indices = offsets.to(tl.int32)
     _, sorted_indices = _argsort(values, source_indices, DESCENDING)
 
-    # sorted_indices is the per-lane coordinate tensor for the sparse column
-    # dimension.  The partition stores clip the tile to the requested k.
-    selected = tl.load(input_gather, index=(row, sorted_indices))
-    tl.store(value_tiles, selected, index=(row, 0))
+    # Only the first k ranks are observable.  Give every other gather lane a
+    # valid coordinate so the backend never forms an extreme or negative
+    # address.  Their scatter coordinates are one-past-the-end and TensorView
+    # boundary handling drops those stores.
+    output_valid = offsets < k
+    gather_indices = tl.where(output_valid, sorted_indices, 0).to(tl.int32)
+    selected = tl.reshape(
+        tl.load(input_gather, index=(row, gather_indices)), (BLOCK_SIZE,)
+    )
+    output_indices = tl.where(
+        output_valid, row * k + offsets, output_elements
+    ).to(tl.int32)
+    tl.store(value_scatter, selected, index=(output_indices,))
     tl.store(
-        index_tiles,
-        sorted_indices.to(tl.int64)[None, :],
-        index=(row, 0),
+        index_scatter,
+        sorted_indices.to(tl.int64),
+        index=(output_indices,),
     )
 
 
