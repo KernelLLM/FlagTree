@@ -1194,6 +1194,7 @@ def flash_attention_fwd(q, k, v, combine_batch, is_causal=False):
         BLOCK_N=BLOCK_N,
         DIM=DIM,
         SUB_M=SUB_M,
+        plan_memory_strategy="largest-first",
     )
     return out
 
