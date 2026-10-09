@@ -38,6 +38,7 @@ from .core import (
 from .types import (layout, distributed_encoding, BlockEncoding, MmaEncoding, DotOperandEncoding, SlicedEncoding,
                     shared_layout, swizzled_shared_layout, tensor_memory_layout, nv_mma_shared_layout, scope,
                     buffered_tensor, buffered_tensor_type, barrier, barrier_type, smem, tmem, PENDING, READY)
+from . import metax
 
 # Backward-compat alias expected by existing tests/tutorials.
 storage_kind = memory_space
@@ -51,6 +52,7 @@ __all__ = [
     "barrier_arrive",
     "barrier_wait",
     "copy",
+    "metax",
     "local_ptr",
     "warp_specialize",
     "wgmma",

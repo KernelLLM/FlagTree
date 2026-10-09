@@ -1,3 +1,9 @@
+if(FLAGTREE_COMMON_IR_ENABLED)
+    set(_COMMON_IR_LIBS MetaxCommonIRToTTGIR)
+else()
+    set(_COMMON_IR_LIBS "")
+endif()
+
 if(BUILD_MCTLE)
     set(_MCTLE_IR_LIBS McTleIR)
 else()
@@ -20,6 +26,7 @@ add_triton_library(TritonToTritonGPU
     ProtonIR
     TritonGPUIR
     ${_MCTLE_IR_LIBS}
+    ${_COMMON_IR_LIBS}
 )
 
 if(BUILD_MCTLE)
