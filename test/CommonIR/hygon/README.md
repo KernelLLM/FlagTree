@@ -7,13 +7,24 @@
 3. 因为tle算子下降路线上有比gluon更多的优化pass，所以gluon基线版和tle算子的性能也会有差异
 4. 加速比的计算方法是 tle算子运行时间 / gluon优化版运行时间
 
-# layout介绍
-1. blockedlayout的参数是
-```
-#ttg.blocked<{
-  sizePerThread,
-  threadsPerWarp,
-  warpsPerCTA,
-  order
-}>
-```
+## 当前算子
+
+已整理 16 个算子：
+
+- `add_rms_norm`
+- `dequantize_and_gather_k_cache`
+- `fp8_fp4_paged_mqa_logits`
+- `fused_deepseek_v4_qnorm_rope_kv_rope_insert`
+- `group_mm`
+- `hc_head_fused_kernel`
+- `hc_split_sinkhorn_forward`
+- `lightning_indexer`
+- `megamoe`
+- `mhc_bwd`
+- `mhc_post`
+- `mhc_pre`
+- `moe_sum`
+- `rms_norm`
+- `rms_norm_w8a16_fp8`
+- `rwkv_ka_fusion`
+

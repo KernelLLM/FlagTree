@@ -119,12 +119,6 @@ def dequantize_and_gather_k_cache(
     nope_dim: int | None = None,
     scale_slots: int | None = None,
 ) -> None:
-    """Launch the historical contiguous-cache GPU flow, without hidden work.
-
-    The accepted cases use contiguous BF16 output and contiguous uint8 cache.
-    Validation of device-resident lengths/indices is the caller's responsibility.
-    No allocation, cache packing, or input conversion occurs in this wrapper.
-    """
     if out.ndim != 3 or str(out.dtype) != "torch.bfloat16" or not out.is_contiguous():
         raise ValueError("out must be a contiguous three-dimensional BF16 tensor")
     if k_cache.ndim not in (2, 3) or not k_cache.is_contiguous() or str(k_cache.dtype) != "torch.uint8":
@@ -156,7 +150,6 @@ def dequantize_and_gather_k_cache(
 
 
 def _self_test():
-    """One small_aligned case, independent finite E4M3FN mathematical decoding."""
     import torch
     if not torch.cuda.is_available():
         raise RuntimeError("a compatible HIP/DCU environment is required")

@@ -98,14 +98,6 @@ def fused_deepseek_v4_qnorm_rope_kv_rope_insert(
     q, kv, k_cache, slot_mapping, position_ids, cos_sin_cache,
     eps=1e-6, cache_block_size=16,
 ):
-    """In-place Q RMSNorm/RoPE and KV RoPE/cache insertion; return None.
-
-    q [N,H,512], kv [N_insert,512], cache [blocks,block_size,512]: BF16.
-    slot_mapping/position_ids: contiguous int64; cos_sin_cache [max_pos,64]: FP32.
-    All tensors must be contiguous on one GPU. A negative slot skips insertion.
-    The caller is responsible for valid positions, slots and non-overlapping
-    insertions. This file supplies its own frozen grid and launch policy.
-    """
     import torch
     if q.ndim != 3 or q.shape[-1] != 512 or q.shape[1] <= 0:
         raise ValueError("q must have shape [N,H,512], H > 0")

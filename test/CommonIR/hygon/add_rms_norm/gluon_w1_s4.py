@@ -83,13 +83,6 @@ def loop(out_ptr, in_ptr1, in_ptr2, w_ptr, N, eps, TILE_N: gl.constexpr):
         cdna3.buffer_store(y, out_ptr, (pid * N + out_offsets).to(gl.int32))
 
 def add_rms_norm(x1, x2, weight, eps=1e-5):
-    """Return RMSNorm(x1 + x2) * weight, using this file's fixed layout.
-
-    Inputs: contiguous GPU x1/x2 [M,N] and weight [N], with a common
-    FP16/BF16/FP32 dtype/device. No layout argument, autotuning, hidden copies,
-    external configuration, or autograd support. Performance is archived for
-    the 45 configurations in README; other shapes are not performance claims.
-    """
     import torch
     import triton
 
