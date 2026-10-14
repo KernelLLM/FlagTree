@@ -2342,36 +2342,6 @@ def advance(base, offsets, _semantic=None):
     """
     return _semantic.advance(base, offsets)
 
-
-@builtin
-def make_partition_view(base: tensor, shape, strides, tile, padding_value="zero", _semantic=None) -> tensor_view:
-    """Create a tiled partition view over a scalar base pointer.
-
-    ``padding_value`` must be one of ``"zero"``, ``"nan"``, ``"inf"``, or ``"-inf"``.
-    """
-    return _semantic.make_partition_view(base, shape, strides, tile, padding_value)
-
-
-@builtin
-def make_strided_view(base: tensor, shape, strides, tile, traversal_strides,
-                      padding_value="zero", _semantic=None) -> tensor_view:
-    """Create a tiled pointer view whose origins advance by ``traversal_strides``.
-
-    ``padding_value`` must be one of ``"zero"``, ``"nan"``, ``"inf"``, or ``"-inf"``.
-    """
-    return _semantic.make_strided_view(base, shape, strides, tile, traversal_strides, padding_value)
-
-
-@builtin
-def make_gather_scatter_view(base: tensor, shape, strides, tile, sparse_dim,
-                             padding_value="zero", _semantic=None) -> tensor_view:
-    """Create a pointer view with tensor-valued indices in selected dimensions.
-
-    ``padding_value`` must be one of ``"zero"``, ``"nan"``, ``"inf"``, or ``"-inf"``.
-    """
-    return _semantic.make_gather_scatter_view(base, shape, strides, tile, sparse_dim, padding_value)
-
-
 @builtin
 def make_tensor_descriptor(
     base: tensor,

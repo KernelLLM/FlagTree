@@ -1,6 +1,11 @@
 from . import backends
 
 from . import language
+from .language import (
+    make_partition_view,
+    make_strided_view,
+    make_gather_scatter_view,
+)
 
 try:
     from . import raw
@@ -193,6 +198,9 @@ __all__ = [
     "language",
     "dsa",
     "scope",
+    "make_partition_view",
+    "make_strided_view",
+    "make_gather_scatter_view",
     *backends.ops(),
 ]
 

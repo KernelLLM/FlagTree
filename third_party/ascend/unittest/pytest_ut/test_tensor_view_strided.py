@@ -22,19 +22,20 @@ import torch
 import torch_npu  # noqa: F401
 import triton
 import triton.language as tl
+import triton.experimental.tle as tle
 
 
 @triton.jit
 def strided_view_load_store_kernel(src, dst, n_elements, BLOCK_SIZE: tl.constexpr, TRAVERSAL_STRIDE: tl.constexpr):
     block = tl.program_id(0)
-    src_tiles = tl.make_strided_view(
+    src_tiles = tle.make_strided_view(
         src,
         shape=[n_elements],
         strides=[1],
         tile=[BLOCK_SIZE],
         traversal_strides=[TRAVERSAL_STRIDE],
     )
-    dst_tiles = tl.make_strided_view(
+    dst_tiles = tle.make_strided_view(
         dst,
         shape=[n_elements],
         strides=[1],
@@ -50,7 +51,7 @@ def strided_view_load_store_kernel(src, dst, n_elements, BLOCK_SIZE: tl.constexp
 def strided_view_padding_kernel(src, dst, src_elements, dst_elements, BLOCK_SIZE: tl.constexpr,
                                 TRAVERSAL_STRIDE: tl.constexpr):
     block = tl.program_id(0)
-    src_tiles = tl.make_strided_view(
+    src_tiles = tle.make_strided_view(
         src,
         shape=[src_elements],
         strides=[1],
@@ -58,7 +59,7 @@ def strided_view_padding_kernel(src, dst, src_elements, dst_elements, BLOCK_SIZE
         traversal_strides=[TRAVERSAL_STRIDE],
         padding_value="inf",
     )
-    dst_tiles = tl.make_strided_view(
+    dst_tiles = tle.make_strided_view(
         dst,
         shape=[dst_elements],
         strides=[1],

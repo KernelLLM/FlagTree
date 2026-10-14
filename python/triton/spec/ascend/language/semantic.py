@@ -2044,7 +2044,8 @@ class TritonSemantic(Generic[TensorTy]):
     def _tensor_view_indices(self, view: "tl.tensor_view", index):
         rank = view.type.rank
         if view.type.view_kind is None:
-            raise ValueError("Expected an encoded tensor view; call `tl.make_*_view` before `tl.load` or `tl.store`")
+            raise ValueError("Expected an encoded tensor view; call `tle.make_*_view` "
+                             "before `tl.load` or `tl.store`")
         if len(index) != rank:
             raise ValueError(f"Expected {rank} entries in `index`, but got {len(index)}")
         index_handles = []

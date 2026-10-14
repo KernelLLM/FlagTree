@@ -1,5 +1,8 @@
 add_triton_library(CommonIRToHIVM
   CommonIRToHIVM.cpp
+  TensorViewAccessAnalysis.cpp
+  TensorViewStrategy.cpp
+  TensorViewLowering.cpp
 
   DEPENDS
   CommonIRToHIVMConversionPassIncGen
