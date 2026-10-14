@@ -105,8 +105,11 @@ def call(mat_a, mat_b, num_cores=_DEFAULT_NUM_CORES):
     k = mat_a.shape[1]
     n = mat_b.shape[1]
     mat_c = torch.empty(m, n, dtype=mat_a.dtype, device=mat_a.device)
+    # The kernel writes through tl.store on a partition view, which tensor-view-lowering
+    # consumes. The pipeline carries either that pass or commonir-to-hivm, never both, and
+    # defaults to the latter, so the launch selects the tail this kernel needs.
     matmul_kernel[(num_cores, )](mat_a, mat_b, mat_c, m, n, k, num_cores, BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N,
-                                 BLOCK_K=BLOCK_K)
+                                 BLOCK_K=BLOCK_K, use_commonir_tensor_view=False)
     return mat_c
 
 
