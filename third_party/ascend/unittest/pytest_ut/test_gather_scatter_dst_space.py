@@ -10,7 +10,7 @@ import torch
 import torch_npu  # noqa: F401
 import triton
 import triton.language as tl
-import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
+import triton.experimental.tle as tle
 from triton.experimental.tle.language.dsa import tile_load, tile_store
 
 
@@ -19,9 +19,9 @@ def gather_load_kernel(src, indices, dst, n_elements, BLOCK_SIZE: tl.constexpr):
     block = tl.program_id(0)
     offsets = block * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     data_indices = tl.load(indices + offsets)
-    src_gather = tl.make_gather_scatter_view(src, shape=[n_elements], strides=[1],
+    src_gather = tle.make_gather_scatter_view(src, shape=[n_elements], strides=[1],
                                              tile=[BLOCK_SIZE], sparse_dim=[0])
-    dst_view = tl.make_partition_view(dst, shape=[n_elements], strides=[1],
+    dst_view = tle.make_partition_view(dst, shape=[n_elements], strides=[1],
                                       tile=[BLOCK_SIZE])
 
     value = tile_load(src_gather, index=(data_indices,), dst_space=tle.language.dsa.ascend.UB)
@@ -33,9 +33,9 @@ def scatter_store_kernel(src, indices, dst, n_elements, BLOCK_SIZE: tl.constexpr
     block = tl.program_id(0)
     offsets = block * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     data_indices = tl.load(indices + offsets)
-    src_view = tl.make_partition_view(src, shape=[n_elements], strides=[1],
+    src_view = tle.make_partition_view(src, shape=[n_elements], strides=[1],
                                       tile=[BLOCK_SIZE])
-    dst_scatter = tl.make_gather_scatter_view(dst, shape=[n_elements], strides=[1],
+    dst_scatter = tle.make_gather_scatter_view(dst, shape=[n_elements], strides=[1],
                                               tile=[BLOCK_SIZE], sparse_dim=[0])
 
     value = tile_load(src_view, index=(block,), dst_space=tle.language.dsa.ascend.UB)
@@ -46,10 +46,10 @@ def scatter_store_kernel(src, indices, dst, n_elements, BLOCK_SIZE: tl.constexpr
 def gather_padding_kernel(src, indices, dst, src_elements, BLOCK_SIZE: tl.constexpr):
     offsets = tl.arange(0, BLOCK_SIZE)
     data_indices = tl.load(indices + offsets)
-    src_gather = tl.make_gather_scatter_view(src, shape=[src_elements], strides=[1],
+    src_gather = tle.make_gather_scatter_view(src, shape=[src_elements], strides=[1],
                                              tile=[BLOCK_SIZE], sparse_dim=[0],
                                              padding_value="nan")
-    dst_view = tl.make_partition_view(dst, shape=[BLOCK_SIZE], strides=[1],
+    dst_view = tle.make_partition_view(dst, shape=[BLOCK_SIZE], strides=[1],
                                       tile=[BLOCK_SIZE])
 
     value = tile_load(src_gather, index=(data_indices,), dst_space=tle.language.dsa.ascend.UB)
@@ -60,9 +60,9 @@ def gather_padding_kernel(src, indices, dst, src_elements, BLOCK_SIZE: tl.conste
 def scatter_bounds_kernel(src, indices, dst, dst_elements, BLOCK_SIZE: tl.constexpr):
     offsets = tl.arange(0, BLOCK_SIZE)
     data_indices = tl.load(indices + offsets)
-    src_view = tl.make_partition_view(src, shape=[BLOCK_SIZE], strides=[1],
+    src_view = tle.make_partition_view(src, shape=[BLOCK_SIZE], strides=[1],
                                       tile=[BLOCK_SIZE])
-    dst_scatter = tl.make_gather_scatter_view(dst, shape=[dst_elements], strides=[1],
+    dst_scatter = tle.make_gather_scatter_view(dst, shape=[dst_elements], strides=[1],
                                               tile=[BLOCK_SIZE], sparse_dim=[0])
 
     value = tile_load(src_view, index=(0,), dst_space=tle.language.dsa.ascend.UB)
@@ -81,12 +81,12 @@ def gather_embedding_kernel(embed_table, token_ids, output, VOCAB,
     offsets = pid * BLOCK_SEQ + tl.arange(0, BLOCK_SEQ)
     ids = tl.load(token_ids + offsets)
 
-    embed_gs = tl.make_gather_scatter_view(embed_table, shape=[VOCAB, DIM],
+    embed_gs = tle.make_gather_scatter_view(embed_table, shape=[VOCAB, DIM],
                                            strides=[DIM, 1], tile=[BLOCK_SEQ, DIM],
                                            sparse_dim=[0])
     gathered = tile_load(embed_gs, index=(ids, 0), dst_space=tle.language.dsa.ascend.UB)
 
-    out_view = tl.make_partition_view(output, shape=[SEQ_LEN, DIM],
+    out_view = tle.make_partition_view(output, shape=[SEQ_LEN, DIM],
                                       strides=[DIM, 1], tile=[BLOCK_SEQ, DIM])
     tile_store(out_view, value=gathered, index=(pid, 0), src_space=tle.language.dsa.ascend.UB)
 

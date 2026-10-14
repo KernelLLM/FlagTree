@@ -28,11 +28,8 @@
 // ops.
 //
 // Strategy: greedy rewrite runs patterns iteratively to fixed point.
-//   Step 1: tile.alloc → memref.alloc (produces memref with
-//   #hivm.address_space) Step 2: tile.to_tensor → RAUW: replace all uses of
-//   result with src operand,
-//           then erase. The src is now memref (from Step 1), consumers get
-//           memref instead of tensor, bridged by UnrealizedConversionCast.
+//   Step 1: tile.alloc → memref.alloc with #hivm.address_space.
+//   Step 2: tile.to_tensor → UnrealizedConversionCast bridging memref to tensor.
 //   Step 3: tile.copy → hivm.copy (tile.* src, on-chip DMA)
 //                    or memref.copy (!tt.ptr src, GM↔local DMA; the ptr is
 //                    bridged to memref via UnrealizedConversionCast)
@@ -42,34 +39,34 @@
 //===----------------------------------------------------------------------===//
 
 #include "ascend/include/CommonIRToHIVM/Passes.h"
+#include "ascend/include/CommonIRToHIVM/TensorViewAccessAnalysis.h"
+#include "ascend/include/CommonIRToHIVM/TensorViewLowering.h"
+#include "ascend/include/CommonIRToHIVM/Utils.h"
 
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
 #include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 #include "triton-shared/Dialect/TensorView/IR/TensorViewDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Pass/PassManager.h"
+#include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 #include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/Support/LogicalResult.h"
 
 using namespace mlir;
-namespace tile = mlir::triton::tile;
-namespace tv = mlir::triton::tv;
+using namespace mlir::triton;
+
 namespace hivm = mlir::hivm;
 
 namespace mlir {
@@ -209,36 +206,38 @@ static bool isTensorOfPointer(Type ty) {
 // TensorView tile.load / tile.store direct lowering.
 //
 // A `tile.load`/`tile.store` whose operand is a `tv.tensor_view` is lowered
-// here: a partition or strided encoding becomes a contiguous GM<->UB DMA, a
-// gather_scatter encoding becomes an element-wise discrete gather/scatter.
+// here. Dense views use the dense lowering helpers; gather_scatter views use
+// strategy-selected per-index payload DMA or scalar transfer.
 // Both carry the explicit dst_space/src_space memory space.
 // ============================================================================
 
-struct ViewTileInfo {
-  Value base;
-  Type elementType;
-  SmallVector<int64_t> tile;
-  SmallVector<int64_t> traversal;
-  SmallVector<int64_t> dimMap;
-  SmallVector<int64_t> strideStatic;
-  SmallVector<int64_t> sparseDims;
-  SmallVector<Value> shape;
-  SmallVector<Value> strides;
-  tv::PaddingValue padding = tv::PaddingValue::ZERO;
-  bool ok = false;
-};
-
-static Value asIndexValue(OpBuilder &builder, Location loc, Value value) {
-  if (value.getType().isIndex())
-    return value;
-  return builder.create<arith::IndexCastOp>(loc, builder.getIndexType(), value);
+/// Map TensorView padding to the access-analysis padding enum.
+inline PaddingValue getPaddingValue(tv::PaddingValue value) {
+  PaddingValue pad = PaddingValue::ZERO;
+  switch (value) {
+    case tv::PaddingValue::ZERO:
+      pad = PaddingValue::ZERO;
+      break;
+    case tv::PaddingValue::NAN_VALUE:
+      pad = PaddingValue::NAN_VALUE;
+      break;
+    case tv::PaddingValue::POS_INF:
+      pad = PaddingValue::POS_INF;
+      break;
+    case tv::PaddingValue::NEG_INF:
+      pad = PaddingValue::NEG_INF;
+      break;
+    default:
+      break;
+  }
+  return pad;
 }
 
 // Trace a `tile.load`/`tile.store` operand back to the `tv.make_*_view` that
 // produced it and gather the tile geometry. Handles both partition and strided
 // encodings; for a partition view the traversal stride equals the tile size.
-static ViewTileInfo traceView(Value view, PatternRewriter &rewriter) {
-  ViewTileInfo info;
+static TensorViewAccessInfo traceView(Value view, PatternRewriter &rewriter) {
+  TensorViewAccessInfo info;
   auto viewTy = dyn_cast<tv::TensorViewType>(view.getType());
   if (!viewTy)
     return info;
@@ -249,7 +248,7 @@ static ViewTileInfo traceView(Value view, PatternRewriter &rewriter) {
   SmallVector<int64_t> dimMapStorage;
   SmallVector<int64_t> traversal;
   SmallVector<int64_t> sparseDims;
-  tv::PaddingValue padding = tv::PaddingValue::ZERO;
+  PaddingValue padding = PaddingValue::ZERO;
   Value source;
 
   if (auto pv = dyn_cast_or_null<tv::PartitionViewAttr>(enc)) {
@@ -258,7 +257,7 @@ static ViewTileInfo traceView(Value view, PatternRewriter &rewriter) {
       return info;
     tile = pv.getTile();
     dimMap = pv.getDimMap();
-    padding = pv.getPaddingValue();
+    padding = getPaddingValue(pv.getPaddingValue());
     traversal.assign(tile.begin(), tile.end()); // step == size
     source = make.getSource();
   } else if (auto sv = dyn_cast_or_null<tv::StridedViewAttr>(enc)) {
@@ -267,7 +266,7 @@ static ViewTileInfo traceView(Value view, PatternRewriter &rewriter) {
       return info;
     tile = sv.getTile();
     dimMap = sv.getDimMap();
-    padding = sv.getPaddingValue();
+    padding = getPaddingValue(sv.getPaddingValue());
     ArrayRef<int64_t> ts = sv.getTraversalStrides();
     traversal.assign(ts.begin(), ts.end());
     source = make.getSource();
@@ -276,7 +275,7 @@ static ViewTileInfo traceView(Value view, PatternRewriter &rewriter) {
     if (!make)
       return info;
     tile = gs.getTile();
-    padding = gs.getPaddingValue();
+    padding = getPaddingValue(gs.getPaddingValue());
     traversal.assign(tile.begin(), tile.end()); // contiguous step per dim
     sparseDims.assign(gs.getSparseDim().begin(), gs.getSparseDim().end());
     // A gather_scatter view keeps the base dimension order, so the tile
@@ -308,31 +307,52 @@ static ViewTileInfo traceView(Value view, PatternRewriter &rewriter) {
 
   for (int64_t tileSize : tile)
     if (tileSize <= 0)
-      return ViewTileInfo();
+      return TensorViewAccessInfo();
   for (int64_t step : traversal)
     if (step <= 0)
-      return ViewTileInfo();
+      return TensorViewAccessInfo();
   for (unsigned i = 0; i < dimMap.size(); ++i) {
     int64_t d = dimMap[i];
     if (d < 0 || static_cast<size_t>(d) >= makeView.getSizes().size())
-      return ViewTileInfo();
+      return TensorViewAccessInfo();
     for (unsigned j = 0; j < i; ++j)
       if (dimMap[j] == d)
-        return ViewTileInfo();
+        return TensorViewAccessInfo();
   }
 
   info.base = base;
+  info.padding = padding;
+
+  if (isa<tv::GatherScatterViewAttr>(enc))
+    info.kind = TensorViewKind::GatherScatter;
+  else if (isa<tv::StridedViewAttr>(enc))
+    info.kind = TensorViewKind::Strided;
+  else
+    info.kind = TensorViewKind::Partition;
+
   info.elementType = viewTy.getElementType();
   info.tile.assign(tile.begin(), tile.end());
   info.traversal = std::move(traversal);
   info.dimMap.assign(dimMap.begin(), dimMap.end());
-  info.strideStatic.assign(baseTy.getStrides().begin(),
-                           baseTy.getStrides().end());
+  info.sparseDims = std::move(sparseDims);
   info.shape.assign(makeView.getSizes().begin(), makeView.getSizes().end());
+  info.staticShape.assign(baseTy.getShape().begin(), baseTy.getShape().end());
   info.strides.assign(makeView.getStrides().begin(),
                       makeView.getStrides().end());
-  info.padding = padding;
-  info.sparseDims = std::move(sparseDims);
+
+  // The view *type*'s strides are usually all-dynamic even when the operands are
+  // built from constants (a make_tensor_view on a runtime pointer carries
+  // `strides=[?, ?]`), so fold each operand's constant value in here. Without
+  // this, any contiguity test over `staticStrides` is unsatisfiable in practice.
+  info.staticStrides.assign(baseTy.getStrides().begin(),
+                            baseTy.getStrides().end());
+  for (unsigned d = 0; d < info.staticStrides.size(); ++d) {
+    if (!ShapedType::isDynamic(info.staticStrides[d]))
+      continue;
+    if (auto c = getConstantIntValue(info.strides[d]))
+      info.staticStrides[d] = *c;
+  }
+
   info.ok = true;
   return info;
 }
@@ -344,10 +364,10 @@ static ViewTileInfo traceView(Value view, PatternRewriter &rewriter) {
 // the familiar `index * tile` start. Valid length always clamps against the
 // tile extent, independent of the traversal stride.
 static Value emitViewGeometry(OpBuilder &builder, Location loc,
-                              const ViewTileInfo &info, ValueRange indices,
+                              const TensorViewAccessInfo &info, ValueRange indices,
                               SmallVectorImpl<Value> *validLengths) {
   Value offset;
-  for (unsigned viewDim = 0; viewDim < info.tile.size(); ++viewDim) {
+  for (unsigned viewDim = 0; viewDim < info.rank(); ++viewDim) {
     unsigned baseDim = static_cast<unsigned>(info.dimMap[viewDim]);
     Value index = asIndexValue(builder, loc, indices[viewDim]);
     Value step =
@@ -378,14 +398,14 @@ static Value emitViewGeometry(OpBuilder &builder, Location loc,
 // `tile` (the traversal stride only moved the start offset, not the extent),
 // so this helper is identical for partition and strided views.
 static Value emitViewGmTile(OpBuilder &builder, Location loc,
-                            const ViewTileInfo &info, Value offset) {
+                            const TensorViewAccessInfo &info, Value offset) {
   SmallVector<OpFoldResult> sizes;
   SmallVector<OpFoldResult> strides;
   SmallVector<int64_t> staticStrides;
-  for (unsigned viewDim = 0; viewDim < info.tile.size(); ++viewDim) {
+  for (unsigned viewDim = 0; viewDim < info.rank(); ++viewDim) {
     unsigned baseDim = static_cast<unsigned>(info.dimMap[viewDim]);
     sizes.push_back(builder.getIndexAttr(info.tile[viewDim]));
-    int64_t stride = info.strideStatic[baseDim];
+    int64_t stride = info.staticStrides[baseDim];
     staticStrides.push_back(stride);
     if (stride == ShapedType::kDynamic)
       strides.push_back(info.strides[baseDim]);
@@ -418,13 +438,6 @@ static Value emitPrefixSubview(OpBuilder &builder, Location loc, Value source,
   return builder.create<memref::SubViewOp>(loc, source, offsets, sizes, strides);
 }
 
-static MemRefType makeSpaceMemref(MLIRContext *ctx, ArrayRef<int64_t> shape,
-                                  Type elementType, hivm::AddressSpace space) {
-  auto spaceAttr = hivm::AddressSpaceAttr::get(ctx, space);
-  return MemRefType::get(shape, elementType, MemRefLayoutAttrInterface{},
-                         spaceAttr);
-}
-
 // Resolve the on-chip memory space carried by a tile.load/tile.store into a
 // HIVM address space. A null/absent attribute means the DSL did not specify a
 // space, so we default to UB (the Vector working buffer). Generic GPU spaces
@@ -441,18 +454,18 @@ resolveTileSpace(std::optional<tile::MemorySpace> space) {
 // out-of-range lanes of a gather_scatter gather. Float element types support the
 // IEEE special pads (nan / +inf / -inf); integers only support zero.
 static Value emitPadConstant(OpBuilder &builder, Location loc, Type elementType,
-                             tv::PaddingValue padding) {
+                             PaddingValue padding) {
   if (auto floatTy = dyn_cast<FloatType>(elementType)) {
     const llvm::fltSemantics &sem = floatTy.getFloatSemantics();
     llvm::APFloat value = llvm::APFloat::getZero(sem);
     switch (padding) {
-    case tv::PaddingValue::NAN_VALUE:
+    case PaddingValue::NAN_VALUE:
       value = llvm::APFloat::getNaN(sem);
       break;
-    case tv::PaddingValue::POS_INF:
+    case PaddingValue::POS_INF:
       value = llvm::APFloat::getInf(sem, /*Negative=*/false);
       break;
-    case tv::PaddingValue::NEG_INF:
+    case PaddingValue::NEG_INF:
       value = llvm::APFloat::getInf(sem, /*Negative=*/true);
       break;
     default:
@@ -480,121 +493,15 @@ static bool isViewLowerable(tv::TensorViewType viewTy, size_t numIndices) {
   return false;
 }
 
-// Build a single-element GM view (memref<1xT>) at a dynamic flat offset so an
-// individual scalar element can be loaded from global memory.
-static Value emitGmElementView(OpBuilder &b, Location loc, Value base,
-                               Value offset, Type elementType) {
-  auto layout = StridedLayoutAttr::get(b.getContext(),
-                                       /*offset=*/ShapedType::kDynamic, {1});
-  auto gmSpace =
-      hivm::AddressSpaceAttr::get(b.getContext(), hivm::AddressSpace::GM);
-  auto ty = MemRefType::get({1}, elementType, layout, gmSpace);
-  return b.create<memref::ReinterpretCastOp>(
-      loc, ty, base, OpFoldResult(offset),
-      ArrayRef<OpFoldResult>{b.getIndexAttr(1)},
-      ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
-}
-
-// Physical (flat) element offset and in-bounds predicate of one tile element.
-struct ElementAccess {
-  Value physOffset;
-  Value inBounds;
-};
-
-// Resolve one tile element to its base coordinate along every dimension. A
-// gather_scatter sparse dimension reads its logical coordinate from the
-// per-lane index tensor via tensor.extract; every other dimension follows the
-// dense rule index * traversal + coord. The element is in bounds when all of
-// its logical coordinates fall inside the base view; physOffset is the flat
-// element offset (sum of logical * stride) into the base memref.
-static ElementAccess emitElementAccess(OpBuilder &b, Location loc,
-                                       const ViewTileInfo &info,
-                                       ValueRange indices, ValueRange coords) {
-  ElementAccess access;
-  Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
-  access.inBounds = b.create<arith::ConstantIntOp>(loc, 1, /*width=*/1);
-  for (unsigned viewDim = 0; viewDim < info.tile.size(); ++viewDim) {
-    unsigned baseDim = static_cast<unsigned>(info.dimMap[viewDim]);
-    Value logical;
-    if (llvm::is_contained(info.sparseDims, static_cast<int64_t>(viewDim))) {
-      Value extracted =
-          b.create<tensor::ExtractOp>(loc, indices[viewDim], coords[viewDim]);
-      logical = asIndexValue(b, loc, extracted);
-    } else {
-      Value index = asIndexValue(b, loc, indices[viewDim]);
-      Value step =
-          b.create<arith::ConstantIndexOp>(loc, info.traversal[viewDim]);
-      Value origin = b.create<arith::MulIOp>(loc, index, step);
-      logical = b.create<arith::AddIOp>(loc, origin, coords[viewDim]);
-    }
-
-    Value extent = asIndexValue(b, loc, info.shape[baseDim]);
-    Value nonNeg =
-        b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sge, logical, zero);
-    Value below = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
-                                          logical, extent);
-    Value dimIn = b.create<arith::AndIOp>(loc, nonNeg, below);
-    access.inBounds = b.create<arith::AndIOp>(loc, access.inBounds, dimIn);
-
-    Value stride = asIndexValue(b, loc, info.strides[baseDim]);
-    Value physical = b.create<arith::MulIOp>(loc, logical, stride);
-    access.physOffset =
-        access.physOffset
-            ? b.create<arith::AddIOp>(loc, access.physOffset, physical)
-            : physical;
-  }
-  return access;
-}
-
-// Element-wise padded gather into a caller-provided UB buffer, valid for any
-// tile rank and for both a dense boundary tile and a gather_scatter view. One
-// scf.for is nested per tile dimension; for each element emitElementAccess
-// resolves its base coordinate (a gather_scatter sparse dimension reads it
-// from the index tensor), and an scf.if loads from GM when the element is in
-// bounds or stores the pad constant otherwise. Writing element-by-element
-// into `ub` (rather than assembling a tensor) lets a dense caller share the
-// same destination buffer with its whole-tile DMA fast path.
-static void emitElementwiseFill(OpBuilder &b, Location loc,
-                                const ViewTileInfo &info, ValueRange indices,
-                                Value ub, Value pad) {
-  unsigned rank = info.tile.size();
-  Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
-  Value one = b.create<arith::ConstantIndexOp>(loc, 1);
-
-  SmallVector<Value> coords;
-  OpBuilder::InsertionGuard guard(b);
-  for (unsigned d = 0; d < rank; ++d) {
-    Value upper = b.create<arith::ConstantIndexOp>(loc, info.tile[d]);
-    auto loop = b.create<scf::ForOp>(loc, zero, upper, one);
-    b.setInsertionPointToStart(loop.getBody());
-    coords.push_back(loop.getInductionVar());
-  }
-
-  ElementAccess access = emitElementAccess(b, loc, info, indices, coords);
-  auto ifOp = b.create<scf::IfOp>(
-      loc, access.inBounds,
-      [&](OpBuilder &nested, Location nestedLoc) {
-        Value elemView = emitGmElementView(nested, nestedLoc, info.base,
-                                           access.physOffset, info.elementType);
-        Value loaded =
-            nested.create<memref::LoadOp>(nestedLoc, elemView, ValueRange{zero});
-        nested.create<scf::YieldOp>(nestedLoc, loaded);
-      },
-      [&](OpBuilder &nested, Location nestedLoc) {
-        nested.create<scf::YieldOp>(nestedLoc, pad);
-      });
-  b.create<memref::StoreOp>(loc, ifOp.getResult(0), ub, coords);
-}
-
 // A dense tile is fully in bounds when every dimension's valid length
 // (computed by emitViewGeometry) covers the whole tile extent. The base
 // view's shape is a runtime value, so this can only be decided at runtime,
 // not from the static tile size alone.
 static Value emitAllInBounds(OpBuilder &b, Location loc,
-                             const ViewTileInfo &info,
+                             const TensorViewAccessInfo &info,
                              ValueRange validLengths) {
   Value allIn = b.create<arith::ConstantIntOp>(loc, 1, /*width=*/1);
-  for (unsigned d = 0; d < info.tile.size(); ++d) {
+  for (unsigned d = 0; d < info.rank(); ++d) {
     Value tileSize = b.create<arith::ConstantIndexOp>(loc, info.tile[d]);
     Value full = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq,
                                          validLengths[d], tileSize);
@@ -604,18 +511,16 @@ static Value emitAllInBounds(OpBuilder &b, Location loc,
 }
 
 // Load a dense (partition/strided) tile, choosing at runtime between a
-// whole-tile DMA and the element-wise padded gather. Whether the tile stays
+// whole-tile DMA and emitElementwiseFill's padded gather. Whether the tile stays
 // in bounds is a runtime property of the base view's shape, so scf.if picks
 // the branch once per tile invocation rather than at compile time. Both
-// branches fill the same UB buffer so the result has a single definition
-// regardless of which one ran: a tensor-typed scf.if result would instead
-// require both branches to bufferize to the same memory space, which a
-// whole-tile DMA and an element-wise loop do not do identically. A boundary
+// branches fill the same UB buffer, which keeps the scf.if result-free and
+// gives the tile a single definition regardless of which one ran. A boundary
 // tile takes the gather branch even though the view is dense, because the
 // in-bounds region of a multi-dim tile is generally L-shaped and cannot be
 // expressed as a single rectangular subview of the whole-tile DMA.
 static Value emitDenseTileLoad(OpBuilder &b, Location loc,
-                               const ViewTileInfo &info, ValueRange indices,
+                               const TensorViewAccessInfo &info, ValueRange indices,
                                Value offset, ValueRange validLengths,
                                hivm::AddressSpace dstSpace,
                                RankedTensorType resultTy, Value pad) {
@@ -637,64 +542,11 @@ static Value emitDenseTileLoad(OpBuilder &b, Location loc,
   return b.create<bufferization::ToTensorOp>(loc, resultTy, ub, true, false);
 }
 
-// Element-wise padded gather for a gather_scatter view, valid for any tile
-// rank. One scf.for is nested per tile dimension; for each element
-// emitElementAccess resolves its base coordinate from the sparse dimension's
-// index tensor, and an scf.if loads from GM when the element is in bounds or
-// yields the pad constant otherwise. Because the padded lane's value is
-// produced as the element's sole definition (rather than a whole-tile fill
-// that a later DMA partially overwrites), it survives backend dead-store
-// elimination.
-static Value emitPaddedGatherLoad(OpBuilder &b, Location loc,
-                                  const ViewTileInfo &info, ValueRange indices,
-                                  RankedTensorType resultTy, Value pad) {
-  unsigned rank = info.tile.size();
-  Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
-  Value one = b.create<arith::ConstantIndexOp>(loc, 1);
-  Value init = b.create<tensor::EmptyOp>(loc, resultTy.getShape(),
-                                         resultTy.getElementType());
-
-  SmallVector<scf::ForOp> loops;
-  SmallVector<Value> coords;
-  OpBuilder::InsertionGuard guard(b);
-  for (unsigned d = 0; d < rank; ++d) {
-    Value iterArg = loops.empty() ? init : loops.back().getRegionIterArg(0);
-    Value upper = b.create<arith::ConstantIndexOp>(loc, info.tile[d]);
-    auto loop = b.create<scf::ForOp>(loc, zero, upper, one, iterArg);
-    if (!loops.empty())
-      b.create<scf::YieldOp>(loc, loop.getResult(0));
-    loops.push_back(loop);
-    b.setInsertionPointToStart(loop.getBody());
-    coords.push_back(loop.getInductionVar());
-  }
-
-  Value target = loops.back().getRegionIterArg(0);
-  ElementAccess access = emitElementAccess(b, loc, info, indices, coords);
-
-  auto ifOp = b.create<scf::IfOp>(
-      loc, access.inBounds,
-      [&](OpBuilder &nested, Location nestedLoc) {
-        Value elemView = emitGmElementView(nested, nestedLoc, info.base,
-                                           access.physOffset, info.elementType);
-        Value loaded =
-            nested.create<memref::LoadOp>(nestedLoc, elemView, ValueRange{zero});
-        nested.create<scf::YieldOp>(nestedLoc, loaded);
-      },
-      [&](OpBuilder &nested, Location nestedLoc) {
-        nested.create<scf::YieldOp>(nestedLoc, pad);
-      });
-
-  Value inserted =
-      b.create<tensor::InsertOp>(loc, ifOp.getResult(0), target, coords);
-  b.create<scf::YieldOp>(loc, inserted);
-  return loops.front().getResult(0);
-}
-
 // A gather_scatter view pairs each sparse dimension with a tensor-valued index
 // and every other dimension with a scalar index; a dense view (empty
 // sparseDims) therefore expects all-scalar indices. Reject a mismatched operand
 // so the element-access emitters can assume the pairing holds.
-static bool viewIndicesWellTyped(const ViewTileInfo &info, ValueRange indices) {
+static bool viewIndicesWellTyped(const TensorViewAccessInfo &info, ValueRange indices) {
   for (unsigned d = 0; d < indices.size(); ++d) {
     bool isSparse = llvm::is_contained(info.sparseDims, static_cast<int64_t>(d));
     bool isTensor = isa<RankedTensorType>(indices[d].getType());
@@ -704,60 +556,33 @@ static bool viewIndicesWellTyped(const ViewTileInfo &info, ValueRange indices) {
   return true;
 }
 
-// Element-wise discrete scatter, symmetric to emitPaddedGatherLoad. One scf.for
-// is nested per tile dimension; emitElementAccess resolves each element's base
-// coordinate and in-bounds predicate, and an scf.if stores the source tensor's
-// element to GM only when it is in bounds. Out-of-bounds lanes are dropped,
-// matching the view's scatter semantics.
-static void emitDiscreteScatter(OpBuilder &b, Location loc,
-                                const ViewTileInfo &info, ValueRange indices,
-                                Value source) {
-  unsigned rank = info.tile.size();
-  Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
-  Value one = b.create<arith::ConstantIndexOp>(loc, 1);
+// lowerViewLoad/lowerViewStore below call emitGatherLoad/emitScatterStore from
+// TensorViewLowering.cpp; nothing reaches the emitters in the .inc any more
+// (verified: zero references to emitPerIndexPayloadGather,
+// emitSingleAffineGatherDMA or emitDensePayloadInBounds from this file).
+// Including it only compiled a second, divergent copy of helpers that share
+// names with the live ones -- edits to one silently did not affect the other.
+//
+// The file is kept rather than deleted because it holds the only working
+// implementation of the affine fast path: emitAffineGmTile (which folds the
+// index step into the sparse dim's stride) and emitAffineRunInBounds (which
+// range-checks both ends of a run once per tile). Those are what
+// emitSingleAffineGather/Scatter in TensorViewLowering.cpp need when the stubs
+// there are filled in. See documents/commonir/tensorview_known_issues.md,
+// Issues 1 and 3.
 
-  SmallVector<Value> coords;
-  OpBuilder::InsertionGuard guard(b);
-  for (unsigned d = 0; d < rank; ++d) {
-    Value upper = b.create<arith::ConstantIndexOp>(loc, info.tile[d]);
-    auto loop = b.create<scf::ForOp>(loc, zero, upper, one);
-    b.setInsertionPointToStart(loop.getBody());
-    coords.push_back(loop.getInductionVar());
-  }
+// Lower a `tile.load` off a TensorView. Dense views use emitDenseTileLoad;
+// gather_scatter views use emitGatherLoad to select payload DMA or scalar
+// transfer with bounds handling. The tile geometry comes from `traceView`.
 
-  ElementAccess access = emitElementAccess(b, loc, info, indices, coords);
-  b.create<scf::IfOp>(
-      loc, access.inBounds, [&](OpBuilder &nested, Location nestedLoc) {
-        Value element =
-            nested.create<tensor::ExtractOp>(nestedLoc, source, coords);
-        Value elemView = emitGmElementView(nested, nestedLoc, info.base,
-                                           access.physOffset, info.elementType);
-        Value empty = nested.create<tensor::EmptyOp>(
-            nestedLoc, ArrayRef<int64_t>{1}, info.elementType);
-        Value inserted = nested.create<tensor::InsertOp>(nestedLoc, element,
-                                                         empty, ValueRange{zero});
-        auto materialize =
-            nested.create<bufferization::MaterializeInDestinationOp>(
-                nestedLoc, inserted, elemView);
-        materialize->setAttr("writable", nested.getUnitAttr());
-        nested.create<scf::YieldOp>(nestedLoc);
-      });
-}
-
-// Lower a `tile.load` off a TensorView. A dense (partition/strided) view maps
-// to a contiguous GM -> UB DMA (hivm.load, MTE2) when the tile is fully in
-// bounds, falling back to an element-wise gather at any boundary; a
-// gather_scatter view always takes the element-wise gather, since its sparse
-// dimension has no contiguous physical layout to DMA. The tile geometry
-// comes from `traceView`.
 static LogicalResult lowerViewLoad(tile::LoadOp op, PatternRewriter &rewriter) {
   auto resultTy = dyn_cast<RankedTensorType>(op.getResult().getType());
   if (!resultTy)
     return rewriter.notifyMatchFailure(op, "expected ranked tensor result");
 
-  ViewTileInfo info = traceView(op.getSrc(), rewriter);
-  if (!info.ok || op.getIndices().size() != info.tile.size() ||
-      resultTy.getRank() != static_cast<int64_t>(info.tile.size()) ||
+  TensorViewAccessInfo info = traceView(op.getSrc(), rewriter);
+  if (!info.ok || op.getIndices().size() != info.rank() ||
+      resultTy.getRank() != static_cast<int64_t>(info.rank()) ||
       resultTy.getElementType() != info.elementType ||
       resultTy.getShape() != ArrayRef<int64_t>(info.tile))
     return rewriter.notifyMatchFailure(op, "unsupported TensorView load shape");
@@ -768,46 +593,53 @@ static LogicalResult lowerViewLoad(tile::LoadOp op, PatternRewriter &rewriter) {
   Location loc = op.getLoc();
   // Only the GM -> UB DMA is lowered here; other on-chip spaces
   // (L1/L0A/L0B/L0C) are unsupported.
-  hivm::AddressSpace dstSpace = resolveTileSpace(op.getDstSpace());
-  if (dstSpace != hivm::AddressSpace::UB)
+  hivm::AddressSpace space = resolveTileSpace(op.getDstSpace());
+  if (space != hivm::AddressSpace::UB)
     return rewriter.notifyMatchFailure(
         op, "TensorView load: dst_space other than UB is unsupported");
 
   Value pad = emitPadConstant(rewriter, loc, info.elementType, info.padding);
 
-  if (info.sparseDims.empty()) {
+  // PartitionView/StridedView
+  if (!info.isSparse()) {
     SmallVector<Value> validLengths;
     Value offset =
         emitViewGeometry(rewriter, loc, info, op.getIndices(), &validLengths);
     Value tensor = emitDenseTileLoad(rewriter, loc, info, op.getIndices(),
-                                     offset, validLengths, dstSpace, resultTy,
+                                     offset, validLengths, space, resultTy,
                                      pad);
     rewriter.replaceOp(op, tensor);
     return success();
   }
 
-  // Element-wise gather: a gather_scatter view reads scattered rows, so each
-  // lane loads independently. In-bounds lanes load from GM and out-of-bounds
-  // lanes take the view's padding value.
-  Value tensor =
-      emitPaddedGatherLoad(rewriter, loc, info, op.getIndices(), resultTy, pad);
-  rewriter.replaceOp(op, tensor);
+  // GatherScatterView selects per-index payload DMA when the strategy permits,
+  // otherwise scalar transfer. Out-of-bounds elements take the padding value.
+  // emitGatherLoad covers every lowerable gather: its own ScalarTransfer
+  // branch is the element-wise path, so there is no fallback to add here.
+  // A failure means the view is not lowerable at all, which leaves the
+  // tile.load for whoever can handle it rather than being quietly dropped.
+  // GatherScatterView
+  auto gathered =
+      emitGatherLoad(rewriter, loc, info, op.getIndices(), resultTy, space, pad);
+  if (failed(gathered))
+    return rewriter.notifyMatchFailure(op, "TensorView load: view is not "
+                                           "lowerable as a gather");
+  rewriter.replaceOp(op, *gathered);
   return success();
 }
 
-// Lower a `tile.store` into a TensorView, symmetric to lowerViewLoad. A dense
-// view becomes a contiguous UB -> GM DMA (hivm.store, MTE3); a gather_scatter
-// view becomes an element-wise discrete scatter that writes each lane to its
-// sparse coordinate and drops out-of-bounds lanes.
+// Lower a `tile.store` into a TensorView. GatherScatterView selects per-index
+// payload DMA or scalar transfer and leaves out-of-bounds elements unwritten;
+// dense views use the dense store path below.
 static LogicalResult lowerViewStore(tile::StoreOp op,
                                     PatternRewriter &rewriter) {
   auto valueTy = dyn_cast<RankedTensorType>(op.getSrc().getType());
   if (!valueTy)
     return rewriter.notifyMatchFailure(op, "expected ranked tensor source");
 
-  ViewTileInfo info = traceView(op.getDst(), rewriter);
-  if (!info.ok || op.getIndices().size() != info.tile.size() ||
-      valueTy.getRank() != static_cast<int64_t>(info.tile.size()) ||
+  TensorViewAccessInfo info = traceView(op.getDst(), rewriter);
+  if (!info.ok || op.getIndices().size() != info.rank() ||
+      valueTy.getRank() != static_cast<int64_t>(info.rank()) ||
       valueTy.getElementType() != info.elementType ||
       valueTy.getShape() != ArrayRef<int64_t>(info.tile))
     return rewriter.notifyMatchFailure(op,
@@ -825,10 +657,15 @@ static LogicalResult lowerViewStore(tile::StoreOp op,
     return rewriter.notifyMatchFailure(
         op, "TensorView store: src_space other than UB is unsupported");
 
-  // A gather_scatter view writes each lane to its own sparse coordinate;
-  // out-of-bounds lanes are dropped.
+  // A gather_scatter view writes valid payloads or scalar elements to their
+  // indexed coordinates. As on the load side, emitScatterStore's
+  // ScalarTransfer branch *is* the element-wise scatter, so a failure means
+  // the view is not lowerable rather than "take the slow path".
   if (!info.sparseDims.empty()) {
-    emitDiscreteScatter(rewriter, loc, info, op.getIndices(), op.getSrc());
+    if (failed(emitScatterStore(rewriter, loc, info, op.getIndices(),
+                                op.getSrc(), srcSpace)))
+      return rewriter.notifyMatchFailure(op, "TensorView store: view is not "
+                                             "lowerable as a scatter");
     rewriter.eraseOp(op);
     return success();
   }

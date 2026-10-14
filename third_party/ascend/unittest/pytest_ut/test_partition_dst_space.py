@@ -8,7 +8,7 @@ import torch
 import torch_npu  # noqa: F401
 import triton
 import triton.language as tl
-import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
+import triton.experimental.tle as tle
 from triton.experimental.tle.language.dsa import tile_load, tile_store
 
 
@@ -18,8 +18,8 @@ def partition_dst_space_ub_kernel(src, dst, rows, cols, BLOCK_M: tl.constexpr, B
     # it as a mutable module global.
     row_block = tl.program_id(0)
     col_block = tl.program_id(1)
-    src_view = tl.make_partition_view(src, shape=[rows, cols], strides=[cols, 1], tile=[BLOCK_M, BLOCK_N])
-    dst_view = tl.make_partition_view(dst, shape=[rows, cols], strides=[cols, 1], tile=[BLOCK_M, BLOCK_N])
+    src_view = tle.make_partition_view(src, shape=[rows, cols], strides=[cols, 1], tile=[BLOCK_M, BLOCK_N])
+    dst_view = tle.make_partition_view(dst, shape=[rows, cols], strides=[cols, 1], tile=[BLOCK_M, BLOCK_N])
 
     value = tile_load(src_view, index=(row_block, col_block),
                       dst_space=tle.language.dsa.ascend.UB)
@@ -32,8 +32,8 @@ def partition_default_space_kernel(src, dst, rows, cols, BLOCK_M: tl.constexpr, 
     # dst_space/src_space omitted -> defaults to UB.
     row_block = tl.program_id(0)
     col_block = tl.program_id(1)
-    src_view = tl.make_partition_view(src, shape=[rows, cols], strides=[cols, 1], tile=[BLOCK_M, BLOCK_N])
-    dst_view = tl.make_partition_view(dst, shape=[rows, cols], strides=[cols, 1], tile=[BLOCK_M, BLOCK_N])
+    src_view = tle.make_partition_view(src, shape=[rows, cols], strides=[cols, 1], tile=[BLOCK_M, BLOCK_N])
+    dst_view = tle.make_partition_view(dst, shape=[rows, cols], strides=[cols, 1], tile=[BLOCK_M, BLOCK_N])
 
     value = tile_load(src_view, index=(row_block, col_block))
     tile_store(dst_view, value=value, index=(row_block, col_block))
@@ -63,9 +63,9 @@ def partition_padding_ub_kernel(src, dst, src_elements, dst_elements, BLOCK_SIZE
     # past the source signal, so the out-of-bounds lanes must be pre-filled with
     # the view's padding_value ("-inf") instead of leaking stale UB data.
     block = tl.program_id(0)
-    src_view = tl.make_partition_view(src, shape=[src_elements], strides=[1],
+    src_view = tle.make_partition_view(src, shape=[src_elements], strides=[1],
                                       tile=[BLOCK_SIZE], padding_value="-inf")
-    dst_view = tl.make_partition_view(dst, shape=[dst_elements], strides=[1],
+    dst_view = tle.make_partition_view(dst, shape=[dst_elements], strides=[1],
                                       tile=[BLOCK_SIZE])
 
     value = tile_load(src_view, index=(block,),
@@ -85,9 +85,9 @@ def partition_padding_2d_kernel(src, dst, sh, sw, dh, dw,
     # padded tile is written out verbatim (observable).
     row_block = tl.program_id(0)
     col_block = tl.program_id(1)
-    src_view = tl.make_partition_view(src, shape=[sh, sw], strides=[sw, 1],
+    src_view = tle.make_partition_view(src, shape=[sh, sw], strides=[sw, 1],
                                       tile=[BLOCK_M, BLOCK_N], padding_value="-inf")
-    dst_view = tl.make_partition_view(dst, shape=[dh, dw], strides=[dw, 1],
+    dst_view = tle.make_partition_view(dst, shape=[dh, dw], strides=[dw, 1],
                                       tile=[BLOCK_M, BLOCK_N])
 
     value = tile_load(src_view, index=(row_block, col_block),
@@ -112,10 +112,10 @@ def partition_padding_3d_kernel(src, dst, sd, sh, sw, dd, dh, dw,
     d_block = tl.program_id(0)
     row_block = tl.program_id(1)
     col_block = tl.program_id(2)
-    src_view = tl.make_partition_view(
+    src_view = tle.make_partition_view(
         src, shape=[sd, sh, sw], strides=[sh * sw, sw, 1],
         tile=[BLOCK_D, BLOCK_M, BLOCK_N], padding_value="-inf")
-    dst_view = tl.make_partition_view(
+    dst_view = tle.make_partition_view(
         dst, shape=[dd, dh, dw], strides=[dh * dw, dw, 1],
         tile=[BLOCK_D, BLOCK_M, BLOCK_N])
 

@@ -11,7 +11,7 @@ import torch
 import torch_npu  # noqa: F401
 import triton
 import triton.language as tl
-import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
+import triton.experimental.tle as tle
 from triton.experimental.tle.language.dsa import tile_load, tile_store
 
 
@@ -20,9 +20,9 @@ def strided_gap_ub_kernel(src, dst, signal_len, WINDOW: tl.constexpr, STRIDE: tl
     # Reference the space inline (like native_matmul) so the JIT does not treat
     # it as a mutable module global.
     pid = tl.program_id(0)
-    src_view = tl.make_strided_view(src, shape=[signal_len], strides=[1],
+    src_view = tle.make_strided_view(src, shape=[signal_len], strides=[1],
                                     tile=[WINDOW], traversal_strides=[STRIDE])
-    dst_view = tl.make_strided_view(dst, shape=[signal_len], strides=[1],
+    dst_view = tle.make_strided_view(dst, shape=[signal_len], strides=[1],
                                     tile=[WINDOW], traversal_strides=[STRIDE])
 
     value = tile_load(src_view, index=(pid,),
@@ -35,9 +35,9 @@ def strided_gap_ub_kernel(src, dst, signal_len, WINDOW: tl.constexpr, STRIDE: tl
 def strided_gap_default_kernel(src, dst, signal_len, WINDOW: tl.constexpr, STRIDE: tl.constexpr):
     # dst_space/src_space omitted -> defaults to UB.
     pid = tl.program_id(0)
-    src_view = tl.make_strided_view(src, shape=[signal_len], strides=[1],
+    src_view = tle.make_strided_view(src, shape=[signal_len], strides=[1],
                                     tile=[WINDOW], traversal_strides=[STRIDE])
-    dst_view = tl.make_strided_view(dst, shape=[signal_len], strides=[1],
+    dst_view = tle.make_strided_view(dst, shape=[signal_len], strides=[1],
                                     tile=[WINDOW], traversal_strides=[STRIDE])
 
     value = tile_load(src_view, index=(pid,))
@@ -49,9 +49,9 @@ def strided_overlap_pack_kernel(src, out, signal_len, out_len, WINDOW: tl.conste
     # Overlapping strided read windows (STRIDE < WINDOW) packed into disjoint
     # partition slots on the store side, so overlap is exercised on LOAD only.
     pid = tl.program_id(0)
-    src_view = tl.make_strided_view(src, shape=[signal_len], strides=[1],
+    src_view = tle.make_strided_view(src, shape=[signal_len], strides=[1],
                                     tile=[WINDOW], traversal_strides=[STRIDE])
-    out_view = tl.make_partition_view(out, shape=[out_len], strides=[1],
+    out_view = tle.make_partition_view(out, shape=[out_len], strides=[1],
                                       tile=[WINDOW])
 
     value = tile_load(src_view, index=(pid,))
@@ -108,10 +108,10 @@ def strided_padding_tail_kernel(src, dst, signal_len, dst_len, WINDOW: tl.conste
     # filled with the view's padding_value ("-inf"). Each window is packed into a
     # disjoint partition slot on the store side so the padded tail is observable.
     pid = tl.program_id(0)
-    src_view = tl.make_strided_view(src, shape=[signal_len], strides=[1],
+    src_view = tle.make_strided_view(src, shape=[signal_len], strides=[1],
                                     tile=[WINDOW], traversal_strides=[STRIDE],
                                     padding_value="-inf")
-    dst_view = tl.make_partition_view(dst, shape=[dst_len], strides=[1],
+    dst_view = tle.make_partition_view(dst, shape=[dst_len], strides=[1],
                                       tile=[WINDOW])
 
     value = tile_load(src_view, index=(pid,),

@@ -22,6 +22,7 @@ import torch
 import torch_npu  # noqa: F401
 import triton
 import triton.language as tl
+import triton.experimental.tle as tle
 
 
 @triton.jit
@@ -29,14 +30,14 @@ def gather_view_load_kernel(src, indices, dst, n_elements, BLOCK_SIZE: tl.conste
     block = tl.program_id(0)
     offsets = block * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     data_indices = tl.load(indices + offsets)
-    src_gather = tl.make_gather_scatter_view(
+    src_gather = tle.make_gather_scatter_view(
         src,
         shape=[n_elements],
         strides=[1],
         tile=[BLOCK_SIZE],
         sparse_dim=[0],
     )
-    dst_tiles = tl.make_partition_view(
+    dst_tiles = tle.make_partition_view(
         dst,
         shape=[n_elements],
         strides=[1],
@@ -52,13 +53,13 @@ def scatter_view_store_kernel(src, indices, dst, n_elements, BLOCK_SIZE: tl.cons
     block = tl.program_id(0)
     offsets = block * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     data_indices = tl.load(indices + offsets)
-    src_tiles = tl.make_partition_view(
+    src_tiles = tle.make_partition_view(
         src,
         shape=[n_elements],
         strides=[1],
         tile=[BLOCK_SIZE],
     )
-    dst_scatter = tl.make_gather_scatter_view(
+    dst_scatter = tle.make_gather_scatter_view(
         dst,
         shape=[n_elements],
         strides=[1],
@@ -74,7 +75,7 @@ def scatter_view_store_kernel(src, indices, dst, n_elements, BLOCK_SIZE: tl.cons
 def gather_view_padding_kernel(src, indices, dst, src_elements, BLOCK_SIZE: tl.constexpr):
     offsets = tl.arange(0, BLOCK_SIZE)
     data_indices = tl.load(indices + offsets)
-    src_gather = tl.make_gather_scatter_view(
+    src_gather = tle.make_gather_scatter_view(
         src,
         shape=[src_elements],
         strides=[1],
@@ -82,7 +83,7 @@ def gather_view_padding_kernel(src, indices, dst, src_elements, BLOCK_SIZE: tl.c
         sparse_dim=[0],
         padding_value="nan",
     )
-    dst_tiles = tl.make_partition_view(
+    dst_tiles = tle.make_partition_view(
         dst,
         shape=[BLOCK_SIZE],
         strides=[1],
@@ -97,13 +98,13 @@ def gather_view_padding_kernel(src, indices, dst, src_elements, BLOCK_SIZE: tl.c
 def scatter_view_bounds_kernel(src, indices, dst, dst_elements, BLOCK_SIZE: tl.constexpr):
     offsets = tl.arange(0, BLOCK_SIZE)
     data_indices = tl.load(indices + offsets)
-    src_tiles = tl.make_partition_view(
+    src_tiles = tle.make_partition_view(
         src,
         shape=[BLOCK_SIZE],
         strides=[1],
         tile=[BLOCK_SIZE],
     )
-    dst_scatter = tl.make_gather_scatter_view(
+    dst_scatter = tle.make_gather_scatter_view(
         dst,
         shape=[dst_elements],
         strides=[1],
