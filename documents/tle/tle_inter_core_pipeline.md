@@ -29,6 +29,8 @@
 
 ### 2.1 流水线同步机制
 
+在 CV 间流水中，每个计算区域会先用 `with tle.scope(core_mode="cube")` 或 `with tle.scope(core_mode="vector")` 标记其运行核心，再通过事件同步机制协调数据搬运。`tle.scope` 的说明见 5.1 节。
+
 tle拓展提供事件同步机制，通过PIPE进行数据传输：
 
 ```python
@@ -405,6 +407,59 @@ Vector Core:
 ---
 
 ## 5. TLE接口参考
+
+### 5.1 作用域标记 `tle.scope`
+
+`tle.scope` 用于在 `@triton.jit` kernel 中标记一段代码的运行核心，是最基础的 CV 编排原语：先用它划分出 Cube 与 Vector 的代码区域，再在区域内使用 `sync_block_set` / `sync_block_wait` 等接口协调数据流。
+
+```python
+import triton.experimental.tle as tle
+
+with tle.scope(core_mode="cube"):
+    ...
+
+with tle.scope(core_mode="vector"):
+    ...
+```
+
+#### 参数说明
+
+| 参数 | 类型 | 默认值 | 含义说明 |
+|------|------|--------|----------|
+| `core_mode` | Python 常量 `str` | 无 | 作用域内代码的运行核心类型。仅支持字面量 `"cube"` 或 `"vector"`。 |
+
+`tle.scope` 仅接受关键字参数，且必须且只能传入 `core_mode` 一个参数。参数值必须是字面量字符串 `"cube"` 或 `"vector"`，不支持运行时变量。例如 `tle.scope("cube")`、`tle.scope(core_mode=mode)` 都会报错。
+
+#### 使用说明
+
+- `tle.scope` 只能作为 `with` 上下文使用，用于编译期标记代码区域，不会在 JIT 运行时执行。在 kernel 之外调用会直接报错。
+- 作用域可以嵌套，内层作用域会覆盖外层的核心设置。
+- 在作用域内定义的变量在作用域结束后仍然可用（例如先在一个 `tle.scope` 中计算，再在另一个 `tle.scope` 中使用）。
+- 作用域可以放在循环体内，即每次迭代都重新划分 Cube / Vector 区域。
+
+#### 示例
+
+```python
+import triton
+import triton.language as tl
+import triton.experimental.tle as tle
+
+
+@triton.jit
+def cv_kernel(x_ptr, out_ptr, N, BLOCK: tl.constexpr):
+    offsets = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+    mask = offsets < N
+
+    # Cube 核心：计算
+    with tle.scope(core_mode="cube"):
+        x = tl.load(x_ptr + offsets, mask=mask)
+
+    # Vector 核心：后处理并写回
+    with tle.scope(core_mode="vector"):
+        tl.store(out_ptr + offsets, x + 1.0, mask=mask)
+```
+
+上例中，`x` 在 `cube` 作用域内定义、在 `vector` 作用域内使用，说明作用域内定义的变量可以跨作用域继续使用。实际的 CV 算子中，`cube` 区域通常放置矩阵计算，`vector` 区域放置逐元素后处理，两者之间通过 `sync_block_set` / `sync_block_wait` 协调数据依赖，完整示例参见 3.3 节的 CV Mix 流水实现。
 
 ### 6.1 CV间同步接口
 
