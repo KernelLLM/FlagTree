@@ -6,7 +6,12 @@ import triton
 import triton.language as tl
 import numpy as np
 from datetime import datetime
-from triton.backends.ascend.testing import do_bench_npu
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../test/CommonIR/Ascend/performance_case"))
+from testing_flagtree import do_bench_npu
+#from triton.backends.ascend.testing import do_bench_npu
 import triton.experimental.tle as tle
 # import random
 
@@ -17,7 +22,7 @@ torch.manual_seed(20)
 torch_npu.npu.set_device(int(DEVICE_ID))
 torch.set_printoptions(sci_mode=False, precision=4, linewidth=300)
 
-ascend_aiv_core_nums = triton.language.constexpr(24)
+ascend_aiv_core_nums = triton.language.constexpr(20)
 
 
 # ===== Fused PA + Rope Concat + BNSD + Gather Kernel =====
@@ -152,8 +157,8 @@ def triton_fused_pa_rope_to_sparse(k_pa, k_rope_pa, v_pa, block_table, sparse_in
     k_sparse = torch.empty((B, N, TOPK, dk_total), dtype=k_pa.dtype, device=DEVICE)
     v_sparse = torch.empty((B, N, TOPK, dv), dtype=v_pa.dtype, device=DEVICE)
 
-    # Grid: use 48 programs for parallelism
-    grid = (min(48, TOPK), )
+    # Grid: use 40 programs for parallelism
+    grid = (min(40, TOPK), )
 
     # sparse_indices input format: [T, N, TOPK] or [B, N, TOPK]
     # No squeeze needed - kernel expects [B, N, TOPK] format
@@ -207,10 +212,10 @@ def gather_kv_bnsd_vec_kernel(
     TOPK: tl.constexpr,
     B: tl.constexpr,
 ):
-    end = TOPK // 48 * 48
+    end = TOPK // 40 * 40
     for b_idx in range(B):
-        # 分批处理所有TOPK个索引，每次48个
-        for batch_start in range(0, end, 48):
+        # 分批处理所有TOPK个索引，每次40个
+        for batch_start in range(0, end, 40):
             pid_k = tl.program_id(0) + batch_start
 
             # 读 index
@@ -233,7 +238,7 @@ def gather_kv_bnsd_vec_kernel(
             tl.store(v_out_ptr + v_dst_off + tl.arange(0, BLOCK_DV) * stride_ovd, v_val)
 
         # 处理余数部分（end到TOPK）
-        for batch_start in range(end, TOPK, 48):
+        for batch_start in range(end, TOPK, 40):
             pid_k = tl.program_id(0) + batch_start
 
             # 必须在计算pid_k之后检查边界
@@ -266,7 +271,7 @@ def triton_gather_kv_bnsd_vec(k, v, indices):
     k_sparse = torch.empty((B, N, TOPK, Dk), dtype=k.dtype, device=DEVICE)
     v_sparse = torch.empty((B, N, TOPK, Dv), dtype=v.dtype, device=DEVICE)
 
-    grid = (48, )  # TOPK 个 program，每个搬 Dk/Dv 元素
+    grid = (40, )  # TOPK 个 program，每个搬 Dk/Dv 元素
     gather_kv_bnsd_vec_kernel[grid](
         k,
         v,
