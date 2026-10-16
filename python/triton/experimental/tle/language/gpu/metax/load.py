@@ -44,7 +44,7 @@ def local_load(buffer, dtype=None, intrinsic=False, is_constant_offs=False, mma_
             raise ValueError("local_load mma_mode=2 requires a rank-2 float16/bfloat16 buffer and dtype=tl.int32")
     elif dtype != buffer.dtype:
         raise ValueError("local_load dtype must match the buffer element type unless mma_mode=2")
-    result_type = tl.block_type(dtype, buffer.type.shape)
+    result_type = tl.block_type(dtype, list(buffer.type.shape))
     handle = _semantic.builder.create_metax_local_load(result_type.to_ir(_semantic.builder),
                                                        get_memdesc(buffer, _semantic), intrinsic, is_constant_offs,
                                                        mma_mode)
