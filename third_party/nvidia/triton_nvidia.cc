@@ -4,6 +4,7 @@
 #include "TritonNVIDIAGPUToLLVM/Passes.h"
 #ifdef __FLAGTREE_COMMON_IR__
 #include "CommonIRToTTGIR/Passes.h"
+#include "mlir-ext/Conversion/CommonIRToWarpIR/Passes.h"
 #endif
 #include "cublas_instance.h"
 #include "mlir/Pass/PassManager.h"
@@ -101,6 +102,12 @@ void init_triton_nvidia_passes_nvws(py::module &&m) {
 void init_triton_nvidia_passes_commonir(py::module &&m) {
   ADD_PASS_OPTION_WRAPPER_1("add_to_ttgir", mlir::triton::createCommonIRToTTGIR,
                             bool);
+}
+
+void init_triton_nvidia_passes_warpir(py::module &&m) {
+  ADD_PASS_OPTION_WRAPPER_4("add_to_warpir",
+                            mlir::triton::warp::createCommonIRToWarpIR,
+                            const std::string &, int, int, int);
 }
 #endif
 
@@ -202,6 +209,7 @@ void init_triton_nvidia(py::module &&m) {
 #endif
 #ifdef __FLAGTREE_COMMON_IR__
   init_triton_nvidia_passes_commonir(passes.def_submodule("commonir"));
+  init_triton_nvidia_passes_warpir(passes.def_submodule("warpir"));
 #endif
 
   // load dialects
