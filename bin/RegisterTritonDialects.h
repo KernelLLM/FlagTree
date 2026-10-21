@@ -47,6 +47,7 @@
 #endif
 #ifdef __FLAGTREE_COMMON_IR__
 #include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
+#include "mlir-ext/Dialect/WarpIR/IR/WarpIRDialect.h"
 #include "nvidia/include/CommonIRToTTGIR/Passes.h"
 #endif
 #include "triton/Dialect/Gluon/Transforms/Passes.h"
@@ -209,7 +210,7 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
       mlir::triton::tle::TleDialect, // flagtree tle raw
 #endif
 #ifdef __FLAGTREE_COMMON_IR__
-      mlir::triton::tile::CommonIRDialect,
+      mlir::triton::tile::CommonIRDialect, mlir::triton::warp::WarpIRDialect,
 #endif
       mlir::triton::gluon::GluonDialect>();
 }
