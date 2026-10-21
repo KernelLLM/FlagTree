@@ -294,6 +294,15 @@ class CUDABackend(BaseBackend):
         return mod
 
     @staticmethod
+    def make_warpir(mod, metadata, opt, capability):
+        pm = ir.pass_manager(mod.context)
+        pm.enable_debug()
+        if COMMON_IR_ENABLED:
+            nvidia.passes.warpir.add_to_warpir(pm, f"cuda:{capability}", opt.num_warps, 32, opt.num_ctas)
+        pm.run(mod, 'make_warpir')
+        return mod
+
+    @staticmethod
     def make_ttgir(mod, metadata, opt, capability):
         # Set maxnreg on all kernels, if it was provided.
         if opt.maxnreg is not None:
@@ -675,6 +684,8 @@ please share the reproducer above with Triton project.
         capability = self._parse_arch(options.arch)
         if language == Language.TRITON:
             stages["ttir"] = lambda src, metadata: self.make_ttir(src, metadata, options, capability)
+            if COMMON_IR_ENABLED:
+                stages["warpir"] = lambda src, metadata: self.make_warpir(src, metadata, options, capability)
             stages["ttgir"] = lambda src, metadata: self.make_ttgir(src, metadata, options, capability)
         elif language == Language.GLUON:
             stages["ttgir"] = lambda src, metadata: self.gluon_to_ttgir(src, metadata, options, capability)

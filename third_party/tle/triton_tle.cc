@@ -26,6 +26,7 @@
 #include "ir.h" // TritonOpBuilder
 #ifdef __FLAGTREE_COMMON_IR__
 #include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
+#include "mlir-ext/Dialect/WarpIR/IR/WarpIRDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #endif
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -1184,6 +1185,7 @@ void init_triton_tle(py::module &&m) {
   m.def("load_tile_dialects", [](mlir::MLIRContext &context) {
     mlir::DialectRegistry registry;
     registry.insert<mlir::triton::tile::CommonIRDialect>();
+    registry.insert<mlir::triton::warp::WarpIRDialect>();
     context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
   });
