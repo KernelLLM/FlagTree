@@ -5,9 +5,13 @@ import torch
 import triton
 import triton.language as tl
 
-import triton.experimental.tle as tle  # noqa: F401  (registers tile/tle dialects)
+import triton.experimental.tle as tle
 from triton.experimental.tle.language.dsa.ascend import L1, L0C  # noqa: F401
-from triton.experimental.tle.language.dsa import tile_alloc, tile_copy, tile_to_tensor  # noqa: F401
+from triton.experimental.tle.language.dsa import (  # noqa: F401
+    tile_alloc,
+    tile_copy,
+    tile_to_tensor,
+)
 
 # =============================================================================
 #  Compile-time configuration
@@ -62,7 +66,7 @@ def matmul_kernel(
 
     # tl.tensor_view over the whole logical output matrix; the epilogue
     # store below indexes into it by (pid_m, pid_n) tile position.
-    mat_c_tiles = tl.make_partition_view(mat_c, (M, N), (N, 1),
+    mat_c_tiles = tle.make_partition_view(mat_c, (M, N), (N, 1),
                                          (BLOCK_M, BLOCK_N))
 
     # Each core processes output blocks in round-robin
@@ -141,6 +145,7 @@ def dump_ttir(path=None, M=_DEFAULT_M, N=_DEFAULT_N, K=_DEFAULT_K, NUM_CORES=_DE
     from triton.compiler.compiler import ASTSource
     from triton.compiler.code_generator import ast_to_ttir
     from triton._C.libtriton import ir
+    from triton._C.libtriton import ascend
     from triton._C.libtriton import tle as tle_ir
 
     os.environ.setdefault("TRITON_ALLOW_NON_CONSTEXPR_GLOBALS", "1")
@@ -158,9 +163,10 @@ def dump_ttir(path=None, M=_DEFAULT_M, N=_DEFAULT_N, K=_DEFAULT_K, NUM_CORES=_DE
         "BLOCK_K": BLOCK_K,
     }
 
-    src = ASTSource(matmul_kernel.fn, signature, constants)
+    src = ASTSource(matmul_kernel, signature, constants)
     context = ir.context()
     ir.load_dialects(context)
+    ascend.load_dialects(context)
     tle_ir.load_dialects(context)
     tle_ir.dsa_ir.load_tile_dialects(context)
     try:

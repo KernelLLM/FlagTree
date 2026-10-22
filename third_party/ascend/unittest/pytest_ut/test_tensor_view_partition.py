@@ -22,19 +22,20 @@ import torch
 import torch_npu  # noqa: F401
 import triton
 import triton.language as tl
+import triton.experimental.tle as tle
 
 
 @triton.jit
 def partition_view_load_store_kernel(src, dst, rows, cols, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
     row_block = tl.program_id(0)
     col_block = tl.program_id(1)
-    src_tiles = tl.make_partition_view(
+    src_tiles = tle.make_partition_view(
         src,
         shape=[rows, cols],
         strides=[cols, 1],
         tile=[BLOCK_M, BLOCK_N],
     )
-    dst_tiles = tl.make_partition_view(
+    dst_tiles = tle.make_partition_view(
         dst,
         shape=[rows, cols],
         strides=[cols, 1],
@@ -48,14 +49,14 @@ def partition_view_load_store_kernel(src, dst, rows, cols, BLOCK_M: tl.constexpr
 @triton.jit
 def partition_view_padding_kernel(src, dst, src_elements, dst_elements, BLOCK_SIZE: tl.constexpr):
     block = tl.program_id(0)
-    src_tiles = tl.make_partition_view(
+    src_tiles = tle.make_partition_view(
         src,
         shape=[src_elements],
         strides=[1],
         tile=[BLOCK_SIZE],
         padding_value="-inf",
     )
-    dst_tiles = tl.make_partition_view(
+    dst_tiles = tle.make_partition_view(
         dst,
         shape=[dst_elements],
         strides=[1],
