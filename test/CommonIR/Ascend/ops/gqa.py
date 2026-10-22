@@ -22,8 +22,14 @@ import triton.language as tl
 import triton.experimental.tle as tle
 
 
+# 128x128 tiles keep 17 UB buffers of [BLOCK_M, BLOCK_D] live; at head_dim 128
+# that is 557 KiB against a 192 KiB budget and the kernel does not compile
+# (`ub overflow, requires 2387968 bits while 1572864 available`).  head_dim 64
+# fits at 128x128 (and is the faster choice there), so gate on the head dim.
 _BLOCK_M = 128
 _BLOCK_N = 128
+_BLOCK_M_WIDE_D = 64
+_BLOCK_N_WIDE_D = 64
 
 
 @triton.jit
@@ -175,8 +181,10 @@ def run(query, key, value, scaleValue=-1.0, is_causal=False):
     if batch * heads_q * seq_q == 0:
         return out
 
-    block_m = _BLOCK_M
-    block_n = _BLOCK_N
+    if head_dim <= 64:
+        block_m, block_n = _BLOCK_M, _BLOCK_N
+    else:
+        block_m, block_n = _BLOCK_M_WIDE_D, _BLOCK_N_WIDE_D
     block_d = triton.next_power_of_2(head_dim)
     m_full = (seq_q % block_m) == 0
     n_full = (seq_kv % block_n) == 0

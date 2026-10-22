@@ -246,14 +246,26 @@ _TORCH_DTYPE = {
 }
 
 
+# Tiling knobs, hoisted to module scope so they can be swept from
+# bench_ops.py (`--const _BLOCK_T=64`) without editing the kernel.  Values are
+# unchanged defaults.  NOTE: no benchmarked improvement was found for this
+# operator - the body reads x WIDTH times, which is 2.5x the bytes of the
+# non-CommonIR counterpart at comparable achieved bandwidth and accounts for the
+# whole gap; _BLOCK_T=64 is ~8% better (accuracy verified) but within run-to-run
+# noise, and both attempts at a shared-strip formulation faulted the MTE engine.
+_MAX_BLOCK_D = 128
+_BLOCK_T = 32
+_HEAD_DSA_AVG_LIMIT = 256.0
+
+
 def _pick_block_d(dim):
-    """Widest dim block that divides dim, up to 128.
+    """Widest dim block that divides dim, up to ``_MAX_BLOCK_D``.
 
     The kernel pays a fixed per-program cost, so for large dim it is better to
     cover twice as many dims per program (half as many programs dispatched) than
     to keep the per-program tile small.
     """
-    bd = 128
+    bd = _MAX_BLOCK_D
     while bd > 16 and (bd > dim or dim % bd):
         bd //= 2
     return bd
@@ -296,7 +308,7 @@ def run(
 
     block_d = _pick_block_d(dim)
     # BLOCK_T also fixes the shortest body that can use the unmasked DSA path.
-    block_t = 32
+    block_t = _BLOCK_T
     hh = width - 1
     th = max(4, triton.next_power_of_2(hh))
     wp = triton.next_power_of_2(width)
@@ -309,7 +321,7 @@ def run(
     # The per-column head pays off while the boundary columns are a large share
     # of the work, i.e. for short sequences; on long ones its extra code makes
     # the bulk body slower, so the masked head is kept there.
-    head_dsa = head_ok and (total_len / max(1, nseq)) < 256.0
+    head_dsa = head_ok and (total_len / max(1, nseq)) < _HEAD_DSA_AVG_LIMIT
     dsa_ok = (width == wp) and dim_whole
     minspan = hh + block_t if dsa_ok else (1 << 30)
     nsplit = 1
