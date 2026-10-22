@@ -53,6 +53,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -331,6 +332,17 @@ static ViewTileInfo traceView(Value view, PatternRewriter &rewriter) {
   info.shape.assign(makeView.getSizes().begin(), makeView.getSizes().end());
   info.strides.assign(makeView.getStrides().begin(),
                       makeView.getStrides().end());
+  // The view type keeps every stride dynamic. Recover the ones the IR carries
+  // as constants so the emitted memref types describe the real layout: a
+  // statically unit innermost stride is what makes a tile DMA contiguous rather
+  // than strided. After this, strideStatic is the single source of truth for
+  // which strides are known at compile time.
+  for (unsigned d = 0; d < info.strideStatic.size(); ++d) {
+    if (info.strideStatic[d] != ShapedType::kDynamic)
+      continue;
+    if (std::optional<int64_t> known = getConstantIntValue(info.strides[d]))
+      info.strideStatic[d] = *known;
+  }
   info.padding = padding;
   info.sparseDims = std::move(sparseDims);
   info.ok = true;
@@ -586,6 +598,23 @@ static void emitElementwiseFill(OpBuilder &b, Location loc,
   b.create<memref::StoreOp>(loc, ifOp.getResult(0), ub, coords);
 }
 
+// Fill the box [lower[d], upper[d]) of a local buffer with the padding value.
+// An empty range on any dimension makes the whole box empty.
+static void emitFillBox(OpBuilder &b, Location loc, Value dest,
+                        ArrayRef<Value> lower, ArrayRef<Value> upper,
+                        Value pad) {
+  Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
+  SmallVector<OpFoldResult> offsets, sizes, strides;
+  for (unsigned d = 0; d < lower.size(); ++d) {
+    Value extent = b.create<arith::SubIOp>(loc, upper[d], lower[d]);
+    offsets.push_back(OpFoldResult(lower[d]));
+    sizes.push_back(OpFoldResult(b.create<arith::MaxSIOp>(loc, extent, zero)));
+    strides.push_back(b.getIndexAttr(1));
+  }
+  Value box = b.create<memref::SubViewOp>(loc, dest, offsets, sizes, strides);
+  b.create<linalg::FillOp>(loc, ValueRange{pad}, ValueRange{box});
+}
+
 // A dense tile is fully in bounds when every dimension's valid length
 // (computed by emitViewGeometry) covers the whole tile extent. The base
 // view's shape is a runtime value, so this can only be decided at runtime,
@@ -604,16 +633,20 @@ static Value emitAllInBounds(OpBuilder &b, Location loc,
 }
 
 // Load a dense (partition/strided) tile, choosing at runtime between a
-// whole-tile DMA and the element-wise padded gather. Whether the tile stays
-// in bounds is a runtime property of the base view's shape, so scf.if picks
-// the branch once per tile invocation rather than at compile time. Both
-// branches fill the same UB buffer so the result has a single definition
-// regardless of which one ran: a tensor-typed scf.if result would instead
-// require both branches to bufferize to the same memory space, which a
-// whole-tile DMA and an element-wise loop do not do identically. A boundary
-// tile takes the gather branch even though the view is dense, because the
-// in-bounds region of a multi-dim tile is generally L-shaped and cannot be
-// expressed as a single rectangular subview of the whole-tile DMA.
+// whole-tile DMA, a prefix DMA plus padding, and the element-wise padded
+// gather. Whether the tile stays in bounds is a runtime property of the base
+// view's shape, so scf.if picks the branch once per tile invocation rather
+// than at compile time. Every branch fills the same UB buffer so the result
+// has a single definition regardless of which one ran: a tensor-typed scf.if
+// result would instead require both branches to bufferize to the same memory
+// space, which a DMA and an element-wise loop do not do identically.
+//
+// A boundary tile still has a rectangular in-bounds prefix, so it moves with
+// one DMA and only the L-shaped remainder around that prefix is filled with
+// the padding value. That matters whenever the tile is wider than the view --
+// a 1024-wide tile over a 768-wide row, say -- because loading the whole tile
+// element by element costs orders of magnitude more than the DMA. The
+// element-wise branch remains for tiles with no in-bounds element at all.
 static Value emitDenseTileLoad(OpBuilder &b, Location loc,
                                const ViewTileInfo &info, ValueRange indices,
                                Value offset, ValueRange validLengths,
@@ -622,7 +655,17 @@ static Value emitDenseTileLoad(OpBuilder &b, Location loc,
   Value ub = b.create<memref::AllocOp>(
       loc, makeSpaceMemref(b.getContext(), info.tile, info.elementType,
                           dstSpace));
+  unsigned rank = info.tile.size();
+  Value zeroIdx = b.create<arith::ConstantIndexOp>(loc, 0);
   Value allInBounds = emitAllInBounds(b, loc, info, validLengths);
+
+  Value prefixNonEmpty = b.create<arith::ConstantIntOp>(loc, 1, /*width=*/1);
+  for (unsigned d = 0; d < rank; ++d) {
+    Value nonEmpty = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt,
+                                             validLengths[d], zeroIdx);
+    prefixNonEmpty = b.create<arith::AndIOp>(loc, prefixNonEmpty, nonEmpty);
+  }
+
   b.create<scf::IfOp>(
       loc, allInBounds,
       [&](OpBuilder &nested, Location nestedLoc) {
@@ -630,9 +673,39 @@ static Value emitDenseTileLoad(OpBuilder &b, Location loc,
         nested.create<hivm::LoadOp>(nestedLoc, TypeRange{}, gm, ub);
         nested.create<scf::YieldOp>(nestedLoc);
       },
-      [&](OpBuilder &nested, Location nestedLoc) {
-        emitElementwiseFill(nested, nestedLoc, info, indices, ub, pad);
-        nested.create<scf::YieldOp>(nestedLoc);
+      [&](OpBuilder &outer, Location outerLoc) {
+        outer.create<scf::IfOp>(
+            outerLoc, prefixNonEmpty,
+            [&](OpBuilder &nested, Location nestedLoc) {
+              Value gm = emitViewGmTile(nested, nestedLoc, info, offset);
+              Value gmPrefix =
+                  emitPrefixSubview(nested, nestedLoc, gm, validLengths);
+              Value ubPrefix =
+                  emitPrefixSubview(nested, nestedLoc, ub, validLengths);
+              nested.create<hivm::LoadOp>(nestedLoc, TypeRange{}, gmPrefix,
+                                          ubPrefix);
+              // The remainder is covered by one box per dimension j: past
+              // valid[j] there, inside valid[d] for d < j, the whole tile for
+              // d > j. The union is exactly the tile minus the prefix.
+              SmallVector<Value> tileBounds;
+              for (unsigned d = 0; d < rank; ++d)
+                tileBounds.push_back(nested.create<arith::ConstantIndexOp>(
+                    nestedLoc, info.tile[d]));
+              for (unsigned j = 0; j < rank; ++j) {
+                SmallVector<Value> lower, upper;
+                for (unsigned d = 0; d < rank; ++d) {
+                  lower.push_back(d == j ? validLengths[d] : zeroIdx);
+                  upper.push_back(d < j ? validLengths[d] : tileBounds[d]);
+                }
+                emitFillBox(nested, nestedLoc, ub, lower, upper, pad);
+              }
+              nested.create<scf::YieldOp>(nestedLoc);
+            },
+            [&](OpBuilder &nested, Location nestedLoc) {
+              emitElementwiseFill(nested, nestedLoc, info, indices, ub, pad);
+              nested.create<scf::YieldOp>(nestedLoc);
+            });
+        outer.create<scf::YieldOp>(outerLoc);
       });
   return b.create<bufferization::ToTensorOp>(loc, resultTy, ub, true, false);
 }
@@ -840,22 +913,16 @@ static LogicalResult lowerViewStore(tile::StoreOp op,
   Value ub = rewriter.create<memref::AllocOp>(
       loc, makeSpaceMemref(rewriter.getContext(), info.tile, info.elementType,
                            srcSpace));
+  // Stage the whole tile in UB with static shapes. Slicing the source tensor
+  // down to the in-bounds prefix first hands the rest of the pipeline a
+  // dynamically shaped tensor, which is what makes any computed store value
+  // (anything other than a freshly loaded tile) fail to compile. Only the
+  // GM-side DMA needs to be restricted to the in-bounds prefix.
+  auto materialize = rewriter.create<bufferization::MaterializeInDestinationOp>(
+      loc, op.getSrc(), ub);
+  materialize->setAttr("writable", rewriter.getUnitAttr());
   Value gmSub = emitPrefixSubview(rewriter, loc, gm, validLengths);
   Value ubSub = emitPrefixSubview(rewriter, loc, ub, validLengths);
-
-  SmallVector<OpFoldResult> offsets;
-  SmallVector<OpFoldResult> sizes;
-  SmallVector<OpFoldResult> strides;
-  for (Value length : validLengths) {
-    offsets.push_back(rewriter.getIndexAttr(0));
-    sizes.push_back(OpFoldResult(length));
-    strides.push_back(rewriter.getIndexAttr(1));
-  }
-  Value slice = rewriter.create<tensor::ExtractSliceOp>(
-      loc, op.getSrc(), offsets, sizes, strides);
-  auto materialize = rewriter.create<bufferization::MaterializeInDestinationOp>(
-      loc, slice, ubSub);
-  materialize->setAttr("writable", rewriter.getUnitAttr());
   rewriter.create<hivm::StoreOp>(loc, TypeRange{}, ubSub, gmSub);
   rewriter.eraseOp(op);
   return success();
