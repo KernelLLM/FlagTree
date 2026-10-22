@@ -22,14 +22,18 @@ import triton.language as tl
 import triton.experimental.tle as tle
 
 
-# 128x128 tiles keep 17 UB buffers of [BLOCK_M, BLOCK_D] live; at head_dim 128
-# that is 557 KiB against a 192 KiB budget and the kernel does not compile
-# (`ub overflow, requires 2387968 bits while 1572864 available`).  head_dim 64
-# fits at 128x128 (and is the faster choice there), so gate on the head dim.
+# 128x128 tiles keep 17 UB buffers of [BLOCK_M, BLOCK_D] live.  That fits only
+# for head_dim <= 64 *without* a causal mask:
+#   head_dim 128, causal      requires 2387968 bits (291 KiB) -> over the 192 KiB
+#   head_dim  64, causal      requires 2256896 bits (275 KiB) -> over
+#   head_dim  64, non-causal  fits, and 128x128 is the faster tile there
+# so the wide tile is gated on both, which is exactly the measured-good set.
+# The mask tensor the causal branch materialises is what pushes the causal
+# cases over, not the head dim on its own.
 _BLOCK_M = 128
 _BLOCK_N = 128
-_BLOCK_M_WIDE_D = 64
-_BLOCK_N_WIDE_D = 64
+_BLOCK_M_NARROW = 64
+_BLOCK_N_NARROW = 64
 
 
 @triton.jit
@@ -181,10 +185,10 @@ def run(query, key, value, scaleValue=-1.0, is_causal=False):
     if batch * heads_q * seq_q == 0:
         return out
 
-    if head_dim <= 64:
+    if head_dim <= 64 and not is_causal:
         block_m, block_n = _BLOCK_M, _BLOCK_N
     else:
-        block_m, block_n = _BLOCK_M_WIDE_D, _BLOCK_N_WIDE_D
+        block_m, block_n = _BLOCK_M_NARROW, _BLOCK_N_NARROW
     block_d = triton.next_power_of_2(head_dim)
     m_full = (seq_q % block_m) == 0
     n_full = (seq_kv % block_n) == 0

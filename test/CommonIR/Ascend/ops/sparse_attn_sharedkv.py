@@ -423,7 +423,8 @@ def _run_sparse(
         _attn_kernel[(1, n, hb_blocks)](
             qk[start:start + n], out[start:start + n], ori_view, kg, sparse_ptr,
             cu1, seq1, sinks, scale, ori_stride, 0, _TOPK, row0,
-            D=HEAD_DIM, QH=qk.shape[1], HEAD_BLOCK=head_block, N_ORI=PAGE_SIZE,
+            D=HEAD_DIM, QH=qk.shape[1], HEAD_BLOCK=_HEAD_BLOCK_CMP,
+            N_ORI=PAGE_SIZE,
             N_CHUNK=_N_CHUNK, CMP_CHUNK=_CMP_CHUNK, TOPK=_TOPK, HAS_CMP=True,
             HAS_SPARSE=True, CMP_RATIO=ratio,
         )

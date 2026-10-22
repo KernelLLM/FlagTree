@@ -1029,6 +1029,12 @@ def cmd_compare(args):
                 before_mode=(b or {}).get("mode"), after_mode=(a or {}).get("mode"),
             ))
 
+    ran_both = [r for r in rows
+                if r["before_status"] != "missing" and r["after_status"] != "missing"]
+    skipped = [r for r in rows
+               if r["before_status"] == "missing" or r["after_status"] == "missing"]
+    rows = ran_both
+
     md = [f"# bench_ops — before/after", ""]
     md.append(f"- before: `{bmeta.get('label')}` ({args.before})")
     md.append(f"- after:  `{ameta.get('label')}` ({args.after})")
@@ -1050,6 +1056,13 @@ def cmd_compare(args):
         dig = "identical" if r["digest_identical"] else (
             f"Δ {r['digest_rel']:.2e}" if r["digest_rel"] is not None else "-")
         md.append(f"| {r['op']} | {r['case']} | {f(r['before_ms'])} | {f(r['after_ms'])} | {sp} | {dig} |")
+
+    if skipped:
+        md += ["", f"_{len(skipped)} (op, case) pair(s) present in only one of the two"
+                   f" runs and are not compared: "
+                   + ", ".join(f"{r['op']}/{r['case']}"
+                               for r in skipped[:8])
+                   + (" ..." if len(skipped) > 8 else "") + "_"]
 
     # per-op geomean of the after/before speedup
     md += ["", "## Per-op geomean (before/after)", "", "| op | geomean | cases |", "|---|---|---|"]
