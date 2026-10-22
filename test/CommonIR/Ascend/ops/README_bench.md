@@ -1,0 +1,85 @@
+# bench_ops.py — standalone latency benchmark for the CommonIR Ascend ops
+
+No reference implementation needed: it measures each of the six operators on its
+own.  It exists so that a kernel change can be compared **before/after** on the
+same box, with the same inputs, and with a check that the numbers did not move.
+
+```bash
+cd test/CommonIR/Ascend/ops
+
+python bench_ops.py list        # case registry
+python bench_ops.py selfcheck   # build every case on CPU (no device needed)
+python bench_ops.py run  --label before --outdir out/before
+# ...apply the change...
+python bench_ops.py run  --label after  --outdir out/after
+python bench_ops.py compare --before out/before --after out/after
+```
+
+`compare` writes `out/compare.md` (plus a sibling `compare.json`) with per-case
+before/after milliseconds, the factor, the numerical digest, and a per-op
+geomean.
+
+## Timing modes
+
+`--measure-mode` (default `npu-graph`):
+
+| mode | what it measures |
+|---|---|
+| `loop` | wall clock of `run(**kwargs)` — what a caller sees, host work included |
+| `npu-graph` | capture once, time `graph.replay()` — **device only**. Ops that synchronise the host inside `run()` cannot be captured; they report `graph_capture_failed` and fall back to `loop` |
+| `host-split` | wall clock, plus the same call with every Triton launch stubbed out; `device_ms = total - host`, where host includes any device→host sync |
+
+`npu-graph` and `host-split` answer different questions and their numbers are not
+comparable to each other. In particular the ones that do `.cpu().tolist()` inside
+`run()` (`causal_conv1d_fn`) cannot be captured at all — use `host-split` there.
+
+Note that `graph.replay()` has a floor of roughly 60 µs on Ascend910B4, so any
+sub-0.1 ms graph number is floor-dominated; use `loop`/`host-split` for those.
+
+## Numerical guard (no reference required)
+
+Every run records an fp64 digest per output tensor — `sum`, `sumsq`, `absmax`,
+`numel`, non-finite count — where "output" means the return value *and* whatever
+the op mutated in place (`conv_states`, `state_cache`, the paged caches at the
+touched rows).  `compare` reports `identical` or the relative delta next to the
+timing.  A tile-size change legitimately perturbs the fp32 reduction order, so
+this is reported as information, **not** as pass/fail; a change of order 1e-7 is
+reduction order, a change of order 1e-2 is a bug.
+
+## Isolation and knobs
+
+* one subprocess per `(op, case)`: a kernel that faults the device
+  (`aivec error`), hangs (`--timeout`), or fails to compile only costs that one
+  row, and the traceback lands in `out/logs/`.
+* `--const NAME=VALUE[,NAME=VALUE]` overrides module-level constants before the
+  call, for ad-hoc A/B on one knob without editing the kernel, e.g.
+
+  ```bash
+  python bench_ops.py run --label t64 --outdir out/t64 --ops causal_conv1d_fn \
+         --const _BLOCK_T=64
+  python bench_ops.py compare --before out/before --after out/t64
+  ```
+
+  The overrides are echoed into `meta.json` and into every raw record, so a row
+  can never be mistaken for the committed defaults.
+
+## Output layout
+
+```
+<outdir>/
+  meta.json                 label, ops, cases, mode, constants, warmup/iters/rounds
+  results.json              one record per (op, case) incl. digest + timings
+  summary.md                the table for this run
+  raw/<op>__<case>@<label>.json   full record (samples, peak alloc, notes)
+  logs/<op>__<case>@<label>.log   worker stdout/stderr (tracebacks)
+```
+
+## Case sets
+
+`--cases quick|default|full` or an explicit comma-separated list of case ids.
+The shapes are the ones that showed measurable differences while these operators
+were compared against their non-CommonIR counterparts, so numbers here stay
+comparable with that work. `full` adds the heavier production shapes
+(`compressor/prefill0`, `causal_conv1d_fn/b10_d4096_s4096_pad_fp16`,
+`sparse_attn_sharedkv/*_prefill`, …) which are the ones worth quoting when
+comparing kernels, because the small shapes are dominated by fixed costs.
