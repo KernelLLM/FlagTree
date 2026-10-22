@@ -921,60 +921,95 @@ def cmd_run(args):
     rows = []
     for op in ops:
         for case_id in _cases_for(op, args.cases):
-            cmd = [
-                sys.executable, SELF, "worker",
-                "--outdir", args.outdir, "--op", op, "--case", case_id,
-                "--op-dir", args.op_dir, "--device", args.device,
-                "--measure-mode", args.measure_mode,
-                "--warmup", str(args.warmup), "--iters", str(args.iters),
-                "--rounds", str(args.rounds), "--tag", args.tag,
-            ]
-            if args.const:
-                cmd += ["--const", args.const]
-            if args.no_bench:
-                cmd.append("--no-bench")
-            if args.device_index is not None:
-                cmd += ["--device-index", str(args.device_index)]
-            log = os.path.join(args.outdir, "logs", f"{op}__{case_id}{'@'+args.tag if args.tag else ''}.log")
-            os.makedirs(os.path.dirname(log), exist_ok=True)
-            t0 = time.time()
-            with open(log, "w") as lf:
-                try:
-                    subprocess.run(cmd, stdout=lf, stderr=subprocess.STDOUT, timeout=args.timeout)
-                except subprocess.TimeoutExpired:
-                    pass
-            rec = _json_load(_raw(args.outdir, op, case_id, args.tag), {}) or {}
-            bench = rec.get("bench") or {}
-            status = rec.get("status", "crash")
-            ms = bench.get("median_ms")
-            rows.append(dict(
-                op=op, case=case_id, status=status,
-                mode=bench.get("mode"), ms=ms, min_ms=bench.get("min_ms"),
-                host_ms=bench.get("host_ms"), device_ms=bench.get("device_ms"),
-                peak_alloc_mb=bench.get("peak_alloc_mb"),
-                capture_failed=bench.get("graph_capture_failed"),
-                wall_s=round(time.time() - t0, 1), digest=rec.get("digest"),
-                error=rec.get("error"),
-            ))
-            tag = f"{ms:8.3f} ms" if isinstance(ms, (int, float)) else "     n/a "
-            _log(f"  {op:<22}{case_id:<30}{status:<7}{tag:>12}  {bench.get('mode') or ''}")
+            reps = []
+            for rep in range(max(1, args.repeat)):
+                tag = args.tag if rep == 0 else f"{args.tag}r{rep + 1}"
+                reps.append(_run_one(args, op, case_id, tag))
+            rows.append(_aggregate(op, case_id, reps))
     _json_dump(os.path.join(args.outdir, "results.json"), rows)
     _write_summary(args.outdir, args.label, rows)
     return 0
 
 
+def _run_one(args, op, case_id, tag):
+    cmd = [
+        sys.executable, SELF, "worker",
+        "--outdir", args.outdir, "--op", op, "--case", case_id,
+        "--op-dir", args.op_dir, "--device", args.device,
+        "--measure-mode", args.measure_mode,
+        "--warmup", str(args.warmup), "--iters", str(args.iters),
+        "--rounds", str(args.rounds), "--tag", tag,
+    ]
+    if args.const:
+        cmd += ["--const", args.const]
+    if args.no_bench:
+        cmd.append("--no-bench")
+    if args.device_index is not None:
+        cmd += ["--device-index", str(args.device_index)]
+    log = os.path.join(args.outdir, "logs", f"{op}__{case_id}@{tag}.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    t0 = time.time()
+    with open(log, "w") as lf:
+        try:
+            subprocess.run(cmd, stdout=lf, stderr=subprocess.STDOUT, timeout=args.timeout)
+        except subprocess.TimeoutExpired:
+            pass
+    rec = _json_load(_raw(args.outdir, op, case_id, tag), {}) or {}
+    bench = rec.get("bench") or {}
+    status = rec.get("status", "crash")
+    ms = bench.get("median_ms")
+    human = f"{ms:8.3f} ms" if isinstance(ms, (int, float)) else "     n/a "
+    _log(f"  {op:<22}{case_id:<30}{tag:<10}{status:<7}{human:>12}  "
+         f"{bench.get('mode') or ''}")
+    return dict(
+        op=op, case=case_id, status=status,
+        mode=bench.get("mode"), ms=ms, min_ms=bench.get("min_ms"),
+        host_ms=bench.get("host_ms"), device_ms=bench.get("device_ms"),
+        peak_alloc_mb=bench.get("peak_alloc_mb"),
+        capture_failed=bench.get("graph_capture_failed"),
+        wall_s=round(time.time() - t0, 1), digest=rec.get("digest"),
+        error=rec.get("error"),
+    )
+
+
+def _aggregate(op, case_id, reps):
+    """Median across repeated runs, plus the spread that a single run hides.
+
+    Within-run rounds are tight; the variation that matters for a before/after
+    comparison is between process invocations, so `--repeat` re-runs the case in
+    fresh processes and this records min/max/spread over their medians.
+    """
+    good = [r for r in reps if r["status"] == "ok" and isinstance(r["ms"], (int, float))]
+    first = reps[0]
+    if not good:
+        return first
+    vals = sorted(r["ms"] for r in good)
+    med = vals[len(vals) // 2]
+    out = dict(first)
+    out["ms"] = med
+    out["repeat_ms"] = [r["ms"] for r in reps]
+    out["repeat_min"] = vals[0]
+    out["repeat_max"] = vals[-1]
+    out["spread_pct"] = (
+        round(100.0 * (vals[-1] - vals[0]) / med, 2) if med and len(vals) > 1 else 0.0
+    )
+    out["digest_identical_across_repeats"] = all(r["digest"] == first["digest"] for r in reps)
+    return out
+
+
 def _write_summary(outdir, label, rows):
     md = [f"# bench_ops — {label}", ""]
-    md.append("| op | case | status | mode | ms | host ms | device ms | peak MB |")
-    md.append("|---|---|---|---|---|---|---|---|")
+    md.append("| op | case | status | mode | ms | spread % | host ms | device ms | peak MB |")
+    md.append("|---|---|---|---|---|---|---|---|---|")
 
     def f(v, sp="{:.3f}"):
         return sp.format(v) if isinstance(v, (int, float)) else "-"
 
     for r in rows:
-        md.append("| {op} | {case} | {st} | {m} | {ms} | {h} | {d} | {p} |".format(
+        md.append("| {op} | {case} | {st} | {m} | {ms} | {sp} | {h} | {d} | {p} |".format(
             op=r["op"], case=r["case"], st=r["status"], m=r["mode"] or "-",
-            ms=f(r["ms"]), h=f(r["host_ms"]), d=f(r["device_ms"]),
+            ms=f(r["ms"]), sp=f(r.get("spread_pct"), "{:.1f}"),
+            h=f(r["host_ms"]), d=f(r["device_ms"]),
             p=f(r["peak_alloc_mb"], "{:.0f}")))
     bad = [r for r in rows if r["status"] != "ok"]
     if bad:
@@ -1025,6 +1060,8 @@ def cmd_compare(args):
                 before_ms=b_ms, after_ms=a_ms, speedup=ratio,
                 same_mode=same_mode,
                 digest_rel=digest_rel,
+                before_spread=(b or {}).get("spread_pct"),
+                after_spread=(a or {}).get("spread_pct"),
                 digest_identical=(digest_rel is not None and digest_rel == 0.0),
                 before_mode=(b or {}).get("mode"), after_mode=(a or {}).get("mode"),
             ))
@@ -1039,7 +1076,8 @@ def cmd_compare(args):
     md.append(f"- before: `{bmeta.get('label')}` ({args.before})")
     md.append(f"- after:  `{ameta.get('label')}` ({args.after})")
     md.append(f"- mode: `{bmeta.get('measure_mode')}` / `{ameta.get('measure_mode')}`")
-    md += ["", "| op | case | before ms | after ms | after vs before | digest |", "|---|---|---|---|---|---|"]
+    md += ["", "| op | case | before ms | after ms | after vs before | digest | spread |",
+           "|---|---|---|---|---|---|---|"]
 
     def f(v, sp="{:.3f}"):
         return sp.format(v) if isinstance(v, (int, float)) else "-"
@@ -1055,7 +1093,11 @@ def cmd_compare(args):
             sp += " (mode!)"
         dig = "identical" if r["digest_identical"] else (
             f"Δ {r['digest_rel']:.2e}" if r["digest_rel"] is not None else "-")
-        md.append(f"| {r['op']} | {r['case']} | {f(r['before_ms'])} | {f(r['after_ms'])} | {sp} | {dig} |")
+        spd = "-"
+        if r.get("before_spread") is not None or r.get("after_spread") is not None:
+            spd = f"{f(r.get('before_spread'), '{:.1f}')}/{f(r.get('after_spread'), '{:.1f}')} %"
+        md.append(f"| {r['op']} | {r['case']} | {f(r['before_ms'])} | {f(r['after_ms'])}"
+                  f" | {sp} | {dig} | {spd} |")
 
     if skipped:
         md += ["", f"_{len(skipped)} (op, case) pair(s) present in only one of the two"
@@ -1140,6 +1182,12 @@ def main(argv=None):
     p_run.add_argument("--rounds", type=int, default=5)
     p_run.add_argument("--timeout", type=int, default=3600)
     p_run.add_argument("--no-bench", action="store_true")
+    p_run.add_argument(
+        "--repeat", type=int, default=1,
+        help="run each case N times in fresh processes; results.json then holds "
+        "the median across repeats plus spread_pct (the between-process noise "
+        "that a single run cannot show)",
+    )
     p_run.add_argument("--const", default=None,
                        metavar="NAME=VALUE[,NAME=VALUE]",
                        help="override module constants before calling run()")

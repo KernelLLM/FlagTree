@@ -36,6 +36,29 @@ comparable to each other. In particular the ones that do `.cpu().tolist()` insid
 Note that `graph.replay()` has a floor of roughly 60 µs on Ascend910B4, so any
 sub-0.1 ms graph number is floor-dominated; use `loop`/`host-split` for those.
 
+## Between-process noise (`--repeat`)
+
+Within-run rounds are tight, but two runs minutes apart can disagree — a
+before/after pair on `sparse_attn_sharedkv/swa_prefill_small` moved 12% with the
+kernel configuration, the compilation cache entry and the output digest all
+provably unchanged. That is drift between process invocations, not a regression,
+and a single run cannot show it.
+
+`--repeat N` re-runs every case N times in fresh processes; `results.json` then
+holds the median across repeats plus `repeat_ms`, `repeat_min/max`,
+`spread_pct` and `digest_identical_across_repeats`, and both `summary.md` and
+`compare.md` show the spread next to each timing:
+
+```bash
+python bench_ops.py run --outdir out/after --label after --repeat 3
+python bench_ops.py compare --before out/before --after out/after
+```
+
+Rule of thumb from the measurements so far: **treat a delta below ~15% on a
+sub-millisecond case as unresolved** unless `spread_pct` is much smaller than
+the delta. Deltas of 20%+ (e.g. `compressor/prefill0_b2_rank3` at 1.47x) are
+well clear of it.
+
 ## Numerical guard (no reference required)
 
 Every run records an fp64 digest per output tensor — `sum`, `sumsq`, `absmax`,
