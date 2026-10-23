@@ -145,6 +145,12 @@ class MACAOptions:
     inner_stages: Tuple[int, int] = field(default_factory=lambda: (0, 0))
 
     def __post_init__(self):
+        scenarios = set(parse_option(self.scenario))
+        if "gluon-flashattn-fwd" in scenarios:
+            if self.pipeline != "basic" or self.num_stages != 2:
+                raise ValueError("gluon-flashattn-fwd requires pipeline='basic' and num_stages=2")
+            if scenarios & {"mla", "flashattn-fwd", "flashattn-bwd"}:
+                raise ValueError("gluon-flashattn-fwd cannot be combined with another attention scenario")
         default_libdir = os.getenv("MACA_PATH") + '/lib'
         ext_default_libdir = Path(__file__).parent / 'lib'
         extern_libs = {} if self.extern_libs is None else dict(self.extern_libs)
@@ -419,7 +425,13 @@ class MACABackend(BaseBackend):
         if mxcc_arch is None:
             raise RuntimeError('mxcc_arch is None (not specified)')
         compile_options = ""
-        if (opt.pipeline == "basic" or opt.pipeline == "basic-prefetch") and "mla" not in scenarios:
+        if "gluon-flashattn-fwd" in scenarios:
+            # Keep this preset independent of MLA: both FA branches use K16
+            # shared reads whose base + constant offsets must survive LICM.
+            compile_options = (" -mllvm -metaxgpu-mma-sched=true -mllvm -map-use-pk-fma=1"
+                               " -mllvm -metaxgpu-split-regalloc=true -mllvm -metaxgpu-aggressive-fold=true"
+                               " -mllvm -metaxgpu-disable-licm=true ")
+        elif (opt.pipeline == "basic" or opt.pipeline == "basic-prefetch") and "mla" not in scenarios:
             compile_options = " -mllvm -metaxgpu-sched-regpressure=false "
             if "fullstage" in scenarios:
                 compile_options += " -mllvm -metaxgpu-vectorize-slp=true -mllvm -metaxgpu-igroup "
