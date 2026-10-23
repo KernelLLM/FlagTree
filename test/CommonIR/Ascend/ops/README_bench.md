@@ -54,10 +54,22 @@ python bench_ops.py run --outdir out/after --label after --repeat 3
 python bench_ops.py compare --before out/before --after out/after
 ```
 
-Rule of thumb from the measurements so far: **treat a delta below ~15% on a
-sub-millisecond case as unresolved** unless `spread_pct` is much smaller than
-the delta. Deltas of 20%+ (e.g. `compressor/prefill0_b2_rank3` at 1.47x) are
-well clear of it.
+`spread_pct` is necessary but **not sufficient**: it measures variation *within*
+one run, while the drift that matters is *between* the before-run and the
+after-run. Two reference points from three repeated before/after pairs on
+Ascend910B4:
+
+| case | same-kernel measurements across runs |
+|---|---|
+| `causal_conv1d_fn/*` (ms scale) | 2.108, 2.096, 2.118 ms → between-run floor **<1%** |
+| `kv_rmsnorm_rope_cache/*`, `lightning_indexer/R*` (~60 µs) | geomean 0.95x, 1.02x, 0.97x → **±5%** |
+| `sparse_attn_sharedkv/swa_prefill_small` | 0.517, 0.521, 0.554, 0.566, 0.589, 0.633 ms → **±20%**, unusable |
+
+So: check the delta against the *spread for that specific case*, and treat a
+change as real only if it is several times larger **and** reproduces across
+runs. `compressor/prefill0_b2_rank3` at 1.44x with 1.8% spread, reproduced as
+1.47x / 1.42x / 1.44x, is about 25x its spread; `sparse_attn_sharedkv/swa_decode`
+at 1.26x with a 19.3% spread on one side is not a result at all.
 
 ## Numerical guard (no reference required)
 
