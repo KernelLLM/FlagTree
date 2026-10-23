@@ -1076,7 +1076,14 @@ def cmd_compare(args):
     md.append(f"- before: `{bmeta.get('label')}` ({args.before})")
     md.append(f"- after:  `{ameta.get('label')}` ({args.after})")
     md.append(f"- mode: `{bmeta.get('measure_mode')}` / `{ameta.get('measure_mode')}`")
-    md += ["", "| op | case | before ms | after ms | after vs before | digest | spread |",
+    md.append("")
+    md.append("`after/before` is the latency ratio: **>1x means the `after` state is"
+              " faster**, <1x means slower (`0.95x` = 5% slower).")
+    md.append("")
+    md.append("`status` rows are pairs that could not be compared (one side did not"
+              " run); `*` marks a ratio whose two sides were measured in different"
+              " timing modes and is therefore not meaningful.")
+    md += ["", "| op | case | before ms | after ms | after/before | digest | spread |",
            "|---|---|---|---|---|---|---|"]
 
     def f(v, sp="{:.3f}"):
@@ -1087,10 +1094,12 @@ def cmd_compare(args):
             summary = f"{r['before_status']} -> {r['after_status']}"
             md.append(f"| {r['op']} | {r['case']} | {f(r['before_ms'])} | {f(r['after_ms'])} | {summary} | - |")
             continue
-        sp = f"{r['speedup']:.2f}x faster" if r["speedup"] and r["speedup"] > 1 else (
-            f"{1/r['speedup']:.2f}x slower" if r["speedup"] else "-")
-        if not r["same_mode"]:
-            sp += " (mode!)"
+        if r["speedup"]:
+            sp = f"{r['speedup']:.2f}x"
+            if not r["same_mode"]:
+                sp += " *"
+        else:
+            sp = "-"
         dig = "identical" if r["digest_identical"] else (
             f"Δ {r['digest_rel']:.2e}" if r["digest_rel"] is not None else "-")
         spd = "-"
@@ -1107,7 +1116,8 @@ def cmd_compare(args):
                    + (" ..." if len(skipped) > 8 else "") + "_"]
 
     # per-op geomean of the after/before speedup
-    md += ["", "## Per-op geomean (before/after)", "", "| op | geomean | cases |", "|---|---|---|"]
+    md += ["", "## Per-op geomean of after/before (>1x = faster)",
+           "", "| op | geomean | cases |", "|---|---|---|"]
     for op in OP_ORDER:
         vals = [r["speedup"] for r in rows
                 if r["op"] == op and r["speedup"] and r["same_mode"]]
