@@ -115,10 +115,10 @@ def _mm1_qkt(
     sync_block_wait("vector", "cube", SEM_S_FREE, PIPE.PIPE_MTE2, PIPE.PIPE_FIX)
 
     # reload resident Q at the first task of each output tile
-    if idx_in_conbine == 0:
-        q_bp = tl.make_block_ptr(Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd),
-                                 (global_head_idx * BLOCK_M, 0), (BLOCK_M, DIM), (1, 0))
-        tile_copy(q_bp, q_l1, [CBM, CD])
+    # if idx_in_conbine == 0:
+    q_bp = tl.make_block_ptr(Q + batch_idx * sQb + head_idx * sQh, (S, DIM), (sQs, sQd), (global_head_idx * BLOCK_M, 0),
+                             (BLOCK_M, DIM), (1, 0))
+    tile_copy(q_bp, q_l1, [CBM, CD])
     for cb_idx in range(CB):
         kv_idx = idx_in_conbine * CB + cb_idx
 
@@ -128,7 +128,7 @@ def _mm1_qkt(
 
         # attn_score = Q * K^T for this KV block; fresh zero acc each iteration
         # so each tl.dot yields only the current block's score (no cross-block accumulation)
-        attn_score = tl.dot(tile_to_tensor(q_l1, writable=False), tile_to_tensor(k_l1, writable=False),
+        attn_score = tl.dot(tile_to_tensor(q_l1, writable=False), tl.trans(tile_to_tensor(k_l1, writable=False)),
                             tl.zeros((BLOCK_M, BLOCK_N), tl.float32))
 
         # single slot: layout [cid, CB, BLOCK_M, BLOCK_N]
