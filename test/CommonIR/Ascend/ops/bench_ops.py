@@ -923,7 +923,7 @@ def cmd_run(args):
         for case_id in _cases_for(op, args.cases):
             reps = []
             for rep in range(max(1, args.repeat)):
-                tag = args.tag if rep == 0 else f"{args.tag}r{rep + 1}"
+                tag = args.tag if rep == 0 else f"{args.tag}#{rep + 1}"
                 reps.append(_run_one(args, op, case_id, tag))
             rows.append(_aggregate(op, case_id, reps))
     _json_dump(os.path.join(args.outdir, "results.json"), rows)
