@@ -231,6 +231,27 @@ SAS = {
     "cfa_prefill_small": ("CFA", 512, 512, 128, 0),
 }
 
+# Constants that reproduce the pre-port configuration of the operators, so the
+# "before" side of a comparison can be measured on the current tree without a
+# git checkout.  This is exact because the port is *only* module constants plus
+# gates whose conditions read the operator's inputs, and the functional diff
+# against the merge commit is exactly: 128/128 (compressor projection), 64/64
+# (gqa narrow tile) and 32 (sparse compressed head block) - restoring those
+# reproduces the old code path.  `bench_ops.py ab --before-ref <merge>` remains
+# the independent check.
+PRE_PORT_CONSTS = {
+    "_PROJ_BN": 128,         # compressor: projection N tile
+    "_PROJ_BK": 128,         # compressor: projection K tile
+    "_BLOCK_M_NARROW": 128,  # gqa: narrow tile, i.e. no 64x64 gate
+    "_BLOCK_N_NARROW": 128,
+    "_HEAD_BLOCK_CMP": 32,   # sparse_attn_sharedkv: no 16-head cmp block
+}
+
+
+def _const_string(consts):
+    return ",".join(f"{k}={v}" for k, v in consts.items())
+
+
 SPECS = {
     "causal_conv1d_fn": CC1D,
     "compressor": COMPRESSOR,
@@ -812,17 +833,24 @@ def worker_main(args):
             return 1
 
     rec = dict(op=op, case=case_id, tag=args.tag, device=device, status="ok",
-               consts=_parse_consts(args.const))
+               consts={}, consts_ignored=[])
     try:
         kw, meta = BUILDERS[op](case_id, device)
         mod = _load_op(op, args.op_dir)
-        for name, value in rec["consts"].items():
-            if not hasattr(mod, name):
-                raise AttributeError(
-                    f"{op}.py has no module constant {name!r} "
-                    f"(has: {[a for a in dir(mod) if a.isupper()]})"
-                )
-            setattr(mod, name, value)
+        # A const list is shared by every operator in a run, so names an
+        # operator does not have are skipped - but recorded, and fatal under
+        # --strict-const, so a typo cannot pass silently.
+        for name, value in _parse_consts(args.const).items():
+            if hasattr(mod, name):
+                setattr(mod, name, value)
+                rec["consts"][name] = value
+            else:
+                rec["consts_ignored"].append(name)
+        if rec["consts_ignored"] and args.strict_const:
+            raise AttributeError(
+                f"{op}.py has no module constant(s) {rec['consts_ignored']} "
+                f"(has: {[a for a in dir(mod) if a.isupper()]})"
+            )
 
         def invoke():
             return mod.run(**kw)
@@ -903,12 +931,17 @@ def cmd_run(args):
     for o in ops:
         if o not in OP_ORDER:
             raise SystemExit(f"unknown op {o}; available: {list(OP_ORDER)}")
+    if getattr(args, "before_consts", False):
+        merged = dict(PRE_PORT_CONSTS)
+        merged.update(_parse_consts(args.const))
+        args.const = _const_string(merged)
     os.makedirs(args.outdir, exist_ok=True)
     _json_dump(
         os.path.join(args.outdir, "meta.json"),
         dict(label=args.label, ops=ops, cases=args.cases, device=args.device,
              measure_mode=args.measure_mode, const=args.const,
              warmup=args.warmup, iters=args.iters, rounds=args.rounds,
+             before_consts=getattr(args, "before_consts", False),
              op_dir=os.path.abspath(args.op_dir),
              env={"python": sys.version.split()[0], "platform": platform.platform()}),
     )
@@ -942,6 +975,8 @@ def _run_one(args, op, case_id, tag):
     ]
     if args.const:
         cmd += ["--const", args.const]
+    if getattr(args, "strict_const", False):
+        cmd.append("--strict-const")
     if args.no_bench:
         cmd.append("--no-bench")
     if args.device_index is not None:
@@ -968,6 +1003,8 @@ def _run_one(args, op, case_id, tag):
         peak_alloc_mb=bench.get("peak_alloc_mb"),
         capture_failed=bench.get("graph_capture_failed"),
         wall_s=round(time.time() - t0, 1), digest=rec.get("digest"),
+        consts=rec.get("consts"),
+        consts_ignored=rec.get("consts_ignored") or None,
         error=rec.get("error"),
     )
 
@@ -1039,11 +1076,23 @@ def _op_py_files(op_dir):
 
 
 def cmd_ab(args):
-    """One command: before-ref -> run -> after-ref -> run -> restore -> compare."""
+    """One command: before -> run -> after -> run -> compare.
+
+    The 'before' state is either a git ref (operator files checked out, then
+    restored from an in-memory snapshot) or, with --before-consts, the same tree
+    with PRE_PORT_CONSTS applied - which needs no git at all.
+    """
+    if bool(args.before_ref) == bool(args.before_consts):
+        raise SystemExit(
+            "give exactly one of --before-ref <ref> or --before-consts"
+        )
     op_dir = os.path.abspath(args.op_dir)
     repo = _git(op_dir, "rev-parse", "--show-toplevel").stdout.strip()
     files = _op_py_files(op_dir)
     rel = [os.path.relpath(os.path.join(op_dir, f), repo) for f in files]
+
+    if args.before_consts:
+        return _ab_by_consts(args, op_dir, repo)
 
     refs = {}
     for ref in (args.before_ref, args.after_ref):
@@ -1104,6 +1153,46 @@ def cmd_ab(args):
         repeat=args.repeat, const=args.const,
     ))
 
+    args.before = os.path.join(root, "before")
+    args.after = os.path.join(root, "after")
+    return cmd_compare(args)
+
+
+def _ab_by_consts(args, op_dir, repo):
+    """before = current tree + PRE_PORT_CONSTS, after = current tree as-is."""
+    root = os.path.abspath(
+        args.root or (getattr(args, "outdir", None) or os.path.join(HERE, "out", "ab"))
+    )
+    os.makedirs(root, exist_ok=True)
+    user = args.const
+    before = dict(PRE_PORT_CONSTS)
+    before.update(_parse_consts(user))
+    _log("=" * 76)
+    _log("A/B  (constant emulation, no git)"
+         f"  {op_dir}")
+    _log(f"  before : current tree + PRE_PORT_CONSTS {before}")
+    _log(f"  after  : current tree, const={user or '<none>'}")
+    for name in before:
+        _log(f"    {name} -> {before[name]}")
+    _log("=" * 76)
+    try:
+        args.const = _const_string(before)
+        args.label = args.tag = "before"
+        args.outdir = os.path.join(root, "before")
+        cmd_run(args)
+    finally:
+        args.const = user
+    args.label = args.tag = "after"
+    args.outdir = os.path.join(root, "after")
+    cmd_run(args)
+
+    _json_dump(os.path.join(root, "ab_meta.json"), dict(
+        mode="const-emulation",
+        before=dict(source="PRE_PORT_CONSTS", consts=before),
+        after=dict(source="working tree", consts=user),
+        cases=args.cases, measure_mode=args.measure_mode,
+        repeat=args.repeat,
+    ))
     args.before = os.path.join(root, "before")
     args.after = os.path.join(root, "after")
     return cmd_compare(args)
@@ -1286,11 +1375,19 @@ def main(argv=None):
         )
         p.add_argument("--const", default=None,
                        metavar="NAME=VALUE[,NAME=VALUE]",
-                       help="override module constants before calling run()")
+                       help="override module constants before calling run(); "
+                       "names an operator does not have are skipped and listed "
+                       "under consts_ignored in results.json")
+        p.add_argument("--strict-const", action="store_true",
+                       help="fail instead of skipping unknown constant names")
 
     p_run = sub.add_parser("run", help="measure every (op, case) in one source state")
     common(p_run)
     run_options(p_run)
+    p_run.add_argument("--before-consts", action="store_true",
+                       help="also apply PRE_PORT_CONSTS, i.e. measure the "
+                       "pre-port configuration of the current tree (no git "
+                       "checkout needed)")
 
     p_ab = sub.add_parser(
         "ab",
@@ -1302,8 +1399,12 @@ def main(argv=None):
     )
     common(p_ab)
     run_options(p_ab, outdir_required=False)
-    p_ab.add_argument("--before-ref", required=True, metavar="REF",
+    p_ab.add_argument("--before-ref", default=None, metavar="REF",
                       help="git ref for the 'before' state, e.g. the merge commit")
+    p_ab.add_argument("--before-consts", action="store_true",
+                      help="take the 'before' state from PRE_PORT_CONSTS "
+                      "instead of a git ref: same tree, no checkout, no git "
+                      "mutation at all")
     p_ab.add_argument("--after-ref", default="HEAD", metavar="REF")
     p_ab.add_argument("--root", default=None,
                       help="output root; before/ and after/ are created inside it "
@@ -1328,6 +1429,7 @@ def main(argv=None):
     p_w.add_argument("--rounds", type=int, default=5)
     p_w.add_argument("--no-bench", action="store_true")
     p_w.add_argument("--const", default=None)
+    p_w.add_argument("--strict-const", action="store_true")
 
     p_list = sub.add_parser("list", help="show the case registry")
     common(p_list)

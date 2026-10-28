@@ -19,6 +19,38 @@ python bench_ops.py compare --before out/before --after out/after
 before/after milliseconds, the factor, the numerical digest, and a per-op
 geomean.
 
+## No git checkout needed for this port
+
+The port is entirely module-level constants plus gates whose conditions read the
+operator's *inputs*, so the pre-port configuration is reproducible on the
+current tree by overriding five constants:
+
+| constant | pre-port value | what it undoes |
+|---|---|---|
+| `_PROJ_BN`, `_PROJ_BK` | 128 | `compressor` projection tiling 256/256 |
+| `_BLOCK_M_NARROW`, `_BLOCK_N_NARROW` | 128 | `gqa`'s 64x64 tile for causal / D>64 |
+| `_HEAD_BLOCK_CMP` | 32 | `sparse_attn_sharedkv`'s 16-head compressed block |
+
+`PRE_PORT_CONSTS` in this file holds them, so:
+
+```bash
+# one command, no git, no mutation of the tree
+python bench_ops.py ab --before-consts --cases full --repeat 3 --root out/ab
+
+# or one state at a time
+python bench_ops.py run --before-consts --label before --outdir out/before
+python bench_ops.py run                  --label after  --outdir out/after
+python bench_ops.py compare --before out/before --after out/after
+```
+
+An operator that does not have a given constant ignores it and records it in
+`results.json` under `consts_ignored` (fatal with `--strict-const`), so one const
+list can be shared by all six operators without a typo passing silently.
+
+Use `--before-ref <merge-commit>` instead only when the change is structural
+rather than a constant, or to cross-check that `PRE_PORT_CONSTS` really does
+reproduce the old code path.
+
 ## Reproducing a before/after comparison in one command
 
 `ab` does the whole state-switch dance: it checks the operator files out of
