@@ -1175,16 +1175,37 @@ def _ab_by_consts(args, op_dir, repo):
     for name in before:
         _log(f"    {name} -> {before[name]}")
     _log("=" * 76)
+    saved_const = args.const
+    saved_flag = getattr(args, "before_consts", False)
     try:
+        args.before_consts = True
         args.const = _const_string(before)
         args.label = args.tag = "before"
         args.outdir = os.path.join(root, "before")
         cmd_run(args)
-    finally:
+
+        args.before_consts = False          # <-- the 'after' side is the tree as-is
         args.const = user
-    args.label = args.tag = "after"
-    args.outdir = os.path.join(root, "after")
-    cmd_run(args)
+        args.label = args.tag = "after"
+        args.outdir = os.path.join(root, "after")
+        cmd_run(args)
+    finally:
+        args.const = saved_const
+        args.before_consts = saved_flag
+
+    # 2) guard: refuse to report a comparison of two identical measurements.
+    #    This is the const-mode equivalent of the "same SHA" check in git mode,
+    #    and it would have caught the bug above.
+    mb = _json_load(os.path.join(root, "before", "meta.json"), {}) or {}
+    ma = _json_load(os.path.join(root, "after", "meta.json"), {}) or {}
+    if (mb.get("const"), bool(mb.get("before_consts"))) == (
+        ma.get("const"), bool(ma.get("before_consts"))
+    ):
+        raise SystemExit(
+            "before and after were measured with the same constants "
+            f"(const={mb.get('const')!r}, before_consts={mb.get('before_consts')!r}); "
+            "nothing differs, refusing to report a comparison"
+        )
 
     _json_dump(os.path.join(root, "ab_meta.json"), dict(
         mode="const-emulation",
