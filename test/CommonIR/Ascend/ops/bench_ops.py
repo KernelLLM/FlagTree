@@ -1023,6 +1023,92 @@ def _write_summary(outdir, label, rows):
     _log(f"  -> {os.path.join(outdir, 'results.json')}")
 
 
+def _git(repo, *argv, check=True):
+    r = subprocess.run(["git", "-C", repo, *argv], capture_output=True, text=True)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"git {' '.join(argv)} failed:\n{r.stderr.strip()}")
+    return r
+
+
+def _op_py_files(op_dir):
+    """The files a state switch may touch: every op, never the tool itself."""
+    return sorted(
+        f for f in os.listdir(op_dir)
+        if f.endswith(".py") and f != os.path.basename(SELF)
+    )
+
+
+def cmd_ab(args):
+    """One command: before-ref -> run -> after-ref -> run -> restore -> compare."""
+    op_dir = os.path.abspath(args.op_dir)
+    repo = _git(op_dir, "rev-parse", "--show-toplevel").stdout.strip()
+    files = _op_py_files(op_dir)
+    rel = [os.path.relpath(os.path.join(op_dir, f), repo) for f in files]
+
+    refs = {}
+    for ref in (args.before_ref, args.after_ref):
+        sha = _git(repo, "rev-parse", "--verify", f"{ref}^{{commit}}").stdout.strip()
+        subject = _git(repo, "log", "-1", "--format=%s", sha).stdout.strip()
+        refs[ref] = (sha, subject)
+    _log("=" * 76)
+    _log("A/B  " + op_dir)
+    _log(f"  before {args.before_ref} -> {refs[args.before_ref][0][:10]} "
+         f"{refs[args.before_ref][1][:52]}")
+    _log(f"  after  {args.after_ref} -> {refs[args.after_ref][0][:10]} "
+         f"{refs[args.after_ref][1][:52]}")
+    _log(f"  files swapped: {len(files)}  (bench_ops.py is never swapped)")
+    _log("=" * 76)
+
+    if refs[args.before_ref][0] == refs[args.after_ref][0]:
+        raise SystemExit("before-ref and after-ref resolve to the same commit")
+
+    root = os.path.abspath(
+        args.root or (args.outdir if getattr(args, "outdir", None) else
+                      os.path.join(HERE, "out", "ab"))
+    )
+    os.makedirs(root, exist_ok=True)
+
+    # snapshot the working tree so the restore is exact even if it is dirty
+    snap = {f: open(os.path.join(op_dir, f), "rb").read() for f in files}
+    dirty = _git(repo, "status", "--porcelain", "--", *rel).stdout.strip()
+    if dirty:
+        _log(f"  note: {len(dirty.splitlines())} operator file(s) differ from HEAD "
+             f"before starting; they are restored afterwards")
+
+    made = {}
+    try:
+        for ref, tag in ((args.before_ref, "before"), (args.after_ref, "after")):
+            _git(repo, "checkout", ref, "--", *rel)
+            diff = _git(repo, "status", "--porcelain", "--", *rel).stdout
+            made[tag] = len(diff.splitlines())
+            _log(f"\n[{tag}] checked out {ref}: {made[tag]} file(s) differ from HEAD")
+            args.outdir = os.path.join(root, tag)
+            args.label = tag
+            args.tag = tag
+            cmd_run(args)
+    finally:
+        for f, blob in snap.items():
+            with open(os.path.join(op_dir, f), "wb") as fh:
+                fh.write(blob)
+        msg = _git(repo, "status", "--porcelain", "--", *rel).stdout.strip()
+        _log("\n[restore] working tree rewritten from the snapshot"
+             + (f" ({len(msg.splitlines())} file(s) still differ from HEAD, "
+                "as before the run)" if msg else " (matches HEAD)"))
+
+    _json_dump(os.path.join(root, "ab_meta.json"), dict(
+        before=dict(ref=args.before_ref, sha=refs[args.before_ref][0],
+                    subject=refs[args.before_ref][1], files_changed=made.get("before")),
+        after=dict(ref=args.after_ref, sha=refs[args.after_ref][0],
+                   subject=refs[args.after_ref][1], files_changed=made.get("after")),
+        files=files, cases=args.cases, measure_mode=args.measure_mode,
+        repeat=args.repeat, const=args.const,
+    ))
+
+    args.before = os.path.join(root, "before")
+    args.after = os.path.join(root, "after")
+    return cmd_compare(args)
+
+
 def cmd_compare(args):
     before = _json_load(os.path.join(args.before, "results.json"))
     after = _json_load(os.path.join(args.after, "results.json"))
@@ -1178,29 +1264,50 @@ def main(argv=None):
             p.add_argument("--cases", default="default",
                            help="quick|default|full or a comma separated list")
 
-    p_run = sub.add_parser("run", help="measure every (op, case)")
-    common(p_run)
-    p_run.add_argument("--outdir", required=True)
-    p_run.add_argument("--label", default="run", help="name for this state, e.g. before/after")
-    p_run.add_argument("--tag", default="", help="suffix for raw/, logs/ (default: label)")
-    p_run.add_argument("--device", default=None)
-    p_run.add_argument("--device-index", type=int, default=None)
-    p_run.add_argument("--measure-mode", choices=("loop", "npu-graph", "host-split"),
+    def run_options(p, outdir_required=True):
+        if outdir_required:
+            p.add_argument("--outdir", required=True)
+        p.add_argument("--label", default="run", help="name for this state, e.g. before/after")
+        p.add_argument("--tag", default="", help="suffix for raw/, logs/ (default: label)")
+        p.add_argument("--device", default=None)
+        p.add_argument("--device-index", type=int, default=None)
+        p.add_argument("--measure-mode", choices=("loop", "npu-graph", "host-split"),
                        default="npu-graph")
-    p_run.add_argument("--warmup", type=int, default=5)
-    p_run.add_argument("--iters", type=int, default=20)
-    p_run.add_argument("--rounds", type=int, default=5)
-    p_run.add_argument("--timeout", type=int, default=3600)
-    p_run.add_argument("--no-bench", action="store_true")
-    p_run.add_argument(
-        "--repeat", type=int, default=1,
-        help="run each case N times in fresh processes; results.json then holds "
-        "the median across repeats plus spread_pct (the between-process noise "
-        "that a single run cannot show)",
-    )
-    p_run.add_argument("--const", default=None,
+        p.add_argument("--warmup", type=int, default=5)
+        p.add_argument("--iters", type=int, default=20)
+        p.add_argument("--rounds", type=int, default=5)
+        p.add_argument("--timeout", type=int, default=3600)
+        p.add_argument("--no-bench", action="store_true")
+        p.add_argument(
+            "--repeat", type=int, default=1,
+            help="run each case N times in fresh processes; results.json then "
+            "holds the median across repeats plus spread_pct (the "
+            "between-process noise that a single run cannot show)",
+        )
+        p.add_argument("--const", default=None,
                        metavar="NAME=VALUE[,NAME=VALUE]",
                        help="override module constants before calling run()")
+
+    p_run = sub.add_parser("run", help="measure every (op, case) in one source state")
+    common(p_run)
+    run_options(p_run)
+
+    p_ab = sub.add_parser(
+        "ab",
+        help="measure <before-ref> and <after-ref> and compare them, in one command",
+        description="Checks the operator files out of --before-ref, runs the whole "
+        "benchmark, checks them out of --after-ref, runs it again, compares, and "
+        "always restores the working tree.  bench_ops.py itself is never swapped, "
+        "so both sides are measured with the same tool.",
+    )
+    common(p_ab)
+    run_options(p_ab, outdir_required=False)
+    p_ab.add_argument("--before-ref", required=True, metavar="REF",
+                      help="git ref for the 'before' state, e.g. the merge commit")
+    p_ab.add_argument("--after-ref", default="HEAD", metavar="REF")
+    p_ab.add_argument("--root", default=None,
+                      help="output root; before/ and after/ are created inside it "
+                      "(default: out/ab next to bench_ops.py)")
 
     p_cmp = sub.add_parser("compare", help="diff two run folders")
     p_cmp.add_argument("--before", required=True)
@@ -1234,6 +1341,8 @@ def main(argv=None):
         args.device = _detect_device()
     if args.cmd == "run":
         return cmd_run(args)
+    if args.cmd == "ab":
+        return cmd_ab(args)
     if args.cmd == "worker":
         return worker_main(args)
     if args.cmd == "compare":

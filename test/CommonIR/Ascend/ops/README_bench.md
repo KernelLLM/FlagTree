@@ -19,6 +19,29 @@ python bench_ops.py compare --before out/before --after out/after
 before/after milliseconds, the factor, the numerical digest, and a per-op
 geomean.
 
+## Reproducing a before/after comparison in one command
+
+`ab` does the whole state-switch dance: it checks the operator files out of
+`--before-ref`, runs the complete benchmark, checks them out of `--after-ref`,
+runs it again, compares, and **always restores the working tree** (from an
+in-memory snapshot, so a dirty tree survives).  `bench_ops.py` itself is never
+swapped, so both sides are measured with the same tool, the same case set and
+the same digests:
+
+```bash
+python bench_ops.py ab --before-ref 01af67551 --after-ref HEAD \
+       --cases default --repeat 2 --root out/ab
+# -> out/ab/compare.md        the ratio table + per-op geomean
+# -> out/ab/ab_meta.json      both SHAs, their subjects, files swapped
+# -> out/ab/{before,after}/   full results.json + summary.md + raw/ + logs/
+```
+
+Use `--cases full` for the record-worthy run.  Without `ab`, the same thing is
+three commands (`run` with the tree in state A, `run` in state B, `compare`) —
+`ab` exists so that a mis-ordered checkout cannot silently compare a state
+against itself: it resolves both refs, refuses if they are the same commit, and
+reports per state how many operator files actually differed.
+
 ## Timing modes
 
 `--measure-mode` (default `npu-graph`):
