@@ -48,6 +48,20 @@ except Exception:  # pragma: no cover
 _LARGE = 3.4028234663852886e38
 _META_BLOCK = 128
 
+# Projection tiling, measured on Ascend910B4 (all bit-exact vs. the non-CommonIR
+# counterpart).  BM/BN/BK = 128/128/128 leaves L1 at 25% and was 5.234 ms on
+# prefill0_b2_rank3; BN=256 (the lever: it halves the A-tile reloads) with
+# BK=256 gives 3.547 ms (-31.5%).  BK alone does not help - matching the
+# counterpart's BK=512 at BN=128 recovers only 11% because that already fills
+# L1.  L0C (128 KiB) caps the fp32 accumulator at BM*BN <= 32768, so BN=512
+# needs BM=64 (5% better again, but it regresses the small shapes).  Below
+# ~2k tokens the 128-wide tile still measured better, which mirrors the
+# counterpart's own `block_n = 256 if wide_projection else 128` rule.
+_PROJ_BM_MAX = 128
+_PROJ_BN = 256
+_PROJ_BK = 256
+_PROJ_WIDE_MIN_TOKENS = 2048
+
 
 # --------------------------------------------------------------------------- #
 # Kernel 0: per-token gather metadata (mirrors _cache_block_id)
@@ -350,7 +364,7 @@ def run(
     # hence the descending fallbacks.
     token_cap = max(total_tokens, 1)
     if token_cap >= 128:
-        bm = 128
+        bm = _PROJ_BM_MAX
         masked = False
         tbase = total_tokens - bm
     elif token_cap >= 64:
@@ -380,12 +394,12 @@ def run(
     )
 
     # ---- kernel 1: projection + scatter (two constexpr halves) ----
-    bn = 128
+    bn = _PROJ_BN if total_tokens >= _PROJ_WIDE_MIN_TOKENS else min(_PROJ_BN, 128)
     while bn > 16 and proj_dim % bn:
         bn >>= 1
     if proj_dim % bn:
         raise ValueError("projection width is not tileable")
-    bk = 128
+    bk = _PROJ_BK
     while bk > 16 and hidden % bk:
         bk >>= 1
     if hidden % bk:
