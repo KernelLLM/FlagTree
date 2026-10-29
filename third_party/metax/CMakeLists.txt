@@ -4,7 +4,18 @@ target_sources(TritonTools PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/spec_cpp/lib/Tools/SwizzleDumpUtils.cpp
 )
 
+# Shared by early CommonIR planning and the final async-copy legalizer.
+add_triton_library(MetaxAsyncCopyUtils
+  plugin/lib/TritonMETAXGPUTransforms/AsyncCopyUtils.cpp
+  LINK_LIBS PUBLIC TritonGPUIR TritonAnalysis TritonTools
+)
+target_include_directories(MetaxAsyncCopyUtils PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/plugin/include)
+
 if(FLAGTREE_COMMON_IR_ENABLED)
+  # Layout hint metadata access is header-only; no dependency on propagation.
+  target_include_directories(TritonGPUIR PRIVATE
+    ${PROJECT_SOURCE_DIR}/third_party/flir/include)
   add_subdirectory(spec_cpp/include/triton/Conversion/CommonIRToTTGIR
     ${PROJECT_BINARY_DIR}/include/triton/Conversion/CommonIRToTTGIR)
   add_subdirectory(spec_cpp/lib/Conversion/CommonIRToTTGIR)

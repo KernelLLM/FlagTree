@@ -30,21 +30,48 @@ def CommonIRLowerTensorTiles
                            "mlir::triton::tile::CommonIRDialect"];
 }
 
-def CommonIRApplyLayoutPlan
-    : Pass<"commonir-apply-layout-plan", "mlir::ModuleOp"> {
-  let summary = "apply joint dot, memory and shared-load layout requirements";
+def CommonIRPlanSharedLayouts
+    : Pass<"commonir-plan-shared-layouts", "mlir::ModuleOp"> {
+  let summary = "plan shared buffers for already assigned MMA operands";
   let description = [{
-    Collects and validates a selected candidate without modifying the IR, then
-    uses a shared CommonIR plan to rewrite producers, loop carriers and layout
-    conversions. Logical tensor tiles remain available until the subsequent
-    CommonIRLowerTensorTiles pass. With no supplied candidate, consumes only
-    existing MMA layouts and memory requirements; it does not select new MMAs.
+    Uses existing MMA operands and writer continuity to choose shared layouts
+    for ordinary FP16/BF16 local loads. Updates allocations and their views,
+    preserving explicit shared layouts. Runs after Coalesce and before tensor
+    layout propagation; it does not select MMAs or rewrite register layouts.
+  }];
+  let dependentDialects = ["mlir::triton::TritonDialect",
+                           "mlir::triton::gpu::TritonGPUDialect"];
+}
+
+def CommonIRPropagateLayouts
+    : Pass<"commonir-propagate-layouts", "mlir::ModuleOp"> {
+  let summary = "reconcile memory layouts through logical tensor views";
+  let description = [{
+    Collects legal async-copy operands and the coalesced layouts of ordinary
+    loads feeding shared stores. Uses CommonIR tensor propagation to reconcile
+    these requirements through addresses, logical tiles, transposes and loops.
+    Preserves explicit tensor constraints and shared layouts, leaving conversions
+    at incompatible boundaries. Runs after Coalesce and shared planning, before
+    CommonIRLowerTensorTiles; it does not select MMAs or move global loads.
+  }];
+  let dependentDialects = ["mlir::arith::ArithDialect", "mlir::scf::SCFDialect",
+                           "mlir::triton::TritonDialect",
+                           "mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::tile::CommonIRDialect"];
+}
+
+def CommonIRPrepareBsmLayouts
+    : Pass<"commonir-prepare-bsm-layouts", "mlir::ModuleOp"> {
+  let summary = "prepare MetaX split-load/BSM dot and shared layouts";
+  let description = [{
+    Derives a default MMA for dots fed by a split local_load and bsm_perm,
+    plans their shared buffer views, and assigns the matching register layouts.
+    Runs before AccelerateMatmul; ordinary dots keep the existing selector.
   }];
   let options =
       [Option<"computeCapability", "compute-capability", "int32_t", "80",
-              "target compute capability for candidate validation">,
-       Option<"numWarps", "num-warps", "int32_t", "4", "warps per CTA">,
-  ];
+              "target compute capability">,
+       Option<"numWarps", "num-warps", "int32_t", "4", "warps per CTA">];
   let dependentDialects = ["mlir::arith::ArithDialect", "mlir::scf::SCFDialect",
                            "mlir::triton::TritonDialect",
                            "mlir::triton::gpu::TritonGPUDialect"];

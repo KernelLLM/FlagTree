@@ -1,13 +1,11 @@
 // MIT License
 // Copyright (c) 2026 The FlagOS Contributors
+#include "TritonMETAXGPUTransforms/AsyncCopyUtils.h"
 #include "mlir-ext/Dialect/CommonIR/Analysis/AxisInfoExt.h"
 #include "mlir/IR/Matchers.h"
 #include "triton/Analysis/AxisInfo.h"
 #include "triton/Conversion/CommonIRToTTGIR/LayoutRules.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
-#include "triton/Dialect/TritonGPU/IR/LinearLayoutConversions.h"
-#include "triton/Tools/LayoutUtils.h"
-#include "llvm/ADT/DenseSet.h"
 
 namespace mlir::triton::metax {
 namespace ttg = mlir::triton::gpu;
@@ -109,39 +107,9 @@ FailureOr<Attribute> inferSharedEncoding(ttg::LocalLoadOp load,
       type.getElementType(), /*needTrans=*/false));
 }
 
-bool isLegalCopyMapping(RankedTensorType source, ttg::MemDescType destination,
-                        unsigned width) {
-  auto shared =
-      cast<ttg::SwizzledSharedEncodingAttr>(destination.getEncoding());
-  auto plain = ttg::SwizzledSharedEncodingAttr::get(
-      source.getContext(), shared.getVec(), 1, 1, shared.getOrder(),
-      shared.getCTALayout());
-  auto plainType = ttg::MemDescType::get(
-      destination.getShape(), destination.getElementType(), plain,
-      destination.getMemorySpace(), destination.getMutableMemory(),
-      destination.getAllocShape());
-  auto src = ttg::toLinearLayout(source);
-  src = actionRemoveBroadcastedRegs(src).apply(src);
-  auto free = src.getFreeVariableMasks();
-  auto name = [&](StringRef str) {
-    return StringAttr::get(source.getContext(), str);
-  };
-  // This first path requires one physical issuer for every element.
-  for (StringRef dim : {"lane", "warp", "block"})
-    if (free.lookup(name(dim)))
-      return false;
-  auto conversion = src.invertAndCompose(ttg::toLinearLayout(plainType));
-  if (!conversion.isTrivialOver({name("block")}))
-    return false;
-  conversion = conversion.sublayout(
-      {name("register"), name("lane"), name("warp")}, {name("offset")});
-  return conversion.isInjective() && conversion.isSurjective() &&
-         conversion.getNumConsecutiveInOut() >= width;
-}
-
-LogicalResult collectSharedCopyRequirement(
+LogicalResult checkSharedCopy(
     ttg::AsyncCopyGlobalToLocalOp copy, ttg::MemDescType destination,
-    ModuleAxisInfoAnalysis &axisInfo, TensorLayoutRequirements &requirements) {
+    ModuleAxisInfoAnalysis &axisInfo) {
   auto shared =
       dyn_cast<ttg::SwizzledSharedEncodingAttr>(destination.getEncoding());
   auto source = copy.getSrc().getType();
@@ -152,10 +120,7 @@ LogicalResult collectSharedCopyRequirement(
         "automatic shared layout requires a rank-2 async copy");
   unsigned dim = shared.getOrder().front();
   unsigned elemBytes = destination.getElementType().getIntOrFloatBitWidth() / 8;
-  unsigned contiguous = std::min<int64_t>(
-      info->getContiguity(dim), info->getDivisibility(dim) / elemBytes);
-  if (shared.getMaxPhase() > 1)
-    contiguous = std::min(contiguous, shared.getVec());
+  unsigned maxVec = 16 / elemBytes;
   if (Value mask = copy.getMask()) {
     auto maskInfo = axisInfo.getAxisInfo(mask);
     if (!maskInfo)
@@ -166,7 +131,7 @@ LogicalResult collectSharedCopyRequirement(
         maskInfo->getConstancy(dim) < source.getShape()[dim])
       return copy.emitError("automatic swizzled shared layout requires an "
                             "async-copy mask uniform along the swizzled axis");
-    contiguous = std::min<int64_t>(contiguous, maskInfo->getConstancy(dim));
+    maxVec = std::min<int64_t>(maxVec, maskInfo->getConstancy(dim));
   }
   if (Value other = copy.getOther()) {
     while (auto convert = other.getDefiningOp<ttg::ConvertLayoutOp>())
@@ -175,32 +140,12 @@ LogicalResult collectSharedCopyRequirement(
         !matchPattern(other, m_PosZeroFloat()))
       return copy.emitError("MetaX async copy requires zero fill");
   }
-  for (unsigned bytes : {16u, 8u, 4u}) {
-    if (bytes % elemBytes || bytes / elemBytes > contiguous)
-      continue;
-    unsigned width = bytes / elemBytes;
-    SmallVector<unsigned> sizePerThread(2, 1);
-    sizePerThread[dim] = width;
-    auto encoding = ttg::BlockedEncodingAttr::get(
-        copy.getContext(), source.getShape(), sizePerThread, shared.getOrder(),
-        ttg::lookupNumWarps(copy),
-        ttg::TritonGPUDialect::getThreadsPerWarp(
-            copy->getParentOfType<ModuleOp>()),
-        1);
-    if (!isLegalCopyMapping(source.cloneWithEncoding(encoding), destination,
-                            width))
-      continue;
-    // Replace the generic coalescing requirement for these exact ports.
-    for (OpOperand &operand : copy->getOpOperands()) {
-      if (!isa<RankedTensorType>(operand.get().getType()))
-        continue;
-      llvm::erase_if(requirements.uses, [&](auto requirement) {
-        return requirement.use == &operand;
-      });
-      requirements.uses.push_back({&operand, encoding});
-    }
+  // Validate the proposed shared type without prescribing a tensor layout.
+  // Keep this planner's 16/8/4-byte policy; propagation chooses the source later.
+  if (METAX::chooseAsyncCopyLayout(source, destination, info,
+                                  /*minVec=*/std::max(4 / elemBytes, 1u),
+                                  maxVec))
     return success();
-  }
   return copy.emitError("no legal 16/8/4-byte async copy for the selected "
                         "shared layout and proven address continuity");
 }
@@ -208,10 +153,10 @@ LogicalResult collectSharedCopyRequirement(
 
 FailureOr<tile::BufferLayoutPlan>
 planSharedLayouts(ModuleOp module, ArrayRef<DotLayoutChoice> choices,
-                  TensorLayoutRequirements &requirements) {
+                  const TensorLayoutRequirements &writerPreferences) {
   TTGIRBufferLayoutAdapter buffers;
   TTGIRLayoutAdapter tensors;
-  auto writerOrders = collectWriterOrders(module, requirements, buffers);
+  auto writerOrders = collectWriterOrders(module, writerPreferences, buffers);
   SmallVector<tile::BufferLayoutRequirement> sharedRequirements;
   for (auto [dot, plan] : choices) {
     for (unsigned index : {0u, 1u}) {
@@ -258,8 +203,7 @@ planSharedLayouts(ModuleOp module, ArrayRef<DotLayoutChoice> choices,
       return failure();
     }
     if (auto copy = dyn_cast<ttg::AsyncCopyGlobalToLocalOp>(op)) {
-      if (failed(collectSharedCopyRequirement(copy, shared, axisInfo,
-                                              requirements)))
+      if (failed(checkSharedCopy(copy, shared, axisInfo)))
         return failure();
     } else if (auto load = dyn_cast<ttg::LocalLoadOp>(op)) {
       if (load.getMmaMode() != -1 ||

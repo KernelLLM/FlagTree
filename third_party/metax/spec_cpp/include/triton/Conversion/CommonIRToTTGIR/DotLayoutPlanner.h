@@ -29,6 +29,10 @@ struct DotLayoutPlan {
 FailureOr<SmallVector<DotLayoutPlan>>
 generateDotLayoutPlans(triton::DotOp dot, int computeCapability, int numWarps);
 
+// Validate a fixed plan without requiring already encoded TTGIR operands.
+LogicalResult validateDotLayoutPlan(triton::DotOp dot, const DotLayoutPlan &plan,
+                                    int computeCapability, int numWarps);
+
 struct DotLayoutDomain {
   triton::DotOp dot;
   std::string functionName;
@@ -41,12 +45,11 @@ struct DotLayoutChoice {
   DotLayoutPlan plan;
 };
 
-// Validate the supplied per-dot geometry and encodings without regenerating
-// domains. Layout application checks BSM hardware and use constraints before
-// modifying any IR.
-FailureOr<SmallVector<DotLayoutChoice>>
-selectDotLayouts(ModuleOp module, int capability, int numWarps,
-                 const llvm::StringMap<DotLayoutPlan> &selection);
+// Validate every choice before inserting A/B/result set_layout anchors in
+// unencoded TTIR. Tensor types and the original module's dot IDs are preserved.
+LogicalResult insertDotLayoutHints(
+    ModuleOp module, int capability, int numWarps,
+    const llvm::StringMap<DotLayoutPlan> &selection);
 
 // Read-only module query. Dots are visited in preorder, numbered separately
 // within each function. These coordinates identify the current IR snapshot,

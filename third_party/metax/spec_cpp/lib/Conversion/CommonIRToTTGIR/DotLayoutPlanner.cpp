@@ -3,6 +3,7 @@
 // Copyright (c) 2025 The FlagOS Contributors
 
 #include "triton/Conversion/CommonIRToTTGIR/DotLayoutPlanner.h"
+#include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 #include "triton/Conversion/CommonIRToTTGIR/BsmLayout.h"
 
 #include "triton/Analysis/Utility.h"
@@ -243,6 +244,29 @@ getDotLayoutConstraints(tt::DotOp dot, int computeCapability, int numWarps) {
   return DotLayoutConstraints{m, n, k, nativeK, supportsColMajor, *bsmB};
 }
 
+bool matchesExplicitDotHints(tt::DotOp dot, const DotLayoutPlan &plan) {
+  auto matches = [](Value value, Attribute expected) {
+    auto hint = value.getDefiningOp<tile::SetLayoutOp>();
+    if (!hint)
+      return true;
+    Attribute layout = hint.getLayout();
+    // A blocked producer may feed a dot through a layout conversion. Only
+    // explicit MMA/dot-operand anchors constrain the candidate's dot ports.
+    return !isa<ttg::MACAMmaEncodingAttr, ttg::DotOperandEncodingAttr>(layout) ||
+           layout == expected;
+  };
+  if (!matches(dot.getA(), plan.operandA) ||
+      !matches(dot.getB(), plan.operandB) || !matches(dot.getC(), plan.mma))
+    return false;
+  for (Operation *user : dot.getResult().getUsers()) {
+    auto hint = dyn_cast<tile::SetLayoutOp>(user);
+    if (hint && isa<ttg::MACAMmaEncodingAttr>(hint.getLayout()) &&
+        hint.getLayout() != plan.mma)
+      return false;
+  }
+  return true;
+}
+
 // Enumeration and application must use the same function-local dot IDs.
 FailureOr<SmallVector<DotLayoutDomain>> collectDots(ModuleOp module) {
   SmallVector<DotLayoutDomain> domains;
@@ -265,6 +289,16 @@ FailureOr<SmallVector<DotLayoutDomain>> collectDots(ModuleOp module) {
 }
 
 } // namespace
+
+LogicalResult validateDotLayoutPlan(tt::DotOp dot, const DotLayoutPlan &plan,
+                                    int computeCapability, int numWarps) {
+  auto constraints = getDotLayoutConstraints(dot, computeCapability, numWarps);
+  if (failed(constraints))
+    return failure();
+  if (!isPlanValid(dot, plan, *constraints, computeCapability, numWarps))
+    return dot.emitError("MMA layout is not legal for this dot and target");
+  return success();
+}
 
 FailureOr<SmallVector<DotLayoutPlan>>
 generateDotLayoutPlans(tt::DotOp dot, int computeCapability, int numWarps) {
@@ -373,61 +407,70 @@ enumerateDotLayoutPlans(ModuleOp module, int computeCapability, int numWarps) {
         generateDotLayoutPlans(domain.dot, computeCapability, numWarps);
     if (failed(plans))
       return failure();
+    llvm::erase_if(*plans, [&](const DotLayoutPlan &plan) {
+      return !matchesExplicitDotHints(domain.dot, plan);
+    });
+    if (plans->empty()) {
+      domain.dot.emitError(
+          "no dot layout candidate matches explicit set_layout requirements");
+      return failure();
+    }
     domain.plans = std::move(*plans);
   }
   return domains;
 }
 
-FailureOr<SmallVector<DotLayoutChoice>>
-selectDotLayouts(ModuleOp module, int computeCapability, int numWarps,
-                 const llvm::StringMap<DotLayoutPlan> &selectedPlans) {
-  auto moduleWarps = module->getAttrOfType<IntegerAttr>(ttg::AttrNumWarpsName);
-  if (!moduleWarps || moduleWarps.getInt() != numWarps) {
-    module.emitError("dot plan injection requires prepared TTGIR with the "
-                     "requested warp count");
-    return failure();
-  }
+LogicalResult insertDotLayoutHints(
+    ModuleOp module, int capability, int numWarps,
+    const llvm::StringMap<DotLayoutPlan> &selection) {
   auto domains = collectDots(module);
   if (failed(domains))
     return failure();
-  if (selectedPlans.size() != domains->size()) {
-    module.emitError("candidate must select exactly one plan for every dot");
-    return failure();
-  }
+  if (selection.size() != domains->size())
+    return module.emitError(
+        "candidate must select exactly one plan for every dot");
 
   SmallVector<DotLayoutChoice> choices;
   for (const auto &domain : *domains) {
     auto dot = domain.dot;
-    for (Value value : {dot.getA(), dot.getB(), dot.getC(), dot.getD()}) {
-      if (!cast<RankedTensorType>(value.getType()).getEncoding()) {
-        dot.emitError("dot plan injection requires encoded TTGIR tensors");
-        return failure();
-      }
-    }
-    if (isa<ttg::MACAMmaEncodingAttr>(dot.getType().getEncoding())) {
-      dot.emitError("dot layout plan has already been injected");
+    for (Value value : {dot.getA(), dot.getB(), dot.getC(), dot.getD()})
+      if (cast<RankedTensorType>(value.getType()).getEncoding())
+        return dot.emitError(
+            "layout hint injection requires unencoded TTIR tensors");
+    std::string id = domain.functionName + "/dot/" +
+                     std::to_string(domain.dotIndex);
+    auto selected = selection.find(id);
+    if (selected == selection.end())
+      return dot.emitError("candidate is missing a plan for ") << id;
+    const auto &plan = selected->second;
+    if (failed(validateDotLayoutPlan(dot, plan, capability, numWarps)))
       return failure();
-    }
-    std::string dotId =
-        domain.functionName + "/dot/" + std::to_string(domain.dotIndex);
-    auto it = selectedPlans.find(dotId);
-    if (it == selectedPlans.end()) {
-      dot.emitError("candidate is missing a plan for ") << dotId;
-      return failure();
-    }
-    const auto &choice = it->second;
-    auto constraints =
-        getDotLayoutConstraints(dot, computeCapability, numWarps);
-    if (failed(constraints))
-      return failure();
-    if (!isPlanValid(dot, choice, *constraints, computeCapability, numWarps)) {
-      dot.emitError("selected layout is not a legal enumerated plan for ")
-          << dotId;
-      return failure();
-    }
-    choices.push_back({dot, choice});
+    if (!matchesExplicitDotHints(dot, plan))
+      return dot.emitError(
+          "candidate conflicts with explicit set_layout requirements");
+    choices.push_back({dot, plan});
   }
-  return choices;
+
+  // Validate the complete selection before mutating any dot. Clones share the
+  // same snapshot and context, so the function-local IDs still identify them.
+  for (auto [dot, plan] : choices) {
+    OpBuilder builder(dot);
+    for (auto [index, encoding] :
+         llvm::enumerate(SmallVector<Attribute>{plan.operandA, plan.operandB})) {
+      Value source = dot->getOperand(index);
+      auto existing = source.getDefiningOp<tile::SetLayoutOp>();
+      if (existing && existing.getLayout() == encoding)
+        continue;
+      auto hint = builder.create<tile::SetLayoutOp>(
+          dot.getLoc(), source.getType(), source, encoding);
+      dot->setOperand(index, hint.getResult());
+    }
+    builder.setInsertionPointAfter(dot);
+    auto hint = builder.create<tile::SetLayoutOp>(
+        dot.getLoc(), dot.getType(), dot.getResult(), plan.mma);
+    dot.getResult().replaceAllUsesExcept(hint.getResult(), hint);
+  }
+  return success();
 }
 
 std::string getDotLayoutPlanId(const DotLayoutPlan &plan) {

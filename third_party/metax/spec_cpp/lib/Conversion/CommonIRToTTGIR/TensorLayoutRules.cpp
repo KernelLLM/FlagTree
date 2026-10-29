@@ -1,9 +1,12 @@
 #include "mlir-ext/Dialect/CommonIR/Analysis/AxisInfoExt.h"
+#include "TritonMETAXGPUTransforms/AsyncCopyUtils.h"
 #include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
+#include "mlir-ext/Dialect/CommonIR/IR/LayoutHintAttrs.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "triton/Conversion/CommonIRToTTGIR/LayoutRules.h"
+#include "triton/Conversion/CommonIRToTTGIR/TensorOps.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/Transforms/CoalesceUtils.h"
@@ -13,9 +16,21 @@
 namespace mlir::triton::metax {
 namespace ttg = mlir::triton::gpu;
 
+bool TTGIRLayoutAdapter::canChangeEncoding(Value value,
+                                          Attribute encoding) const {
+  auto fixed = tile::getExplicitValueEncoding(value);
+  return !fixed || fixed == encoding;
+}
+
 Value TTGIRLayoutAdapter::getConversionSource(Value value) const {
-  if (auto op = value.getDefiningOp<ttg::ConvertLayoutOp>())
+  if (auto op = value.getDefiningOp<ttg::ConvertLayoutOp>()) {
+    // A fixed producer may serve different dot ports through conversions.
+    // Do not merge those ports into one shared-layout requirement.
+    if (auto explicitEncoding = tile::getExplicitValueEncoding(op.getSrc()))
+      if (explicitEncoding != op.getType().getEncoding())
+        return {};
     return op.getSrc();
+  }
   return {};
 }
 
@@ -26,7 +41,7 @@ Attribute TTGIRLayoutAdapter::inferOperandEncoding(Operation *op,
   if (isa<triton::MakeRangeOp, triton::SplatOp, triton::BroadcastOp>(op))
     return encoding;
   if (isa<tile::ExtractTileOp, tile::InsertTileOp>(op))
-    return isa<ttg::BlockedEncodingAttr>(encoding) ? encoding : Attribute{};
+    return canLowerTensorTileInEncoding(op, encoding) ? encoding : Attribute{};
   // Rematerialize only address/mask arithmetic and simple tensor views.
   // Loads and other operations with effects remain conversion boundaries.
   bool arithmetic = op->getName().getDialectNamespace() == "arith" &&
@@ -62,6 +77,16 @@ Value TTGIRLayoutAdapter::convertLayout(Value value, RankedTensorType type,
 }
 
 namespace {
+ttg::BlockedEncodingAttr getCopyCoalescedPreference(
+    ModuleOp module, ttg::AsyncCopyGlobalToLocalOp copy,
+    ModuleAxisInfoAnalysis &axisInfo) {
+  auto type = copy.getSrc().getType();
+  return ttg::buildCoalescedEncoding(
+      module.getContext(), axisInfo, copy, ttg::lookupNumWarps(copy),
+      ttg::TritonGPUDialect::getThreadsPerWarp(module),
+      ttg::getCTALayout(type.getEncoding()), ttg::getShapePerCTA(type));
+}
+
 bool comesFromLogicalTile(Value value) {
   // Coalesce may already have placed a conversion immediately after the tile.
   while (auto convert = value.getDefiningOp<ttg::ConvertLayoutOp>())
@@ -90,8 +115,8 @@ void eraseDeadProducers(ModuleOp module) {
 
 } // namespace
 
-void collectCopyLayoutRequirements(ModuleOp module,
-                                   TensorLayoutRequirements &requirements) {
+void collectCopyWriterPreferences(ModuleOp module,
+                                  TensorLayoutRequirements &preferences) {
   SmallVector<ttg::AsyncCopyGlobalToLocalOp> copies;
   module.walk([&](ttg::AsyncCopyGlobalToLocalOp copy) {
     if (comesFromLogicalTile(copy.getSrc()))
@@ -101,11 +126,43 @@ void collectCopyLayoutRequirements(ModuleOp module,
     return;
   ModuleAxisInfoAnalysis axisInfo(module, tile::addCommonIRAxisInfoVisitors);
   for (auto copy : copies) {
-    auto type = cast<RankedTensorType>(copy.getSrc().getType());
-    auto encoding = ttg::buildCoalescedEncoding(
-        module.getContext(), axisInfo, copy, ttg::lookupNumWarps(copy),
-        ttg::TritonGPUDialect::getThreadsPerWarp(module),
-        ttg::getCTALayout(type.getEncoding()), ttg::getShapePerCTA(type));
+    auto preferred = getCopyCoalescedPreference(module, copy, axisInfo);
+    for (OpOperand &operand : copy->getOpOperands())
+      if (isa<RankedTensorType>(operand.get().getType()))
+        preferences.uses.push_back({&operand, preferred});
+  }
+}
+
+void collectLegalCopyLayoutRequirements(
+    ModuleOp module, TensorLayoutRequirements &requirements) {
+  SmallVector<ttg::AsyncCopyGlobalToLocalOp> copies;
+  module.walk([&](ttg::AsyncCopyGlobalToLocalOp copy) {
+    if (!comesFromLogicalTile(copy.getSrc()))
+      return;
+    // Explicit copy ports remain untouched here. The final legalizer can
+    // convert at the use without changing the user's producer layout.
+    if (tile::getExplicitMemoryEncoding(copy) ||
+        llvm::any_of(copy->getOperands(), [](Value value) {
+          return bool(tile::getExplicitValueEncoding(value));
+        }))
+      return;
+    if (isa<ttg::BlockedEncodingAttr>(copy.getSrc().getType().getEncoding()) &&
+        isa<ttg::SwizzledSharedEncodingAttr>(
+            copy.getResult().getType().getEncoding()))
+      copies.push_back(copy);
+  });
+  if (copies.empty())
+    return;
+
+  ModuleAxisInfoAnalysis axisInfo(module, tile::addCommonIRAxisInfoVisitors);
+  for (auto copy : copies) {
+    auto type = copy.getSrc().getType();
+    auto preferred = getCopyCoalescedPreference(module, copy, axisInfo);
+    auto encoding = METAX::chooseAsyncCopyLayout(
+        type.cloneWithEncoding(preferred), copy.getResult().getType(),
+        axisInfo.getAxisInfo(copy.getSrc()));
+    if (!encoding)
+      continue; // Leave unsupported cases to the final legalizer's diagnostics.
     for (OpOperand &operand : copy->getOpOperands())
       if (isa<RankedTensorType>(operand.get().getType()))
         requirements.uses.push_back({&operand, encoding});

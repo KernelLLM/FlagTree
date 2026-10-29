@@ -22,8 +22,10 @@ FailureOr<std::optional<BsmLayoutChain>> getBsmLayoutChain(Value operand);
 
 // Shared by candidate enumeration and layout application. Returns a reason when
 // the native split LDS / BSM lowering cannot implement this B encoding.
+// An optional planned shared type permits validation before rewriting buffers.
 std::optional<std::string> checkBsmLayout(BsmLayoutChain chain,
-                                          Attribute encoding);
+                                         Attribute encoding,
+                                         gpu::MemDescType shared = {});
 
 } // namespace mlir::triton::metax
 
