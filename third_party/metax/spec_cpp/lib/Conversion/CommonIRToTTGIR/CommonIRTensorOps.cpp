@@ -1,11 +1,14 @@
 #include "triton/Conversion/CommonIRToTTGIR/Passes.h"
 #include "triton/Conversion/CommonIRToTTGIR/TensorOps.h"
 
+#include "mlir-ext/Conversion/CommonIRToTritonGPU/Patterns.h"
 #include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
+#include "mlir-ext/Dialect/CommonIR/IR/LayoutHintAttrs.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/Matchers.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/IR/LinearLayoutConversions.h"
+#include "triton/Dialect/TritonGPU/Transforms/Utility.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/CheckedArithmetic.h"
 
@@ -21,19 +24,16 @@ namespace {
 
 namespace ttg = mlir::triton::gpu;
 
-// Preserve the logical ops while TTIR -> TTGIR assigns their external layouts.
-// Physical register selection is handled by the separate lowering pass below.
-template <typename Op> struct TensorTileTypePattern : OpConversionPattern<Op> {
-  using OpConversionPattern<Op>::OpConversionPattern;
+// Boundary conversions can consume values that have no encoding in TTIR yet.
+struct LayoutConversionPattern : OpConversionPattern<ttg::ConvertLayoutOp> {
+  using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult
-  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto fullTy = cast<RankedTensorType>(adaptor.getOperands()[0].getType());
-    auto resultTy = cast<RankedTensorType>(op.getResult().getType())
-                        .cloneWithEncoding(fullTy.getEncoding());
-    rewriter.template replaceOpWithNewOp<Op>(
-        op, TypeRange{resultTy}, adaptor.getOperands(), op->getAttrs());
+  LogicalResult matchAndRewrite(ttg::ConvertLayoutOp op, OpAdaptor adaptor,
+                                ConversionPatternRewriter &rewriter) const override {
+    auto attrs = op->getAttrs();
+    auto converted = rewriter.replaceOpWithNewOp<ttg::ConvertLayoutOp>(
+        op, getTypeConverter()->convertType(op.getType()), adaptor.getSrc());
+    converted->setAttrs(attrs);
     return success();
   }
 };
@@ -231,12 +231,8 @@ static FailureOr<TensorTilePlan> planTile(Operation *op) {
                                            ? op->getResult(0).getType()
                                            : op->getOperand(1).getType());
   Attribute encoding = fullTy.getEncoding();
-  if (!isa_and_nonnull<ttg::BlockedEncodingAttr, ttg::MACAMmaEncodingAttr>(
-          encoding) ||
-      !isa_and_nonnull<ttg::BlockedEncodingAttr, ttg::MACAMmaEncodingAttr>(
-          tileTy.getEncoding()))
-    return op->emitError(
-        "tensor tile lowering requires blocked or MACA MMA layouts");
+  // Public layouts need not support native register slicing. Validate the
+  // internal layout in planForEncoding and convert at the op boundaries.
   auto module = op->getParentOfType<ModuleOp>();
   if (isa<ttg::MACAMmaEncodingAttr>(encoding))
     if (auto direct = planForEncoding(op, fullTy, tileTy, *tileIndex, encoding);
@@ -327,6 +323,11 @@ struct CommonIRLowerTensorTilesPass
       replacement =
           convertLayout(builder, loc, replacement,
                         cast<RankedTensorType>(op->getResult(0).getType()));
+      // Only transfer a hint that still describes the logical result type.
+      if (auto encoding = tile::getExplicitResultEncoding(op, 0);
+          encoding && encoding == cast<RankedTensorType>(replacement.getType())
+                                      .getEncoding())
+        tile::setExplicitResultEncoding(cast<OpResult>(replacement), encoding);
       op->getResult(0).replaceAllUsesWith(replacement);
       op->erase();
     }
@@ -352,10 +353,10 @@ bool canLowerTensorTileInEncoding(Operation *op, Attribute encoding) {
 void populateCommonIRTensorPatternsAndLegality(TypeConverter &typeConverter,
                                                RewritePatternSet &patterns,
                                                ConversionTarget &target) {
-  patterns.add<TensorTileTypePattern<tile::ExtractTileOp>,
-               TensorTileTypePattern<tile::InsertTileOp>>(
-      typeConverter, patterns.getContext());
-  target.addDynamicallyLegalOp<tile::ExtractTileOp, tile::InsertTileOp>(
+  tile::populateSetLayoutToTritonGPUPatterns(typeConverter, patterns, target);
+  patterns.add<LayoutConversionPattern>(typeConverter, patterns.getContext());
+  tile::populateTensorTileTypePatterns(typeConverter, patterns, target);
+  target.addDynamicallyLegalOp<ttg::ConvertLayoutOp>(
       [&typeConverter](Operation *op) { return typeConverter.isLegal(op); });
 }
 

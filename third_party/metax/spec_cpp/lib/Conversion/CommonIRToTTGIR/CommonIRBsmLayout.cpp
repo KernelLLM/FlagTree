@@ -2,6 +2,7 @@
 // Copyright (c) 2026 The FlagOS Contributors
 
 #include "triton/Conversion/CommonIRToTTGIR/BsmLayout.h"
+#include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
 #include "triton/Conversion/CommonIRToTTGIR/LayoutRules.h"
 #include "triton/Dialect/TritonGPU/IR/LinearLayoutConversions.h"
 #include "triton/Tools/LayoutUtils.h"
@@ -19,9 +20,15 @@ namespace ttg = mlir::triton::gpu;
 FailureOr<std::optional<BsmLayoutChain>> getBsmLayoutChain(Value operand) {
   BsmLayoutChain chain;
   auto skipConversions = [&](Value value) {
-    while (auto cvt = value.getDefiningOp<ttg::ConvertLayoutOp>()) {
-      chain.conversions.push_back(cvt);
-      value = cvt.getSrc();
+    while (true) {
+      if (auto cvt = value.getDefiningOp<ttg::ConvertLayoutOp>()) {
+        chain.conversions.push_back(cvt);
+        value = cvt.getSrc();
+      } else if (auto hint = value.getDefiningOp<tile::SetLayoutOp>()) {
+        value = hint.getSource();
+      } else {
+        break;
+      }
     }
     return value;
   };
@@ -75,8 +82,8 @@ std::optional<BsmMapping> getBsmMapping(unsigned n, unsigned k) {
 }
 
 // Mirror the address-only part of lowerLocalLdswithoutPerm. In addition to
-// avoiding its fallback/assertion paths, prove that its hard-coded v2i32 loads
-// and +512-element offset produce the selected logical B layout after BSM.
+// avoiding its fallback/assertion paths, prove that its v2i32 loads produce
+// the selected logical B layout after BSM.
 bool checkSplitLoadAddresses(LinearLayout cvt, ttg::MemDescType shared,
                              unsigned elementsN, const BsmMapping &mapping) {
   auto *ctx = shared.getContext();
@@ -120,8 +127,14 @@ bool checkSplitLoadAddresses(LinearLayout cvt, ttg::MemDescType shared,
                          reps.getOutDims(), false);
   // Full buffers and slot views have no offset bits within this rank-2 shape.
   auto [additive, strides] = actionAdditiveStrides(reps, addresses, 0);
-  if (!strides.isIdentity() || additive < 4 * vec || additive > kBsmSlots ||
+  if (!strides.isIdentity() || additive <= kBsmSlots / 2 ||
+      additive < 4 * vec || additive > kBsmSlots ||
       kBsmSlots % additive)
+    return false;
+  int32_t upperOffset =
+      reps.apply({{reg, kBsmSlots / 2}, {lane, 0}, {warp, 0}})[0].second;
+  // The native split-LDS lowering still uses a fixed 512-element offset.
+  if (upperOffset != 512)
     return false;
 
   for (int w = 0; w < cvt.getInDimSize(warp); ++w) {
@@ -143,7 +156,8 @@ bool checkSplitLoadAddresses(LinearLayout cvt, ttg::MemDescType shared,
                                    upper * (kBsmSlots / 2);
                   if (index >= kBsmSlots || raw[index] != -1)
                     return false;
-                  raw[index] = inner + 2 * v + second * columns + upper * 512;
+                  raw[index] =
+                      inner + 2 * v + second * columns + upper * upperOffset;
                 }
               }
             }
@@ -165,7 +179,8 @@ bool checkSplitLoadAddresses(LinearLayout cvt, ttg::MemDescType shared,
 } // namespace
 
 std::optional<std::string> checkBsmLayout(BsmLayoutChain chain,
-                                          Attribute encoding) {
+                                         Attribute encoding,
+                                         ttg::MemDescType shared) {
   auto dot = dyn_cast_or_null<ttg::DotOperandEncodingAttr>(encoding);
   auto mma =
       dot ? dyn_cast<ttg::MACAMmaEncodingAttr>(dot.getParent()) : nullptr;
@@ -176,7 +191,8 @@ std::optional<std::string> checkBsmLayout(BsmLayoutChain chain,
     return "BSM split load is disabled by TRITON_DISABLE_SPLIT_PERM";
   auto raw = cast<RankedTensorType>(chain.load.getType());
   auto result = cast<RankedTensorType>(chain.perm.getType());
-  auto shared = cast<ttg::MemDescType>(chain.load.getSrc().getType());
+  if (!shared)
+    shared = cast<ttg::MemDescType>(chain.load.getSrc().getType());
   if (raw.getRank() != 2 || result.getRank() != 2 || shared.getRank() != 2 ||
       raw.getShape() != result.getShape() ||
       raw.getShape() != shared.getShape() ||
@@ -206,13 +222,15 @@ std::optional<std::string> checkBsmLayout(BsmLayoutChain chain,
   if (!checkSplitLoadAddresses(
           rawLayout.invertAndCompose(ttg::toLinearLayout(shared)), shared,
           elements[1], *mapping))
-    return "split LDS addresses do not implement the selected BSM layout";
+    return "split LDS addresses do not implement the selected BSM layout with "
+           "the native 512-element upper-group offset";
   return std::nullopt;
 }
 
 LogicalResult
 collectBsmLayoutRequirements(ModuleOp module, ArrayRef<DotLayoutChoice> choices,
-                             TensorLayoutRequirements &requirements) {
+                             TensorLayoutRequirements &requirements,
+                             const tile::BufferLayoutPlan *buffers) {
   llvm::MapVector<Value, Attribute> assignments;
   llvm::SetVector<OpOperand *> coveredUses;
   for (auto [dot, plan] : choices) {
@@ -224,7 +242,10 @@ collectBsmLayoutRequirements(ModuleOp module, ArrayRef<DotLayoutChoice> choices,
     auto chain = **found;
     Attribute encoding = plan.operandB;
     // Both selected candidates and existing MMA layouts are validated here.
-    if (auto error = checkBsmLayout(chain, encoding))
+    auto shared =
+        buffers ? cast<ttg::MemDescType>(buffers->getType(chain.load.getSrc()))
+                : ttg::MemDescType{};
+    if (auto error = checkBsmLayout(chain, encoding, shared))
       return chain.perm.emitError(*error);
     auto requireLayout = [&](Value value) -> LogicalResult {
       auto [it, inserted] = assignments.insert({value, encoding});

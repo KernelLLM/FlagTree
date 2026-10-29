@@ -4,9 +4,14 @@
 #include "mlir-ext/Dialect/CommonIR/Transforms/BufferLayoutPropagation.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "triton/Conversion/CommonIRToTTGIR/DotLayoutPlanner.h"
-#include "triton/Conversion/CommonIRToTTGIR/TensorLayoutPropagation.h"
+#include "mlir-ext/Dialect/CommonIR/Transforms/TensorLayoutPropagation.h"
 
 namespace mlir::triton::metax {
+
+using tile::collectTensorLayoutComponent;
+using tile::planTensorLayouts;
+using tile::TensorLayoutAdapter;
+using tile::TensorLayoutRequirements;
 
 class TTGIRBufferLayoutAdapter : public tile::BufferLayoutAdapter {
 public:
@@ -17,10 +22,10 @@ public:
   Type withEncoding(Value value, Attribute encoding) const override;
 };
 
-// TTGIR operation adapters. MMA and hardware legality checks belong to the
-// requirement collectors and the tile-specific override in the applying pass.
+// TTGIR operation adapters. Tensor tiles reuse the lowering's direct-slice check.
 class TTGIRLayoutAdapter : public TensorLayoutAdapter {
 public:
+  bool canChangeEncoding(Value value, Attribute encoding) const override;
   Value getConversionSource(Value value) const override;
   Attribute inferOperandEncoding(Operation *op,
                                  Attribute encoding) const override;
@@ -30,8 +35,12 @@ public:
                       Operation *before) const override;
 };
 
-void collectCopyLayoutRequirements(ModuleOp module,
-                                   TensorLayoutRequirements &requirements);
+// Writer preferences guide shared order; they are not applied to tensors here.
+void collectCopyWriterPreferences(ModuleOp module,
+                                  TensorLayoutRequirements &preferences);
+// Copy requirements account for the selected shared layout before propagation.
+void collectLegalCopyLayoutRequirements(ModuleOp module,
+                                        TensorLayoutRequirements &requirements);
 void collectLoadStoreLayoutRequirements(ModuleOp module,
                                         TensorLayoutRequirements &requirements);
 void applyLayoutRequirements(ModuleOp module,
@@ -42,15 +51,11 @@ void applyLayoutRequirements(ModuleOp module,
 // rule has accepted the candidate.
 LogicalResult
 collectBsmLayoutRequirements(ModuleOp module, ArrayRef<DotLayoutChoice> choices,
-                             TensorLayoutRequirements &requirements);
-void collectLocalLoadLayoutRequirements(ArrayRef<DotLayoutChoice> choices,
-                                        TensorLayoutRequirements &requirements,
-                                        const tile::BufferLayoutPlan &buffers);
-void collectDotSliceLayoutRequirements(ArrayRef<DotLayoutChoice> choices,
-                                      TensorLayoutRequirements &requirements);
+                             TensorLayoutRequirements &requirements,
+                             const tile::BufferLayoutPlan *buffers = nullptr);
 FailureOr<tile::BufferLayoutPlan>
 planSharedLayouts(ModuleOp module, ArrayRef<DotLayoutChoice> choices,
-                  TensorLayoutRequirements &requirements);
+                  const TensorLayoutRequirements &writerPreferences);
 
 } // namespace mlir::triton::metax
 #endif

@@ -1,3 +1,5 @@
+from triton._common_ir import ENABLED as COMMON_IR_ENABLED
+
 TLE_SUPPORTED_PRIMITIVES = [
     "extract_tile",
     "insert_tile",
@@ -16,3 +18,6 @@ TLE_SUPPORTED_PRIMITIVES = [
     "gpu.buffered_tensor.slot",
     "gpu.local_ptr",
 ]
+
+if COMMON_IR_ENABLED:
+    TLE_SUPPORTED_PRIMITIVES.extend(["gpu.set_layout", "gpu.buffered_tensor.subslice"])

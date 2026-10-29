@@ -1,5 +1,6 @@
 add_triton_library(MetaxCommonIRToTTGIR
   CommonIRToTTGIR.cpp
+  CommonIRLayoutHints.cpp
   CommonIRTensorOps.cpp
 
   DEPENDS
@@ -10,6 +11,8 @@ add_triton_library(MetaxCommonIRToTTGIR
   MLIRSCFDialect
   MLIRTransforms
   CommonIRIR
+  CommonIRTransforms
+  CommonIRToTritonGPU
   TritonIR
   TritonGPUIR
   TritonAnalysis
@@ -27,13 +30,12 @@ endif()
 # library consumed by TritonToTritonGPU, which those transforms depend on.
 add_triton_library(MetaxCommonIRLayouts
   BufferLayoutRules.cpp
-  CommonIRApplyLayoutPlan.cpp
   CommonIRBsmLayout.cpp
-  CommonIRDotLoadLayouts.cpp
-  CommonIRDotSliceLayouts.cpp
+  CommonIRPrepareBsmLayouts.cpp
+  CommonIRPlanSharedLayouts.cpp
+  CommonIRPropagateLayouts.cpp
   CommonIRSharedLayouts.cpp
   DotLayoutPlanner.cpp
-  TensorLayoutPropagation.cpp
   TensorLayoutRules.cpp
 
   DEPENDS
@@ -41,6 +43,7 @@ add_triton_library(MetaxCommonIRLayouts
 
   LINK_LIBS PUBLIC
   CommonIRAxisInfo
+  MetaxAsyncCopyUtils
   CommonIRTransforms
   MLIRSCFDialect
   MLIRTransforms

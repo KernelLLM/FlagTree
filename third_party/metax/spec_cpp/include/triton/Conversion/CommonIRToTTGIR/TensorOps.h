@@ -9,6 +9,8 @@ namespace mlir::triton::metax {
 // True means both tensors can use encoding without boundary conversions.
 bool canLowerTensorTileInEncoding(Operation *op, Attribute encoding);
 
+LogicalResult applyCommonIRLayoutHints(ModuleOp module);
+
 void populateCommonIRTensorPatternsAndLegality(TypeConverter &typeConverter,
                                                RewritePatternSet &patterns,
                                                ConversionTarget &target);

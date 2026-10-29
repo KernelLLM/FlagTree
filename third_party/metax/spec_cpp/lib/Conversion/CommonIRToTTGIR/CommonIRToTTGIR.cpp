@@ -390,8 +390,14 @@ static LogicalResult convertSubviews(ModuleOp module,
         }
         offsets.push_back(static_cast<int32_t>(*constant));
       }
+      // A slice retains its parent's physical allocation, including for nested
+      // slices; only the visible shape and logical offsets change.
+      auto sliceType = ttg::MemDescType::get(
+          resultType->getShape(), resultType->getElementType(),
+          resultType->getEncoding(), resultType->getMemorySpace(),
+          resultType->getMutableMemory(), sourceType.getAllocShape());
       converted = builder.create<ttg::MemDescSubsliceOp>(
-          op.getLoc(), *resultType, *source,
+          op.getLoc(), sliceType, *source,
           builder.getDenseI32ArrayAttr(offsets));
     } else {
       op.emitError("unsupported tile.subview rank change");
@@ -564,7 +570,7 @@ public:
       if (op->getName().getDialectNamespace() == "tile") {
         // Preserve tensor tile ops for type conversion and lowering after
         // TTIR -> TTGIR assigns concrete layouts.
-        if (isa<tile::ExtractTileOp, tile::InsertTileOp>(op))
+        if (isa<tile::ExtractTileOp, tile::InsertTileOp, tile::SetLayoutOp>(op))
           return;
         op->emitError("was not eliminated by GPU TileIR conversion");
         hasRemainingGpuTileOps = true;
