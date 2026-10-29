@@ -19,11 +19,12 @@ python bench_ops.py compare --before out/before --after out/after
 before/after milliseconds, the factor, the numerical digest, and a per-op
 geomean.
 
-## No git checkout needed for this port
+## Reproducing a before/after comparison in one command
 
 The port is entirely module-level constants plus gates whose conditions read the
-operator's *inputs*, so the pre-port configuration is reproducible on the
-current tree by overriding five constants:
+operator's *inputs*, so the pre-port configuration is reproducible from the same
+checkout by overriding five constants — no `git checkout`, no mutation of the
+tree, so it also works on a read-only copy:
 
 | constant | pre-port value | what it undoes |
 |---|---|---|
@@ -34,8 +35,9 @@ current tree by overriding five constants:
 `PRE_PORT_CONSTS` in this file holds them, so:
 
 ```bash
-# one command, no git, no mutation of the tree
-python bench_ops.py ab --before-consts --cases full --repeat 3 --root out/ab
+# one command: runs the whole benchmark with PRE_PORT_CONSTS, then as-is, then
+# compares -> out/ab/compare.md + out/ab/ab_meta.json
+python bench_ops.py ab --cases full --repeat 3 --root out/ab
 
 # or one state at a time
 python bench_ops.py run --before-consts --label before --outdir out/before
@@ -47,32 +49,10 @@ An operator that does not have a given constant ignores it and records it in
 `results.json` under `consts_ignored` (fatal with `--strict-const`), so one const
 list can be shared by all six operators without a typo passing silently.
 
-Use `--before-ref <merge-commit>` instead only when the change is structural
-rather than a constant, or to cross-check that `PRE_PORT_CONSTS` really does
-reproduce the old code path.
-
-## Reproducing a before/after comparison in one command
-
-`ab` does the whole state-switch dance: it checks the operator files out of
-`--before-ref`, runs the complete benchmark, checks them out of `--after-ref`,
-runs it again, compares, and **always restores the working tree** (from an
-in-memory snapshot, so a dirty tree survives).  `bench_ops.py` itself is never
-swapped, so both sides are measured with the same tool, the same case set and
-the same digests:
-
-```bash
-python bench_ops.py ab --before-ref 01af67551 --after-ref HEAD \
-       --cases default --repeat 2 --root out/ab
-# -> out/ab/compare.md        the ratio table + per-op geomean
-# -> out/ab/ab_meta.json      both SHAs, their subjects, files swapped
-# -> out/ab/{before,after}/   full results.json + summary.md + raw/ + logs/
-```
-
-Use `--cases full` for the record-worthy run.  Without `ab`, the same thing is
-three commands (`run` with the tree in state A, `run` in state B, `compare`) —
-`ab` exists so that a mis-ordered checkout cannot silently compare a state
-against itself: it resolves both refs, refuses if they are the same commit, and
-reports per state how many operator files actually differed.
+`ab` refuses to report a comparison when both states end up with the same
+constants, so a mis-applied override cannot produce twenty rows of 1.00x.  For a
+change that is *structural* rather than a constant, `PRE_PORT_CONSTS` has to be
+extended (or the comparison done against a separate checkout).
 
 ## Timing modes
 

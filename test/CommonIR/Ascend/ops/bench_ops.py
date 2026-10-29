@@ -232,13 +232,11 @@ SAS = {
 }
 
 # Constants that reproduce the pre-port configuration of the operators, so the
-# "before" side of a comparison can be measured on the current tree without a
-# git checkout.  This is exact because the port is *only* module constants plus
-# gates whose conditions read the operator's inputs, and the functional diff
-# against the merge commit is exactly: 128/128 (compressor projection), 64/64
-# (gqa narrow tile) and 32 (sparse compressed head block) - restoring those
-# reproduces the old code path.  `bench_ops.py ab --before-ref <merge>` remains
-# the independent check.
+# "before" side of a comparison can be measured from the same checkout.  This is
+# exact because the port is *only* module constants plus gates whose conditions
+# read the operator's inputs, and the functional diff against the merge commit
+# is exactly: 128/128 (compressor projection), 64/64 (gqa narrow tile) and 32
+# (sparse compressed head block) - restoring those reproduces the old code path.
 PRE_PORT_CONSTS = {
     "_PROJ_BN": 128,         # compressor: projection N tile
     "_PROJ_BK": 128,         # compressor: projection K tile
@@ -1060,120 +1058,26 @@ def _write_summary(outdir, label, rows):
     _log(f"  -> {os.path.join(outdir, 'results.json')}")
 
 
-def _git(repo, *argv, check=True):
-    r = subprocess.run(["git", "-C", repo, *argv], capture_output=True, text=True)
-    if check and r.returncode != 0:
-        raise RuntimeError(f"git {' '.join(argv)} failed:\n{r.stderr.strip()}")
-    return r
-
-
-def _op_py_files(op_dir):
-    """The files a state switch may touch: every op, never the tool itself."""
-    return sorted(
-        f for f in os.listdir(op_dir)
-        if f.endswith(".py") and f != os.path.basename(SELF)
-    )
-
-
 def cmd_ab(args):
-    """One command: before -> run -> after -> run -> compare.
+    """before = current tree + PRE_PORT_CONSTS, after = current tree as-is.
 
-    The 'before' state is either a git ref (operator files checked out, then
-    restored from an in-memory snapshot) or, with --before-consts, the same tree
-    with PRE_PORT_CONSTS applied - which needs no git at all.
+    No git: for these operators the pre-port configuration is fully described by
+    module constants, so both states are measured from the same checkout - no
+    checkout, no snapshot, no mutation of the tree (works on a read-only copy).
     """
-    if bool(args.before_ref) == bool(args.before_consts):
-        raise SystemExit(
-            "give exactly one of --before-ref <ref> or --before-consts"
-        )
     op_dir = os.path.abspath(args.op_dir)
-    repo = _git(op_dir, "rev-parse", "--show-toplevel").stdout.strip()
-    files = _op_py_files(op_dir)
-    rel = [os.path.relpath(os.path.join(op_dir, f), repo) for f in files]
-
-    if args.before_consts:
-        return _ab_by_consts(args, op_dir, repo)
-
-    refs = {}
-    for ref in (args.before_ref, args.after_ref):
-        sha = _git(repo, "rev-parse", "--verify", f"{ref}^{{commit}}").stdout.strip()
-        subject = _git(repo, "log", "-1", "--format=%s", sha).stdout.strip()
-        refs[ref] = (sha, subject)
-    _log("=" * 76)
-    _log("A/B  " + op_dir)
-    _log(f"  before {args.before_ref} -> {refs[args.before_ref][0][:10]} "
-         f"{refs[args.before_ref][1][:52]}")
-    _log(f"  after  {args.after_ref} -> {refs[args.after_ref][0][:10]} "
-         f"{refs[args.after_ref][1][:52]}")
-    _log(f"  files swapped: {len(files)}  (bench_ops.py is never swapped)")
-    _log("=" * 76)
-
-    if refs[args.before_ref][0] == refs[args.after_ref][0]:
-        raise SystemExit("before-ref and after-ref resolve to the same commit")
-
-    root = os.path.abspath(
-        args.root or (args.outdir if getattr(args, "outdir", None) else
-                      os.path.join(HERE, "out", "ab"))
-    )
-    os.makedirs(root, exist_ok=True)
-
-    # snapshot the working tree so the restore is exact even if it is dirty
-    snap = {f: open(os.path.join(op_dir, f), "rb").read() for f in files}
-    dirty = _git(repo, "status", "--porcelain", "--", *rel).stdout.strip()
-    if dirty:
-        _log(f"  note: {len(dirty.splitlines())} operator file(s) differ from HEAD "
-             f"before starting; they are restored afterwards")
-
-    made = {}
-    try:
-        for ref, tag in ((args.before_ref, "before"), (args.after_ref, "after")):
-            _git(repo, "checkout", ref, "--", *rel)
-            diff = _git(repo, "status", "--porcelain", "--", *rel).stdout
-            made[tag] = len(diff.splitlines())
-            _log(f"\n[{tag}] checked out {ref}: {made[tag]} file(s) differ from HEAD")
-            args.outdir = os.path.join(root, tag)
-            args.label = tag
-            args.tag = tag
-            cmd_run(args)
-    finally:
-        for f, blob in snap.items():
-            with open(os.path.join(op_dir, f), "wb") as fh:
-                fh.write(blob)
-        msg = _git(repo, "status", "--porcelain", "--", *rel).stdout.strip()
-        _log("\n[restore] working tree rewritten from the snapshot"
-             + (f" ({len(msg.splitlines())} file(s) still differ from HEAD, "
-                "as before the run)" if msg else " (matches HEAD)"))
-
-    _json_dump(os.path.join(root, "ab_meta.json"), dict(
-        before=dict(ref=args.before_ref, sha=refs[args.before_ref][0],
-                    subject=refs[args.before_ref][1], files_changed=made.get("before")),
-        after=dict(ref=args.after_ref, sha=refs[args.after_ref][0],
-                   subject=refs[args.after_ref][1], files_changed=made.get("after")),
-        files=files, cases=args.cases, measure_mode=args.measure_mode,
-        repeat=args.repeat, const=args.const,
-    ))
-
-    args.before = os.path.join(root, "before")
-    args.after = os.path.join(root, "after")
-    return cmd_compare(args)
-
-
-def _ab_by_consts(args, op_dir, repo):
-    """before = current tree + PRE_PORT_CONSTS, after = current tree as-is."""
     root = os.path.abspath(
         args.root or (getattr(args, "outdir", None) or os.path.join(HERE, "out", "ab"))
     )
     os.makedirs(root, exist_ok=True)
     user = args.const
+    after = _parse_consts(getattr(args, "after_const", None))
     before = dict(PRE_PORT_CONSTS)
     before.update(_parse_consts(user))
     _log("=" * 76)
-    _log("A/B  (constant emulation, no git)"
-         f"  {op_dir}")
-    _log(f"  before : current tree + PRE_PORT_CONSTS {before}")
-    _log(f"  after  : current tree, const={user or '<none>'}")
-    for name in before:
-        _log(f"    {name} -> {before[name]}")
+    _log(f"A/B (constant emulation)  {op_dir}")
+    _log(f"  before : tree + PRE_PORT_CONSTS + {before}")
+    _log(f"  after  : tree + {after or '<no overrides>'}")
     _log("=" * 76)
     saved_const = args.const
     saved_flag = getattr(args, "before_consts", False)
@@ -1184,8 +1088,8 @@ def _ab_by_consts(args, op_dir, repo):
         args.outdir = os.path.join(root, "before")
         cmd_run(args)
 
-        args.before_consts = False          # <-- the 'after' side is the tree as-is
-        args.const = user
+        args.before_consts = False          # the 'after' side is the tree as-is
+        args.const = _const_string(after) if after else None
         args.label = args.tag = "after"
         args.outdir = os.path.join(root, "after")
         cmd_run(args)
@@ -1193,9 +1097,8 @@ def _ab_by_consts(args, op_dir, repo):
         args.const = saved_const
         args.before_consts = saved_flag
 
-    # 2) guard: refuse to report a comparison of two identical measurements.
-    #    This is the const-mode equivalent of the "same SHA" check in git mode,
-    #    and it would have caught the bug above.
+    # guard: refuse to report a comparison of two identical configurations -
+    # twenty rows of 1.00x look like a result but are a measurement mistake.
     mb = _json_load(os.path.join(root, "before", "meta.json"), {}) or {}
     ma = _json_load(os.path.join(root, "after", "meta.json"), {}) or {}
     if (mb.get("const"), bool(mb.get("before_consts"))) == (
@@ -1210,7 +1113,7 @@ def _ab_by_consts(args, op_dir, repo):
     _json_dump(os.path.join(root, "ab_meta.json"), dict(
         mode="const-emulation",
         before=dict(source="PRE_PORT_CONSTS", consts=before),
-        after=dict(source="working tree", consts=user),
+        after=dict(source="working tree", consts=after or None),
         cases=args.cases, measure_mode=args.measure_mode,
         repeat=args.repeat,
     ))
@@ -1412,21 +1315,19 @@ def main(argv=None):
 
     p_ab = sub.add_parser(
         "ab",
-        help="measure <before-ref> and <after-ref> and compare them, in one command",
-        description="Checks the operator files out of --before-ref, runs the whole "
-        "benchmark, checks them out of --after-ref, runs it again, compares, and "
-        "always restores the working tree.  bench_ops.py itself is never swapped, "
-        "so both sides are measured with the same tool.",
+        help="measure the pre-port configuration and the current one, and compare",
+        description="Runs the whole benchmark twice from the same checkout - once "
+        "with PRE_PORT_CONSTS applied (the tiling used before the fixes) and once "
+        "as-is - then compares them.  No git checkout and no mutation of the tree, "
+        "so it also works on a read-only copy.",
     )
     common(p_ab)
     run_options(p_ab, outdir_required=False)
-    p_ab.add_argument("--before-ref", default=None, metavar="REF",
-                      help="git ref for the 'before' state, e.g. the merge commit")
-    p_ab.add_argument("--before-consts", action="store_true",
-                      help="take the 'before' state from PRE_PORT_CONSTS "
-                      "instead of a git ref: same tree, no checkout, no git "
-                      "mutation at all")
-    p_ab.add_argument("--after-ref", default="HEAD", metavar="REF")
+    p_ab.add_argument(
+        "--after-const", default=None, metavar="NAME=VALUE[,...]",
+        help="extra constants for the 'after' state (default: none, i.e. the "
+        "tree exactly as committed)",
+    )
     p_ab.add_argument("--root", default=None,
                       help="output root; before/ and after/ are created inside it "
                       "(default: out/ab next to bench_ops.py)")
