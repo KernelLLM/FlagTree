@@ -55,6 +55,7 @@ elseif(FLAGTREE_BACKEND STREQUAL "ascend")
   # AscendNPU-IR
   set(BISHENGIR_ENABLE_A5_UNPUBLISHED_FEATURES ON)
   set(BISHENGIR_BUILD_STANDALONE_IR_ONLY ON)
+  set(MLIR_ENABLE_BINDINGS_PYTHON OFF CACHE BOOL "Disable Python bindings for AscendNPU-IR" FORCE)
   set(ASCENDNPU_IR_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ascend/AscendNPU-IR)
   set(ASCENDNPU_IR_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/third_party/ascend/AscendNPU-IR)
   include_directories(${ASCENDNPU_IR_SRC_DIR}/bishengir/include)
@@ -336,12 +337,39 @@ endif()
 # TODO: Figure out which target is sufficient to fix errors; triton is
 # apparently not enough. Currently set linking libstdc++fs for all targets
 # to support some old version GCC compilers like 8.3.0.
-if (NOT WIN32 AND NOT APPLE AND NOT BSD)
-  link_libraries(stdc++fs)
-endif()
+# NOTE: moved AFTER AscendNPU-IR add_subdirectory to avoid stdc++fs target conflict
+# with AddMLIRPython.cmake
 
 if(FLAGTREE_BACKEND STREQUAL "ascend")
+  # When building full AscendNPU-IR (STANDALONE_IR_ONLY=OFF) against installed LLVM,
+  # some MLIR tablegen targets don't exist (their .inc outputs are pre-generated).
+  # Create stub targets so CMake dependency resolution succeeds.
+  foreach(_stub_target MLIRLinalgTransformEnumsIncGen MLIRMemRefPassIncGen MLIRTensorTransformsIncGen)
+    if(NOT TARGET ${_stub_target})
+      add_custom_target(${_stub_target})
+    endif()
+  endforeach()
+  # BiShengIRLinalgDialectExt is referenced but never defined in AscendNPU-IR.
+  # Create an empty INTERFACE library so link dependencies resolve.
+  if(NOT TARGET BiShengIRLinalgDialectExt)
+    add_library(BiShengIRLinalgDialectExt INTERFACE)
+  endif()
+
+  # Save and clear RULE_LAUNCH to ensure AscendNPU-IR is not affected by ccache etc.
+  get_property(_saved_launch_compile DIRECTORY PROPERTY RULE_LAUNCH_COMPILE)
+  get_property(_saved_launch_link DIRECTORY PROPERTY RULE_LAUNCH_LINK)
+  set_property(DIRECTORY PROPERTY RULE_LAUNCH_COMPILE "")
+  set_property(DIRECTORY PROPERTY RULE_LAUNCH_LINK "")
+
   add_subdirectory(${ASCENDNPU_IR_SRC_DIR} ${ASCENDNPU_IR_BINARY_DIR})
+
+  # Restore properties
+  set_property(DIRECTORY PROPERTY RULE_LAUNCH_COMPILE ${_saved_launch_compile})
+  set_property(DIRECTORY PROPERTY RULE_LAUNCH_LINK ${_saved_launch_link})
+endif()
+
+if (NOT WIN32 AND NOT APPLE AND NOT BSD)
+  link_libraries(stdc++fs)
 endif()
 
 # -----

@@ -3,29 +3,14 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/third_party/flir/include)
 include_directories(${CMAKE_BINARY_DIR}/third_party/flir/include)
 
-# list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # Triton Ascend is dependent on AscendNPU IR
-# set(ASCENDNPU_IR_SRC_DIR "${PROJECT_SOURCE_DIR}/third_party/ascend/AscendNPU-IR")
-# set(ASCENDNPU_IR_BINARY_DIR "${PROJECT_BINARY_DIR}/third_party/ascend/AscendNPU-IR")
-
-# set(BISHENGIR_ENABLE_A5_UNPUBLISHED_FEATURES ON)
-# set(BISHENGIR_BUILD_STANDALONE_IR_ONLY ON)
-#
-# # Temporarily save and clear the RULE_LAUNCH_* attributes in the current directory to ensure AscendNPU-IR is not affected.
-# get_property(_saved_launch_compile DIRECTORY PROPERTY RULE_LAUNCH_COMPILE)
-# get_property(_saved_launch_link DIRECTORY PROPERTY RULE_LAUNCH_LINK)
-# set_property(DIRECTORY PROPERTY RULE_LAUNCH_COMPILE "")
-# set_property(DIRECTORY PROPERTY RULE_LAUNCH_LINK "")
-#
-# add_subdirectory(${ASCENDNPU_IR_SRC_DIR} ${ASCENDNPU_IR_BINARY_DIR})
-#
-# # restore properties
-# set_property(DIRECTORY PROPERTY RULE_LAUNCH_COMPILE ${_saved_launch_compile})
-# set_property(DIRECTORY PROPERTY RULE_LAUNCH_LINK ${_saved_launch_link})
-#
-# include_directories(${ASCENDNPU_IR_SRC_DIR}/bishengir/include)
-# include_directories(${ASCENDNPU_IR_BINARY_DIR}/bishengir/include) # Tablegen'd files
+# NOTE: AscendNPU-IR add_subdirectory is handled by the root CMakeLists.txt (line 344).
+# Variables ASCENDNPU_IR_SRC_DIR/BINARY_DIR and include_directories are set in root CMakeLists.txt.
+# Only add local includes here that the root doesn't cover.
+include_directories(${ASCENDNPU_IR_SRC_DIR}/bishengir/include)
+include_directories(${ASCENDNPU_IR_BINARY_DIR}/bishengir/include) # Tablegen'd files
 
 add_subdirectory(backend/spec/lib)
 
@@ -39,8 +24,14 @@ add_subdirectory(bin)
 
 add_triton_library(Registrar Registrar.cc)
 
-if(LLVM_MAJOR_VERSION_21_COMPATIBLE)
-  set(_MLIRMeshDialect_LIB MLIRMeshDialect)
+if(LLVM_MAJOR_VERSION_21_COMPATIBLE OR LLVM_MAJOR_VERSION_22_OR_HIGHER)
+  # Only link MLIRMeshDialect if the library exists in the LLVM installation
+  find_library(_MLIRMeshDialect_FOUND MLIRMeshDialect PATHS ${LLVM_LIBRARY_DIR} NO_DEFAULT_PATH)
+  if(_MLIRMeshDialect_FOUND)
+    set(_MLIRMeshDialect_LIB MLIRMeshDialect)
+  else()
+    set(_MLIRMeshDialect_LIB "")
+  endif()
 else()
   set(_MLIRMeshDialect_LIB "")
 endif()

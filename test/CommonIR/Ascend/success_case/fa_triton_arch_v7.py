@@ -180,8 +180,18 @@ layout and hang the Vector core — which is why v7 renames both).
 import argparse
 import json
 import os
+import sys
 import traceback
 from typing import NamedTuple
+
+# ---- Force use of locally built FlagTree instead of any installed version ----
+FLAGTREE_BUILD_DIR = "/dev/shm/yuansheng/ref_flagtree/FlagTree/build/lib.linux-aarch64-cpython-312"
+if os.path.exists(FLAGTREE_BUILD_DIR):
+    # Remove any old triton/flagtree paths from sys.path
+    sys.path = [p for p in sys.path if 'triton' not in p.lower() and 'flagtree' not in p.lower()]
+    # Insert the local build at the front
+    sys.path.insert(0, FLAGTREE_BUILD_DIR)
+    print(f"[INFO] Using FlagTree from: {FLAGTREE_BUILD_DIR}")
 
 # ---- Compiler optimization: disable auto-inject-block-sync and auto-cv-workspace-manage ----
 # Every cross-core dependency below is hand-written with sync_block_set/wait, so
@@ -198,6 +208,11 @@ try:
     _ascend_compiler._USE_CUSTOM_COMPILE_OPT = "1"
 except (ImportError, AttributeError):
     pass
+
+# ---- LLVM version mismatch handled in compiler.py ----
+# libtriton.so (LLVM22) produces MLIR bytecode v6 that bishengir-opt (LLVM19) cannot
+# parse. The compiler pipeline is patched to apply syntax fixup + bishengir-opt on
+# text directly, bypassing the bytecode round-trip while keeping canonicalization.
 import triton.language as tl
 
 import triton.experimental.tle as tle  # registers tile/tle dialects; tle.scope
@@ -2043,7 +2058,43 @@ if __name__ == "__main__":
     out = flash_attention_fwd(q, k, v, cb_override, is_causal=args.causal, balance_causal=balance, config=cfg)
 
     if not args.no_check:
-        torch.testing.assert_close(_reference(q, k, v, args.causal), out, rtol=1e-2, atol=1e-2)
+        ref = _reference(q, k, v, args.causal)
+        nan_count = torch.isnan(out).sum().item()
+        total = out.numel()
+        print(f"[diag] out NaN: {nan_count}/{total}  out sample: {out[0,0,0,:4]}")
+        print(f"[diag] ref sample: {ref[0,0,0,:4]}")
+        if nan_count > 0:
+            # Find first NaN location
+            nan_mask = torch.isnan(out)
+            idx = torch.nonzero(nan_mask.view(-1))[0].item()
+            print(f"[diag] first NaN at flat index {idx}")
+        # Detailed debug: per-batch/head NaN pattern
+        out_cpu = out.cpu().float()
+        ref_cpu = ref.cpu().float()
+        nan_mask_cpu = torch.isnan(out_cpu)
+        for b_i in range(min(B, 2)):
+            for h_i in range(min(Q_H, 3)):
+                sl = out_cpu[b_i, h_i]
+                n = torch.isnan(sl).sum().item()
+                first_nan_s = -1
+                for si in range(S):
+                    if torch.isnan(sl[si, 0]).item():
+                        first_nan_s = si
+                        break
+                print(f"  [b={b_i},h={h_i}] NaN={n}/{sl.numel()} first_nan_seq={first_nan_s}")
+        # Non-NaN accuracy
+        non_nan = ~nan_mask_cpu
+        if non_nan.any():
+            diff = (out_cpu[non_nan] - ref_cpu[non_nan]).abs()
+            print(f"  Non-NaN: count={non_nan.sum().item()} max_diff={diff.max():.4f} mean_diff={diff.mean():.4f}")
+            # Sample values
+            print(f"  out[0,0,0,:8]={out_cpu[0,0,0,:8].tolist()}")
+            print(f"  ref[0,0,0,:8]={ref_cpu[0,0,0,:8].tolist()}")
+            print(f"  out[0,0,3,:8]={out_cpu[0,0,3,:8].tolist()}")
+            print(f"  ref[0,0,3,:8]={ref_cpu[0,0,3,:8].tolist()}")
+            print(f"  out[0,0,4,:8]={out_cpu[0,0,4,:8].tolist()}")
+            print(f"  ref[0,0,4,:8]={ref_cpu[0,0,4,:8].tolist()}")
+        torch.testing.assert_close(ref, out, rtol=1e-2, atol=1e-2)
         print("Test Passed!")
     else:
         print("Reference check skipped.")
