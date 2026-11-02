@@ -48,7 +48,15 @@ KV_HEADS = 1
 HEAD_DIM = 512
 PAGE_SIZE = 128
 
+# 32 heads per program fits the UB budget for the sliding-window (SWA) path.
+# The compressed paths (CFA / SCFA) additionally keep the cmp chunk tiles live
+# and then overflow it: `ub overflow, requires 2230272 bits while 1572864
+# available` (272 KiB vs 192 KiB), so they could not be compiled at all.  At 16
+# they build and match the counterpart to one bf16 ULP; the accumulator
+# [HEAD_BLOCK, 512] fp32 is what dominates, so halving the head block is what
+# buys the room.  Kept shape-dependent so SWA keeps its tuned 32.
 _HEAD_BLOCK = 32
+_HEAD_BLOCK_CMP = 16
 # width of the head_dim slice each window QK dot contracts over
 _N_CHUNK = 128
 _CMP_CHUNK = 128
@@ -329,7 +337,8 @@ def run(
 
     sparse_ptr = cmp_sparse_indices if has_sparse else qk
     scale = float(softmax_scale)
-    hb_blocks = q_heads // _HEAD_BLOCK
+    head_block = _HEAD_BLOCK_CMP if has_cmp else _HEAD_BLOCK
+    hb_blocks = q_heads // head_block
     ori_stride = ori_np * PAGE_SIZE
 
     if has_sparse:
@@ -342,7 +351,7 @@ def run(
         _attn_kernel[(batch, total_q, hb_blocks)](
             qk, out, ori_view, cmp_view, sparse_ptr, cu_seqlens_q, seqused_kv,
             sinks, scale, ori_stride, cmp_np * PAGE_SIZE, 0, 0,
-            D=HEAD_DIM, QH=q_heads, HEAD_BLOCK=_HEAD_BLOCK, N_ORI=PAGE_SIZE,
+            D=HEAD_DIM, QH=q_heads, HEAD_BLOCK=head_block, N_ORI=PAGE_SIZE,
             N_CHUNK=_N_CHUNK, CMP_CHUNK=_CMP_CHUNK, TOPK=_TOPK, HAS_CMP=has_cmp,
             HAS_SPARSE=False, CMP_RATIO=ratio if ratio > 0 else 1,
         )
@@ -366,7 +375,7 @@ def run(
                 qk[start:start + n], out[start:start + n], ori_view, cmp_view,
                 qk, cu_t[i], seq_t[i:i + 1], sinks, scale, ori_stride,
                 cmp_np * PAGE_SIZE, 0, 0,
-                D=HEAD_DIM, QH=q_heads, HEAD_BLOCK=_HEAD_BLOCK, N_ORI=PAGE_SIZE,
+                D=HEAD_DIM, QH=q_heads, HEAD_BLOCK=head_block, N_ORI=PAGE_SIZE,
                 N_CHUNK=_N_CHUNK, CMP_CHUNK=_CMP_CHUNK, TOPK=_TOPK, HAS_CMP=has_cmp,
                 HAS_SPARSE=False, CMP_RATIO=ratio if ratio > 0 else 1,
             )
@@ -414,7 +423,8 @@ def _run_sparse(
         _attn_kernel[(1, n, hb_blocks)](
             qk[start:start + n], out[start:start + n], ori_view, kg, sparse_ptr,
             cu1, seq1, sinks, scale, ori_stride, 0, _TOPK, row0,
-            D=HEAD_DIM, QH=qk.shape[1], HEAD_BLOCK=_HEAD_BLOCK, N_ORI=PAGE_SIZE,
+            D=HEAD_DIM, QH=qk.shape[1], HEAD_BLOCK=_HEAD_BLOCK_CMP,
+            N_ORI=PAGE_SIZE,
             N_CHUNK=_N_CHUNK, CMP_CHUNK=_CMP_CHUNK, TOPK=_TOPK, HAS_CMP=True,
             HAS_SPARSE=True, CMP_RATIO=ratio,
         )
