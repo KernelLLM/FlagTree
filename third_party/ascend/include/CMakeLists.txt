@@ -1,0 +1,11 @@
+add_subdirectory(Dialect)
+add_subdirectory(TritonToAnnotation)
+add_subdirectory(TritonToHFusion)
+add_subdirectory(TritonToHIVM)
+add_subdirectory(TritonToGraph)
+add_subdirectory(TritonToLLVM)
+add_subdirectory(CommonIRToHIVM)
+add_subdirectory(AutoBlockify)
+# todo: this code will be removed in version 530.
+add_subdirectory(TritonAffinityOpt)
+add_subdirectory(DynamicCVPipeline)

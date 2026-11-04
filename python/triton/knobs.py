@@ -450,6 +450,9 @@ class autotuning_knobs(base_knobs):
     cache: env_bool = env_bool("TRITON_CACHE_AUTOTUNING")
     print: env_bool = env_bool("TRITON_PRINT_AUTOTUNING")
     adjust_block_size: env_bool = env_bool("FLAGTREE_AABS", True)  # flagtree aabs
+    # Opt-in to a backend-provided autotuner (consumed by the ascend runtime,
+    # which replaces triton.autotune when this is set).
+    use_backend_autotuning: env_bool = env_bool("FLAGTREE_USE_BACKEND_AUTOTUNING")
 
 
 class LaunchHook(Protocol):
