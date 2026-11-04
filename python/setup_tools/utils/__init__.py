@@ -61,6 +61,10 @@ submodule_registrar = SubmoduleRegistrar(submodules=(
     {"name": "flir", "url": "https://github.com/flagos-ai/flir.git"},
     {"name": "FlagPrism", "url": "https://github.com/flagos-ai/FlagPrism.git"},
     {
+        "name": "AscendNPU-IR", "url": "https://gitcode.com/Ascend/AscendNPU-IR.git", "relative_path":
+        "ascend/AscendNPU-IR", "commit_id": "bb13ef6120526aa3df6f950006af5ec0e585d2f6"
+    },
+    {
         "name": "flagcx", "url": "https://github.com/flagos-ai/FlagCX.git", "relative_path": "tle/third_party/flagcx",
         "commit_id": "c93438decaba8d935e7aa6ae8377e56fd3910b32"
     },
