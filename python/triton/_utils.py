@@ -26,6 +26,11 @@ from functools import reduce
 from typing import Any, Callable, TYPE_CHECKING, Union, List, Dict
 
 from triton._flagtree_spec import spec_func
+from triton._flagtree_backend import FLAGTREE_BACKEND
+
+# The ascend backend lowers tensors through a SIMD pipeline that does not
+# require power-of-2 block shapes (see validate_block_shape below).
+_SKIP_POW2_BLOCK_SHAPE = FLAGTREE_BACKEND == "ascend"
 
 if TYPE_CHECKING:
     from .language import core
@@ -80,7 +85,13 @@ def validate_block_shape(shape: List[int]):
     for i, d in enumerate(shape):
         if not isinstance(d, int):
             raise TypeError(f"Shape element {i} must have type `constexpr[int]`, got `constexpr[{type(d)}]")
-        if not is_power_of_two(d):
+        # A negative dimension is invalid for every backend.
+        if d < 0:
+            raise ValueError(f"Shape element {i} must be non-negative")
+        # Backends that lower through a SIMD pipeline (e.g. ascend) support
+        # non-power-of-2 block shapes; this check has no builder in scope, so
+        # gate it on the active backend.
+        if not is_power_of_two(d) and not _SKIP_POW2_BLOCK_SHAPE:
             raise ValueError(f"Shape element {i} must be a power of 2")
         numel *= d
 
