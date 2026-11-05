@@ -1,0 +1,2514 @@
+flagtree_commit: 60d0c5e7778d368ed7067026dfcec9e6f20554b8
+mappings:
+- mapping_id: integer.abs
+  source:
+    apis:
+    - tl.abs
+    ir_ops:
+    - math.absi
+  conditions:
+  - legal integer type T
+  llvm: y:T = call llvm.abs.iN(x:T,false)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: AbsIOpConversion
+- mapping_id: integer.add
+  source:
+    apis:
+    - operator +
+    ir_ops:
+    - arith.addi
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64); frontend promotion applies
+  - uniform and lane-varying operands both use this LLVM rule
+  llvm: y:T = add T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.and
+  source:
+    apis:
+    - operator &
+    ir_ops:
+    - arith.andi
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = and T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.ashr
+  source:
+    apis:
+    - operator >>
+    ir_ops:
+    - arith.shrsi
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = ashr T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.lshr
+  source:
+    apis:
+    - operator >>
+    ir_ops:
+    - arith.shrui
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = lshr T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.mul
+  source:
+    apis:
+    - operator *
+    ir_ops:
+    - arith.muli
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = mul T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.mulhi
+  source:
+    apis:
+    - tl.umulhi
+    ir_ops:
+    - tt.mulhiui
+  conditions:
+  - unsigned operands, legal width
+  llvm: 'wide:i2N = mul(zext a,zext b)
+
+    y:iN = trunc(lshr wide,N)'
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: MulhiUIOpConversion
+- mapping_id: integer.or
+  source:
+    apis:
+    - operator |
+    ir_ops:
+    - arith.ori
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = or T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.sdiv
+  source:
+    apis:
+    - operator //
+    ir_ops:
+    - arith.divsi
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = sdiv T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.shl
+  source:
+    apis:
+    - operator <<
+    ir_ops:
+    - arith.shli
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = shl T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.smax
+  source:
+    apis:
+    - tl.maximum
+    ir_ops:
+    - arith.maxsi
+  conditions:
+  - T is the promoted integer type
+  llvm: y:T = call llvm.smax.iN(a:T,b:T)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.smin
+  source:
+    apis:
+    - tl.minimum
+    ir_ops:
+    - arith.minsi
+  conditions:
+  - T is the promoted integer type
+  llvm: y:T = call llvm.smin.iN(a:T,b:T)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.srem
+  source:
+    apis:
+    - operator %
+    ir_ops:
+    - arith.remsi
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = srem T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.sub
+  source:
+    apis:
+    - operator -
+    ir_ops:
+    - arith.subi
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = sub T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.udiv
+  source:
+    apis:
+    - operator //
+    ir_ops:
+    - arith.divui
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = udiv T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.umax
+  source:
+    apis:
+    - tl.maximum
+    ir_ops:
+    - arith.maxui
+  conditions:
+  - T is the promoted integer type
+  llvm: y:T = call llvm.umax.iN(a:T,b:T)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.umin
+  source:
+    apis:
+    - tl.minimum
+    ir_ops:
+    - arith.minui
+  conditions:
+  - T is the promoted integer type
+  llvm: y:T = call llvm.umin.iN(a:T,b:T)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.urem
+  source:
+    apis:
+    - operator %
+    ir_ops:
+    - arith.remui
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = urem T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: integer.xor
+  source:
+    apis:
+    - operator ^
+    ir_ops:
+    - arith.xori
+  conditions:
+  - T is a legal scalarized integer type (i1/i8/i16/i32/i64)
+  - signedness and promotion follow the frontend
+  llvm: y:T = xor T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: float.abs
+  source:
+    apis:
+    - tl.abs
+    ir_ops:
+    - math.absf
+  conditions:
+  - floating input
+  - NaN propagation follows propagate_nan and target support
+  llvm: y:T = call llvm.fabs(x:T)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: AbsFOpConversion
+- mapping_id: float.div.fast
+  source:
+    apis:
+    - operator /
+    ir_ops:
+    - arith.divf
+  conditions:
+  - f32
+  - TRITON_ENABLE_RCP_DIVF absent
+  - TRITON_ENABLE_FAST_DIVF present
+  llvm: y:float = call llvm.mxc.fdiv.fast(lhs:float,rhs:float)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FDivOpConversion
+- mapping_id: float.div.rcp
+  source:
+    apis:
+    - operator /
+    ir_ops:
+    - arith.divf
+  conditions:
+  - f32
+  - TRITON_ENABLE_RCP_DIVF present
+  llvm: 'r:float = call llvm.mxc.rcp.f32(rhs)
+
+    y:float = fmul lhs,r'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FDivOpConversion
+- mapping_id: float.fadd
+  source:
+    apis:
+    - operator +
+    ir_ops:
+    - arith.addf
+  conditions:
+  - T in {half, float, double}; BF16 bridge is a separate rule
+  - 'for T=float: fewer than two scalar elements are available, or TRITON_DISABLE_ELEMENTWISE_PK_FMA_OPT is present'
+  llvm: y:T = fadd T a, b
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FAddOpConversion
+- mapping_id: float.fdiv
+  source:
+    apis:
+    - operator /
+    ir_ops:
+    - arith.divf
+  conditions:
+  - T in {half, float, double}; BF16 bridge is a separate rule
+  - TRITON_ENABLE_RCP_DIVF and TRITON_ENABLE_FAST_DIVF absent
+  llvm: y:T = fdiv T a, b
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FDivOpConversion
+- mapping_id: float.fma
+  source:
+    apis:
+    - tl.fma
+    ir_ops:
+    - math.fma
+  conditions:
+  - T in {half, float, double}; BF16 bridge is a separate rule
+  - 'for T=float: fewer than two scalar elements are available, or TRITON_DISABLE_ELEMENTWISE_PK_FMA_OPT is present'
+  llvm: y:T = call llvm.fma.f16/f32/f64(a:T,b:T,c:T), selected by T
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FmaOpConversion
+- mapping_id: float.fmul
+  source:
+    apis:
+    - operator *
+    ir_ops:
+    - arith.mulf
+  conditions:
+  - T in {half, float, double}; BF16 bridge is a separate rule
+  - 'for T=float: fewer than two scalar elements are available, or TRITON_DISABLE_ELEMENTWISE_PK_FMA_OPT is present'
+  llvm: y:T = fmul T a, b
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FMulOpConversion
+- mapping_id: float.frem
+  source:
+    apis:
+    - operator %
+    ir_ops:
+    - arith.remf
+  conditions:
+  - T in {half, float, double}; BF16 bridge is a separate rule
+  llvm: y:T = frem T a, b
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: float.fsub
+  source:
+    apis:
+    - operator -
+    ir_ops:
+    - arith.subf
+  conditions:
+  - T in {half, float, double}; BF16 bridge is a separate rule
+  llvm: y:T = fsub T a, b
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FSubOpConversion
+- mapping_id: float.maximum
+  source:
+    apis:
+    - tl.maximum
+    ir_ops:
+    - arith.maximumf
+  conditions:
+  - targetInfo.supportMaximumMinimum() true; NaN-propagating extrema
+  llvm: y:T = call llvm.maximum(a:T,b:T)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: MinMaxFOpConversion
+- mapping_id: float.maximum.software_nan
+  source:
+    apis:
+    - tl.maximum
+    ir_ops:
+    - arith.maximumf
+  conditions:
+  - targetInfo.supportMaximumMinimum() false; floating type T
+  llvm: isnan = or(fcmp une a,a; fcmp une b,b); v:T=call llvm.maxnum(a,b); y:T=select isnan,NaN,v
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: MinMaxFOpConversion
+- mapping_id: float.maxnum
+  source:
+    apis:
+    - tl.maximum
+    ir_ops:
+    - arith.maxnumf
+  conditions:
+  - legal floating type; numeric extrema
+  llvm: y:T = call llvm.maxnum(a:T,b:T)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: MinMaxFOpConversion
+- mapping_id: float.minimum
+  source:
+    apis:
+    - tl.minimum
+    ir_ops:
+    - arith.minimumf
+  conditions:
+  - targetInfo.supportMaximumMinimum() true; NaN-propagating extrema
+  llvm: y:T = call llvm.minimum(a:T,b:T)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: MinMaxFOpConversion
+- mapping_id: float.minimum.software_nan
+  source:
+    apis:
+    - tl.minimum
+    ir_ops:
+    - arith.minimumf
+  conditions:
+  - targetInfo.supportMaximumMinimum() false; floating type T
+  llvm: isnan = or(fcmp une a,a; fcmp une b,b); v:T=call llvm.minnum(a,b); y:T=select isnan,NaN,v
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: MinMaxFOpConversion
+- mapping_id: float.minnum
+  source:
+    apis:
+    - tl.minimum
+    ir_ops:
+    - arith.minnumf
+  conditions:
+  - legal floating type; numeric extrema
+  llvm: y:T = call llvm.minnum(a:T,b:T)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: MinMaxFOpConversion
+- mapping_id: packed.add
+  source:
+    apis:
+    - operator +
+    ir_ops:
+    - arith.addf
+  conditions:
+  - f32 with at least two elements per thread
+  - TRITON_DISABLE_ELEMENTWISE_PK_FMA_OPT absent
+  - pairs are packed in <2 x float>
+  llvm: 'A=lhs; B=<float 1,float 1>; C=rhs
+
+    y:<2 x float> = call llvm.mxc.pk.fma.f32(A,B,C)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FAddOpConversion
+- mapping_id: packed.fma
+  source:
+    apis:
+    - tl.fma
+    ir_ops:
+    - math.fma
+  conditions:
+  - f32 with at least two elements per thread
+  - TRITON_DISABLE_ELEMENTWISE_PK_FMA_OPT absent
+  - pairs are packed in <2 x float>
+  llvm: 'A=lhs; B=rhs; C=accumulator
+
+    y:<2 x float> = call llvm.mxc.pk.fma.f32(A,B,C)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FmaOpConversion
+- mapping_id: packed.mul
+  source:
+    apis:
+    - operator *
+    ir_ops:
+    - arith.mulf
+  conditions:
+  - f32 with at least two elements per thread
+  - TRITON_DISABLE_ELEMENTWISE_PK_FMA_OPT absent
+  - pairs are packed in <2 x float>
+  llvm: 'A=lhs; B=rhs; C=zeroinitializer
+
+    y:<2 x float> = call llvm.mxc.pk.fma.f32(A,B,C)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FMulOpConversion
+- mapping_id: math.exp.f32
+  source:
+    apis:
+    - tl.exp
+    ir_ops:
+    - math.exp
+  conditions:
+  - f32 plugin approximate exp branch
+  llvm: y:float = call llvm.exp.f32(x:float)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: ExpOpConversionApprox
+- mapping_id: math.exp2.f32
+  source:
+    apis:
+    - tl.exp2
+    ir_ops:
+    - math.exp2
+  conditions:
+  - f32 current linked helper route
+  llvm: y:float = call mc_math_func_exp2f(x:float)
+  source_reference:
+  - path: third_party/metax/backend/compiler.py
+    symbol: ext_maca_mathlib.bc
+- mapping_id: math.precise.fdiv_rn
+  source:
+    apis:
+    - tl.div_rn
+    ir_ops:
+    - tt.precise_divf
+  conditions:
+  - f32 precise operation
+  llvm: y:float = call mc_math_func_fdiv_rn(a:float,b:float)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: math.precise.sqrtf
+  source:
+    apis:
+    - tl.sqrt_rn
+    ir_ops:
+    - tt.precise_sqrt
+  conditions:
+  - f32 precise operation
+  llvm: y:float = call mc_math_func_sqrtf(x:float)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: math.rcp
+  source:
+    apis: []
+    ir_ops:
+    - tt.rcpf
+  conditions:
+  - T in {half,float}; reciprocal operand/result have the same type
+  llvm: 'T=half: y:half = call llvm.mxc.rcp.f16(x:half)
+
+    T=float: y:float = call llvm.mxc.rcp.f32(x:float)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FRcpOpConversion
+- mapping_id: compare.fcmp
+  source:
+    apis:
+    - floating comparison
+    ir_ops:
+    - arith.cmpf
+  conditions:
+  - legal promoted types
+  - comparison predicate preserved
+  llvm: y = fcmp predicate/condition and typed operands
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: CmpFOpConversion
+- mapping_id: compare.icmp
+  source:
+    apis:
+    - integer comparison
+    ir_ops:
+    - arith.cmpi
+  conditions:
+  - legal promoted types
+  - comparison predicate preserved
+  llvm: y = icmp predicate/condition and typed operands
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: CmpIOpConversion
+- mapping_id: compare.select
+  source:
+    apis:
+    - tl.where
+    ir_ops:
+    - arith.select
+  conditions:
+  - legal promoted types
+  - comparison predicate preserved
+  llvm: y = select predicate/condition and typed operands
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: SelectOpConversion
+- mapping_id: cast.bf16.signed
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.fptosi
+  conditions:
+  - BF16 -> signed integer
+  llvm: 'u:i32 = shl(zext i16 x),16
+
+    f:float = bitcast u
+
+    y:iN = fptosi f'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FPToSIOpConversion
+- mapping_id: cast.bitcast
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.bitcast
+  conditions:
+  - legal frontend source/result types
+  llvm: y:D = bitcast S x to D
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: cast.bool.floating
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.cmpi
+    - arith.cmpf
+  conditions:
+  - floating -> bool
+  llvm: y:i1 = fcmp une x,0
+  source_reference:
+  - path: python/triton/language/semantic.py
+    symbol: cast
+- mapping_id: cast.bool.integer
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.cmpi
+    - arith.cmpf
+  conditions:
+  - integer -> bool
+  llvm: y:i1 = icmp ne x,0
+  source_reference:
+  - path: python/triton/language/semantic.py
+    symbol: cast
+- mapping_id: cast.bridge.bf16.f16
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.extf
+    - arith.truncf
+    - tt.fp_to_fp
+  conditions:
+  - bf16 -> f16
+  llvm: BF16 widen (zext/shl16/bitcast) then fptrunc float->half
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: cast.bridge.bf16.f64
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.extf
+    - arith.truncf
+    - tt.fp_to_fp
+  conditions:
+  - bf16 -> f64
+  llvm: BF16 widen (zext/shl16/bitcast) then fpext float->double
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: ExtFOpConversion
+- mapping_id: cast.bridge.f16.bf16
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.extf
+    - arith.truncf
+    - tt.fp_to_fp
+  conditions:
+  - f16 -> bf16
+  llvm: fpext half->float then llvm.mxc.cvt.f32tobf16
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: cast.bridge.f16.f64
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.extf
+    - arith.truncf
+    - tt.fp_to_fp
+  conditions:
+  - f16 -> f64
+  llvm: fpext half->float then fpext float->double
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: ExtFOpConversion
+- mapping_id: cast.float.half.rtz
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f32->f16; rounding RTZ
+  llvm: u:i32=bitcast float x; sign=and u,0x80000000; exponent=and(lshr u,23),255; mantissa=and u,0x7fffff; icmp/select
+    and integer add/sub/lshr renormalize with bias112; assemble sign/exponent/mantissa; trunc i16; bitcast half
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: convertFp32ToFp16
+- mapping_id: cast.fpext
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.extf
+  conditions:
+  - source/destination pair (S,D) in {(half,float),(float,double)}; BF16 and frontend bridges are separate rules
+  llvm: y:D = fpext S x to D
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: ExtFOpConversion
+- mapping_id: cast.fptosi
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.fptosi
+  conditions:
+  - ordinary integer/float types, not specialized BF16 bridge
+  llvm: y:D = fptosi S x to D
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FPToSIOpConversion
+- mapping_id: cast.fptoui
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.fptoui
+  conditions:
+  - legal frontend source/result types
+  llvm: y:D = fptoui S x to D
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: cast.fptrunc
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.truncf
+  conditions:
+  - (S,D) in {(double,float),(double,half),(float,half)}; default RTNE
+  - f32->f16 RTZ and BF16 narrowing use separate rules
+  llvm: y:D = fptrunc S x to D
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: TruncFOpConversion
+- mapping_id: cast.inttoptr
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.int_to_ptr
+  conditions:
+  - legal frontend source/result types
+  llvm: y:D = inttoptr S x to D
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: cast.ptrtoint
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.ptr_to_int
+  conditions:
+  - legal frontend source/result types
+  llvm: y:D = ptrtoint S x to D
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: cast.sext
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.extsi
+  conditions:
+  - legal frontend source/result types
+  llvm: y:D = sext S x to D
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: cast.signed.bf16
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.sitofp
+  conditions:
+  - signed integer -> BF16
+  llvm: 'f:float = sitofp iN x
+
+    y:i16 = call llvm.mxc.cvt.f32tobf16(f)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: SIToFPOpConversion
+- mapping_id: cast.sitofp
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.sitofp
+  conditions:
+  - ordinary integer/float types, not specialized BF16 bridge
+  llvm: y:D = sitofp S x to D
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: SIToFPOpConversion
+- mapping_id: cast.trunc
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.trunci
+  conditions:
+  - legal frontend source/result types
+  llvm: y:D = trunc S x to D
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: cast.uitofp
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.uitofp
+  conditions:
+  - legal frontend source/result types
+  llvm: y:D = uitofp S x to D
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: cast.zext
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.extui
+  conditions:
+  - legal frontend source/result types
+  llvm: y:D = zext S x to D
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populateElementwiseOpToLLVMPatterns
+- mapping_id: bf16.fadd
+  source:
+    apis:
+    - operator +
+    ir_ops:
+    - arith.addf
+  conditions:
+  - both operands BF16, represented as i16
+  llvm: 'wa:i32 = shl(zext i16 a to i32),16
+
+    wb:i32 = shl(zext i16 b to i32),16
+
+    f:float = fadd(bitcast wa to float, bitcast wb to float)
+
+    y:i16 = call llvm.mxc.cvt.f32tobf16(f)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: EmitDualBF16ElementwiseOp
+- mapping_id: bf16.fmul
+  source:
+    apis:
+    - operator *
+    ir_ops:
+    - arith.mulf
+  conditions:
+  - both operands BF16, represented as i16
+  llvm: 'wa:i32 = shl(zext i16 a to i32),16
+
+    wb:i32 = shl(zext i16 b to i32),16
+
+    f:float = fmul(bitcast wa to float, bitcast wb to float)
+
+    y:i16 = call llvm.mxc.cvt.f32tobf16(f)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: EmitDualBF16ElementwiseOp
+- mapping_id: bf16.fsub
+  source:
+    apis:
+    - operator -
+    ir_ops:
+    - arith.subf
+  conditions:
+  - both operands BF16, represented as i16
+  llvm: 'wa:i32 = shl(zext i16 a to i32),16
+
+    wb:i32 = shl(zext i16 b to i32),16
+
+    f:float = fsub(bitcast wa to float, bitcast wb to float)
+
+    y:i16 = call llvm.mxc.cvt.f32tobf16(f)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: EmitDualBF16ElementwiseOp
+- mapping_id: bf16.narrow.rtne
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.truncf
+    - tt.fp_to_fp
+  conditions:
+  - f32 -> bf16
+  - fp_downcast_rounding='rtne'
+  - RTNE is the default; nondefault modes use tt.fp_to_fp
+  llvm: y:i16 = call llvm.mxc.cvt.f32tobf16(x:float)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: TruncFOpConversion
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Utility.cpp
+    symbol: convertFp32ToBf16
+  - path: third_party/metax/spec/triton/language/semantic.py
+    symbol: def _str_to_rounding_mode
+- mapping_id: bf16.narrow.rtne_no_nan
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f32 -> bf16
+  - fp_downcast_rounding='rtne_no_nan'
+  - RTNE is the default; nondefault modes use tt.fp_to_fp
+  - NaN inputs excluded by this rounding mode
+  llvm: u:i32=bitcast float x; l:i32=and(lshr u,16),1; b:i32=add u,32767; y:i16=trunc(lshr(add b,l),16)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: convertFp32ToBf16
+  - path: third_party/metax/spec/triton/language/semantic.py
+    symbol: def _str_to_rounding_mode
+- mapping_id: bf16.narrow.rtz
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f32 -> bf16
+  - fp_downcast_rounding='rtz'
+  - RTNE is the default; nondefault modes use tt.fp_to_fp
+  llvm: 'u:i32 = bitcast float x
+
+    v:i32 = lshr u,16
+
+    y:i16 = trunc v'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Utility.cpp
+    symbol: convertFp32ToBf16
+  - path: third_party/metax/spec/triton/language/semantic.py
+    symbol: def _str_to_rounding_mode
+- mapping_id: bf16.widen
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - arith.extf
+  conditions:
+  - bf16 -> f32
+  llvm: 'u:i32 = zext i16 x
+
+    v:i32 = shl u,16
+
+    y:float = bitcast v'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Utility.cpp
+    symbol: convertBf16ToFp32
+- mapping_id: fp8.bf16.f8E4M3FN.hardware
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - bf16 -> f8E4M3FN; RTNE when narrowing
+  - computeCapability >= 89; TRITON_DISABLE_FAST_F16_F8_CVT absent
+  - packed groups of 2; LLVM packaging may include undef tail slots
+  llvm: i16 call @llvm.mxc.cvt.pk.bf16tof8(<2 x i16> packed); unpack result lanes
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: fp8.bf16.f8E4M3FN.software
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - bf16->f8E4M3FN; RTNE narrowing; capability<89 or TRITON_DISABLE_FAST_F16_F8_CVT present
+  - packing and tail padding follow FpToFpOpConversion
+  llvm: zext/shl16/bitcast BF16->float; E4M3FN f32 software RTNE packet
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: Bf16_to_Fp8E4M3FN_RTNE_SW
+- mapping_id: fp8.f16.f8E4M3FN.hardware
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f16 -> f8E4M3FN; RTNE when narrowing
+  - computeCapability >= 89; TRITON_DISABLE_FAST_F16_F8_CVT absent
+  - packed groups of 4; LLVM packaging may include undef tail slots
+  llvm: i32 call @llvm.mxc.cvt.pk4.f16tof8.cfg(<4 x half> packed, i32 0, i32 3, i32 0, i1 false, i1 false); unpack
+    result lanes
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: fp8.f16.f8E4M3FN.software
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f16->f8E4M3FN; RTNE narrowing; capability<89 or TRITON_DISABLE_FAST_F16_F8_CVT present
+  - packing and tail padding follow FpToFpOpConversion
+  llvm: fpext half->float; E4M3FN f32 software RTNE packet
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: Fp16_to_Fp8E4M3FN_RTNE_SW
+- mapping_id: fp8.f16.f8E5M2.hardware
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f16 -> f8E5M2; RTNE when narrowing
+  - computeCapability >= 89; TRITON_DISABLE_FAST_F16_F8_CVT absent
+  - packed groups of 4; LLVM packaging may include undef tail slots
+  llvm: i32 call @llvm.mxc.cvt.pk4.f16tobf8.cfg(<4 x half> packed, i32 0, i32 3, i32 0, i1 false, i1 false); unpack
+    result lanes
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: fp8.f16.f8E5M2.software
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f16->f8E5M2; RTNE narrowing; capability<89 or TRITON_DISABLE_FAST_F16_F8_CVT present
+  - packing and tail padding follow FpToFpOpConversion
+  llvm: fpext half->float; E5M2 f32 software RTNE packet
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: Fp16_to_Fp8E5M2_RTNE_SW
+- mapping_id: fp8.f32.f8E4M3FN.hardware
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f32 -> f8E4M3FN; RTNE when narrowing
+  - computeCapability >= 89; TRITON_DISABLE_FAST_F32_F8_CVT absent
+  - packed groups of 4; LLVM packaging may include undef tail slots
+  llvm: i32 call @llvm.mxc.cvt.pk4.f32tof8.cfg(<4 x float> packed, i32 0, i32 3, i32 0, i1 false, i1 false); unpack
+    result lanes
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: fp8.f32.f8E4M3FN.software
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f32->f8E4M3FN; RTNE narrowing; capability<89 or TRITON_DISABLE_FAST_F32_F8_CVT present
+  - packing and tail padding follow FpToFpOpConversion
+  llvm: ties-even bias (mantissaLSB+baseBias); llvm.umax for minimum normal; bias shift; halfway LUT icmp/select;
+    bitcast to i32; extract sign/exponent/mantissa using and/lshr; integer add/sub/shift; icmp/select for subnormals,
+    saturation and NaN; trunc to i8; combine sign with or
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: Fp32_to_Fp8E4M3FN_RTNE_SW
+- mapping_id: fp8.f32.f8E5M2.hardware
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f32 -> f8E5M2; RTNE when narrowing
+  - computeCapability >= 89; TRITON_DISABLE_FAST_F32_F8_CVT absent
+  - packed groups of 4; LLVM packaging may include undef tail slots
+  llvm: i32 call @llvm.mxc.cvt.pk4.f32tobf8.cfg(<4 x float> packed, i32 0, i32 3, i32 0, i1 false, i1 false); unpack
+    result lanes
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: fp8.f32.f8E5M2.software
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f32->f8E5M2; RTNE narrowing; capability<89 or TRITON_DISABLE_FAST_F32_F8_CVT present
+  - packing and tail padding follow FpToFpOpConversion
+  llvm: bitcast to i32; extract sign/exponent/mantissa using and/lshr; integer add/sub/shift; icmp/select for subnormals,
+    saturation and NaN; trunc to i8; combine sign with or; exponent bias0x70, sign mask0x80000000, rounding bias0xfffff,
+    saturate0x0f7fffff
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: Fp32_to_Fp8E5M2_RTNE_SW
+- mapping_id: fp8.f8E4M3FN.bf16.hardware
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f8E4M3FN -> bf16; RTNE when narrowing
+  - computeCapability >= 80; TRITON_DISABLE_FAST_F8_F16_CVT absent
+  - packed groups of 2; LLVM packaging may include undef tail slots
+  llvm: <2 x i16> call @llvm.mxc.cvt.pk.f8tobf16(i16 packed); unpack result lanes
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: fp8.f8E4M3FN.bf16.software
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f8E4M3FN->bf16; RTNE narrowing; capability<80 or TRITON_DISABLE_FAST_F8_F16_CVT present
+  - packing and tail padding follow FpToFpOpConversion
+  llvm: FP8 software widen to float; llvm.mxc.cvt.f32tobf16
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: Fp8E4M3FN_to_Bf16_SW
+- mapping_id: fp8.f8E4M3FN.f16.hardware
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f8E4M3FN -> f16; RTNE when narrowing
+  - computeCapability >= 89; TRITON_DISABLE_FAST_F8_F16_CVT absent
+  - packed groups of 2; LLVM packaging may include undef tail slots
+  llvm: <2 x half> call @llvm.mxc.cvt.pk.f8tof16(i16 packed); unpack result lanes
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: fp8.f8E4M3FN.f16.software
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f8E4M3FN->f16; RTNE narrowing; capability<89 or TRITON_DISABLE_FAST_F8_F16_CVT present
+  - packing and tail padding follow FpToFpOpConversion
+  llvm: zext bytes to i32; and/or/shl/lshr, icmp/select exponent/mantissa reconstruction; trunc i16; bitcast to
+    half
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: Fp8E4M3FN_to_Fp16_SW
+- mapping_id: fp8.f8E5M2.f16.hardware
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f8E5M2 -> f16; RTNE when narrowing
+  - computeCapability >= 89; TRITON_DISABLE_FAST_F8_F16_CVT absent
+  - packed groups of 2; LLVM packaging may include undef tail slots
+  llvm: <2 x half> call @llvm.mxc.cvt.pk.bf8tof16(i16 packed); unpack result lanes
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: FpToFpOpConversion
+- mapping_id: fp8.f8E5M2.f16.software
+  source:
+    apis:
+    - tensor.to
+    ir_ops:
+    - tt.fp_to_fp
+  conditions:
+  - f8E5M2->f16; RTNE narrowing; capability<89 or TRITON_DISABLE_FAST_F8_F16_CVT present
+  - packing and tail padding follow FpToFpOpConversion
+  llvm: zext i8 to i16; shl8; bitcast i16 to half
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: Fp8E5M2_to_Fp16_SW
+- mapping_id: fp4.scaled.bf16.hi
+  source:
+    apis:
+    - tl.dot_scaled
+    ir_ops:
+    - tt.fp4_to_fp_scaled
+  conditions:
+  - BF16 result; packed i8 input; i8 scales grouped by identical SSA value
+  - hi scale byte in i16; two input bytes packed i16
+  llvm: <4 x half> call @llvm.mxc.cvt.pk4.f4tobf16.scale.hi(i16 packed,i16 scales); extract BF16 bit carriers
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Fp4ToFpScaledOpToLLVM.cpp
+    symbol: Fp4ToFpScaledOpPattern
+- mapping_id: fp4.scaled.bf16.lo
+  source:
+    apis:
+    - tl.dot_scaled
+    ir_ops:
+    - tt.fp4_to_fp_scaled
+  conditions:
+  - BF16 result; packed i8 input; i8 scales grouped by identical SSA value
+  - lo scale byte in i16; two input bytes packed i16
+  llvm: <4 x half> call @llvm.mxc.cvt.pk4.f4tobf16.scale.lo(i16 packed,i16 scales); extract BF16 bit carriers
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Fp4ToFpScaledOpToLLVM.cpp
+    symbol: Fp4ToFpScaledOpPattern
+- mapping_id: pointer.addptr
+  source:
+    apis:
+    - pointer arithmetic
+    ir_ops:
+    - tt.addptr
+  conditions:
+  - legal frontend types, layout and ABI
+  llvm: getelementptr typed base,integer offset
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp
+    symbol: populate
+- mapping_id: global.async.copy
+  source:
+    apis: []
+    ir_ops:
+    - ttg.async_copy_global_to_local
+  conditions:
+  - valid global-to-shared copy
+  - word width/grouping selected by contiguity and swizzle
+  - mask/zero-other restrictions from AsyncCopyGlobalToLocalOpConversion
+  llvm: 'pred:i64 = llvm.mxc.icmp.i64.i32(mask32,0,34)
+
+    call llvm.mxc.ldg.predicator.bsm.<typed suffix>(global ptr,shared address,pred,flags)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AsyncCopyGlobalToLocalOpConversion
+- mapping_id: global.load.fallback.ordinary
+  source:
+    apis:
+    - tl.load
+    ir_ops:
+    - tt.load
+  conditions:
+  - AS1 global pointer; AS3 shared pointer uses shared.load rules
+  - predicator disabled, invalid other, or unsupported optimized width
+  - scalar/vector grouping determined by width
+  - predicate false returns other/zero
+  - volatile=False
+  - pointer element T preserved
+  llvm: y:T or <V x T> = load ptr AS1 under conditional; merge other/zero
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: LoadOpConversion
+- mapping_id: global.load.fallback.volatile
+  source:
+    apis:
+    - tl.load
+    ir_ops:
+    - tt.load
+  conditions:
+  - AS1 global pointer; AS3 shared pointer uses shared.load rules
+  - predicator disabled, invalid other, or unsupported optimized width
+  - volatile forces scalar load
+  - predicate false returns other/zero
+  - volatile=True
+  - pointer element T preserved
+  llvm: y:T = load volatile T, ptr addrspace(1) p under predicate; merge other/zero
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: LoadOpConversion
+- mapping_id: global.load.predicator
+  source:
+    apis:
+    - tl.load
+    ir_ops:
+    - tt.load
+  conditions:
+  - AS1 global pointer; AS3 shared pointer uses shared.load rules
+  - nonvolatile
+  - TRITON_DISABLE_LOAD_STORE_OPT and TRITON_DISABLE_LDG_PREDICATOR absent
+  - other absent or zero splat
+  - total width in 8/16/32/64/128
+  - element T in i8/i16/i32/i64/f16/f32/f64, vector V chosen from AxisInfo contiguity/constancy
+  - TRITON_DISABLE_LDG_SADDR presence selects saddr=false, otherwise true
+  llvm: 'mask32:i32 = zext predicate (or 1 for unmasked load)
+
+    pred:i64 = call llvm.mxc.icmp.i64.i32(mask32,0,34)
+
+    y:T or <V x T> = call llvm.mxc.ldg.predicator.<typed suffix>(ptr AS1,0,pred,true,saddr,false,false)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: LoadOpConversion
+- mapping_id: global.store.fallback.ordinary
+  source:
+    apis:
+    - tl.store
+    ir_ops:
+    - tt.store
+  conditions:
+  - AS1 global pointer
+  - width not 32/64/128
+  - thread predicate AND optional mask
+  - pointer element T preserved
+  llvm: conditional store <V x T>, ptr AS1 (including vector<1>)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: StoreOpConversion
+- mapping_id: global.store.predicator
+  source:
+    apis:
+    - tl.store
+    ir_ops:
+    - tt.store
+  conditions:
+  - AS1 global pointer
+  - total width in 32/64/128
+  - thread redundancy predicate AND optional mask
+  - element T in i8/i16/i32/i64/f16/f32/f64, vector V chosen from AxisInfo contiguity/constancy
+  - TRITON_DISABLE_STG_SADDR presence selects saddr=false, otherwise true
+  llvm: 'mask32:i32 = zext predicate (or 1 for unmasked load)
+
+    pred:i64 = call llvm.mxc.icmp.i64.i32(mask32,0,34)
+
+    call llvm.mxc.stg.predicator.<typed suffix>(ptr AS1,0,value,pred,saddr,false,false)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: StoreOpConversion
+- mapping_id: shared.bsm_perm.explicit
+  source:
+    apis:
+    - tle.gpu.metax.bsm_perm
+    ir_ops:
+    - ttg.bsm_perm
+  conditions:
+  - rank2 packed i32 from split load; result half/BF16; matching C500 physical permutation layout
+  llvm: extract i32 words; llvm.mxc.byte.perm(first,second,0x01000504) and llvm.mxc.byte.perm(first,second,0x03020706);
+    unpack half/BF16 carriers
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ViewOpToLLVM.cpp
+    symbol: BsmPermOpConversion
+- mapping_id: shared.load.perm.integrated
+  source:
+    apis:
+    - tle.gpu.metax.local_load
+    ir_ops:
+    - ttg.local_load
+  conditions:
+  - non-padded shared encoding -> DotOperandEncoding with MACAMma parent
+  - A/B not transposed; register order differs from shared order; element width16; elementsMNK operand and K even;
+    layout permTile/reps factorization succeeds
+  - TRITON_DISABLE_SPLIT_PERM present or mma_mode != TT_MODE
+  llvm: two AS3 load <elemsPerVec/2 x i32>, align elemsPerVec*2; extract i32 pairs; llvm.mxc.byte.perm(first,second,0x01000504)
+    and llvm.mxc.byte.perm(first,second,0x03020706); unpack half/BF16 bits
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/MemoryOpToLLVM.cpp
+    symbol: lowerLocalLdPerm
+- mapping_id: shared.load.perm.split
+  source:
+    apis:
+    - tle.gpu.metax.local_load
+    ir_ops:
+    - ttg.local_load
+  conditions:
+  - non-padded shared encoding -> DotOperandEncoding with MACAMma parent
+  - A/B not transposed; register order differs from shared order; element width16; elementsMNK operand and K even;
+    layout permTile/reps factorization succeeds
+  - TRITON_DISABLE_SPLIT_PERM absent; mma_mode=TT_MODE(2)
+  llvm: AS3 load <elemsPerVec/2 x i32> tuples; pack raw i32 results; no byte.perm here (separate ttg.bsm_perm)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/MemoryOpToLLVM.cpp
+    symbol: lowerLocalLdswithoutPerm
+- mapping_id: shared.load.predicated
+  source:
+    apis:
+    - tl.load
+    ir_ops:
+    - tt.load
+  conditions:
+  - AS3; no remote CTA; generic path (matrix-permutation/intrinsic paths are separate)
+  - integer carrier T in {i8,i16,i32,i64}; V in {1,2,4}; V*bits(T)<=128
+  - V is selected by layout/contiguity; alignment=V*bits(T)/8 bytes; floating elements use bitcasts to/from integer
+    carriers
+  - predicate is not constant true; false branch yields zero
+  - tl.load/tl.store AS3 path requires __MCTLE__; ttg.local_load/local_store use the shared-memory lowering directly
+  llvm: 'if predicate: load T (V=1) or <V x T> (V>1) from AS3, align A
+
+    else: zero of the same LLVM type
+
+    merge with phi; A=V*bits(T)/8'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/TargetInfo.cpp
+    symbol: loadDShared
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: LoadOpConversion
+- mapping_id: shared.load.unmasked
+  source:
+    apis:
+    - tl.load
+    - tle.gpu.metax.local_load
+    ir_ops:
+    - tt.load
+    - ttg.local_load
+  conditions:
+  - AS3; no remote CTA; generic path (matrix-permutation/intrinsic paths are separate)
+  - integer carrier T in {i8,i16,i32,i64}; V in {1,2,4}; V*bits(T)<=128
+  - V is selected by layout/contiguity; alignment=V*bits(T)/8 bytes; floating elements use bitcasts to/from integer
+    carriers
+  - predicate is constant true
+  - tl.load/tl.store AS3 path requires __MCTLE__; ttg.local_load/local_store use the shared-memory lowering directly
+  llvm: 'V=1: y:T = load T, ptr addrspace(3) p, align A
+
+    V>1: y:<V x T> = load <V x T>, ptr addrspace(3) p, align A
+
+    A=V*bits(T)/8; unpack/reinterpret result elements'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/TargetInfo.cpp
+    symbol: loadDShared
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: LoadOpConversion
+- mapping_id: shared.store
+  source:
+    apis:
+    - tl.store
+    ir_ops:
+    - tt.store
+    - ttg.local_store
+  conditions:
+  - AS3; no remote CTA; generic path (matrix-permutation/intrinsic paths are separate)
+  - integer carrier T in {i8,i16,i32,i64}; V in {1,2,4}; V*bits(T)<=128
+  - V is selected by layout/contiguity; alignment=V*bits(T)/8 bytes; floating elements use bitcasts to/from integer
+    carriers
+  - constant-true predicate emits a direct store; otherwise guard the store with a conditional
+  - tl.load/tl.store AS3 path requires __MCTLE__; ttg.local_load/local_store use the shared-memory lowering directly
+  llvm: 'pack <V x T> value; store <V x T> value, ptr addrspace(3) p, align A, under predicate
+
+    A=V*bits(T)/8; V=1 remains <1 x T>'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/TargetInfo.cpp
+    symbol: storeDShared
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: StoreOpConversion
+- mapping_id: mma.16x16x16bf16
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - bf16
+  - MACAMmaEncoding and matching DotOperandEncoding
+  - supportMMA(mmaType, versionMajor/minor), K != 1
+  - complete per-thread A/B/C tuples required
+  llvm: 'D:accumulator tuple = call llvm.mxc.mma.f32.16x16x2bf16(A tuple,B tuple,C tuple)
+
+    A/B: <4 x half> carrier of BF16 bits; C/D:<4 x float>'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/DotOpToLLVM/MMAMACA.cpp
+    symbol: getMmaInstr
+- mapping_id: mma.16x16x16f16
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - f16
+  - MACAMmaEncoding and matching DotOperandEncoding
+  - supportMMA(mmaType, versionMajor/minor), K != 1
+  - complete per-thread A/B/C tuples required
+  llvm: D:accumulator tuple = call llvm.mxc.mma.f32.16x16x16f16(A tuple,B tuple,C tuple)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/DotOpToLLVM/MMAMACA.cpp
+    symbol: getMmaInstr
+- mapping_id: mma.16x16x16i8
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - i8
+  - MACAMmaEncoding and matching DotOperandEncoding
+  - supportMMA(mmaType, versionMajor/minor), K != 1
+  - complete per-thread A/B/C tuples required
+  llvm: D:accumulator tuple = call llvm.mxc.mma.i32.16x16x16i8(A tuple,B tuple,C tuple)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/DotOpToLLVM/MMAMACA.cpp
+    symbol: getMmaInstr
+- mapping_id: mma.16x16x32bf8
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - fp8 E5M2
+  - MACAMmaEncoding and matching DotOperandEncoding
+  - supportMMA(mmaType, versionMajor/minor), K != 1
+  - complete per-thread A/B/C tuples required
+  - MMA major=2 and minor>=6
+  llvm: D:accumulator tuple = call llvm.mxc.mma.f32.16x16x32bf8(A tuple,B tuple,C tuple)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/DotOpToLLVM/MMAMACA.cpp
+    symbol: getMmaInstr
+- mapping_id: mma.16x16x32f8
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - fp8 E4M3
+  - MACAMmaEncoding and matching DotOperandEncoding
+  - supportMMA(mmaType, versionMajor/minor), K != 1
+  - complete per-thread A/B/C tuples required
+  - MMA major=2 and minor>=6
+  llvm: D:accumulator tuple = call llvm.mxc.mma.f32.16x16x32f8(A tuple,B tuple,C tuple)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/DotOpToLLVM/MMAMACA.cpp
+    symbol: getMmaInstr
+- mapping_id: mma.16x16x32i8
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - i8
+  - MACAMmaEncoding and matching DotOperandEncoding
+  - supportMMA(mmaType, versionMajor/minor), K != 1
+  - complete per-thread A/B/C tuples required
+  llvm: D:accumulator tuple = call llvm.mxc.mma.i32.16x16x32i8(A tuple,B tuple,C tuple)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/DotOpToLLVM/MMAMACA.cpp
+    symbol: getMmaInstr
+- mapping_id: mma.16x16x4f32
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - f32
+  - MACAMmaEncoding and matching DotOperandEncoding
+  - supportMMA(mmaType, versionMajor/minor), K != 1
+  - complete per-thread A/B/C tuples required
+  llvm: D:accumulator tuple = call llvm.mxc.mma.f32.16x16x4f32(A tuple,B tuple,C tuple)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/DotOpToLLVM/MMAMACA.cpp
+    symbol: getMmaInstr
+- mapping_id: mma.16x16x4f64
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - f64
+  - MACAMmaEncoding and matching DotOperandEncoding
+  - supportMMA(mmaType, versionMajor/minor), K != 1
+  - complete per-thread A/B/C tuples required
+  llvm: D:accumulator tuple = call llvm.mxc.mma.f64.16x16x4f64(A tuple,B tuple,C tuple)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/DotOpToLLVM/MMAMACA.cpp
+    symbol: getMmaInstr
+- mapping_id: mma.16x16x8tf32
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - tf32
+  - MACAMmaEncoding and matching DotOperandEncoding
+  - supportMMA(mmaType, versionMajor/minor), K != 1
+  - complete per-thread A/B/C tuples required
+  llvm: D:accumulator tuple = call llvm.mxc.mma.f32.16x16x8tf32(A tuple,B tuple,C tuple)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/DotOpToLLVM/MMAMACA.cpp
+    symbol: getMmaInstr
+- mapping_id: dot.fallback.floating
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - blocked-layout FMA fallback
+  - MMA not selected
+  llvm: 'per K element: LLVM fmuladd of typed scalar operands'
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/DotOpToLLVM/FMA.cpp
+    symbol: GenericFMAVectorMultiplier
+- mapping_id: dot.fallback.integer
+  source:
+    apis:
+    - tl.dot
+    ir_ops:
+    - tt.dot
+  conditions:
+  - blocked-layout FMA fallback
+  - MMA not selected
+  llvm: 'per K element: mul iN + add iN accumulation'
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/DotOpToLLVM/FMA.cpp
+    symbol: GenericFMAVectorMultiplier
+- mapping_id: shuffle.idx.32
+  source:
+    apis:
+    - tl.sum
+    - tl.associative_scan
+    - layout conversion
+    ir_ops:
+    - tt.reduce
+    - tt.scan
+    - ttg.convert_layout
+  conditions:
+  - 32-bit value
+  - MetaX intrinsic shuffle path, width=64
+  llvm: 'index=(lane&-64)+requested_lane
+
+    byte_index:i32 = shl index,2
+
+    call llvm.mxc.bsm.bpermute(byte_index:i32,value:i32)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Utility.cpp
+    symbol: shuffleIdxIntrinsic
+- mapping_id: shuffle.idx.64
+  source:
+    apis:
+    - tl.sum
+    - tl.associative_scan
+    - layout conversion
+    ir_ops:
+    - tt.reduce
+    - tt.scan
+    - ttg.convert_layout
+  conditions:
+  - 64-bit value
+  - MetaX intrinsic shuffle path, width=64
+  llvm: 'index=(lane&-64)+requested_lane
+
+    byte_index:i32 = shl index,2
+
+    split value into two i32 words
+
+    call llvm.mxc.bsm.bpermute(byte_index:i32,value:i32) twice, then repack i64'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Utility.cpp
+    symbol: shuffleIdxIntrinsic
+- mapping_id: shuffle.up.32
+  source:
+    apis:
+    - tl.sum
+    - tl.associative_scan
+    - layout conversion
+    ir_ops:
+    - tt.reduce
+    - tt.scan
+    - ttg.convert_layout
+  conditions:
+  - 32-bit value
+  - MetaX intrinsic shuffle path, width=64
+  llvm: 'index=select((lane-delta)<(lane&-64),lane,lane-delta)
+
+    byte_index:i32 = shl index,2
+
+    call llvm.mxc.bsm.bpermute(byte_index:i32,value:i32)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Utility.cpp
+    symbol: shuffleUpIntrinsic
+- mapping_id: shuffle.up.64
+  source:
+    apis:
+    - tl.sum
+    - tl.associative_scan
+    - layout conversion
+    ir_ops:
+    - tt.reduce
+    - tt.scan
+    - ttg.convert_layout
+  conditions:
+  - 64-bit value
+  - MetaX intrinsic shuffle path, width=64
+  llvm: 'index=select((lane-delta)<(lane&-64),lane,lane-delta)
+
+    byte_index:i32 = shl index,2
+
+    split value into two i32 words
+
+    call llvm.mxc.bsm.bpermute(byte_index:i32,value:i32) twice, then repack i64'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Utility.cpp
+    symbol: shuffleUpIntrinsic
+- mapping_id: shuffle.xor.32
+  source:
+    apis:
+    - tl.sum
+    - tl.associative_scan
+    - layout conversion
+    ir_ops:
+    - tt.reduce
+    - tt.scan
+    - ttg.convert_layout
+  conditions:
+  - 32-bit value
+  - MetaX intrinsic shuffle path, width=64
+  llvm: 'index=select((tid xor delta)>=((tid+64)&-64),tid,tid xor delta)
+
+    byte_index:i32 = shl index,2
+
+    call llvm.mxc.bsm.bpermute(byte_index:i32,value:i32)'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Utility.cpp
+    symbol: shuffleXorIntrinsic
+- mapping_id: shuffle.xor.64
+  source:
+    apis:
+    - tl.sum
+    - tl.associative_scan
+    - layout conversion
+    ir_ops:
+    - tt.reduce
+    - tt.scan
+    - ttg.convert_layout
+  conditions:
+  - 64-bit value
+  - MetaX intrinsic shuffle path, width=64
+  llvm: 'index=select((tid xor delta)>=((tid+64)&-64),tid,tid xor delta)
+
+    byte_index:i32 = shl index,2
+
+    split value into two i32 words
+
+    call llvm.mxc.bsm.bpermute(byte_index:i32,value:i32) twice, then repack i64'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/Utility.cpp
+    symbol: shuffleXorIntrinsic
+- mapping_id: sync.arrive
+  source:
+    apis:
+    - tle.gpu.metax.gvm_arrive
+    ir_ops:
+    - ttg.gvm_arrive
+  conditions:
+  - MetaX TLE operation
+  - required constexpr operands preserved
+  llvm: call llvm.mxc.arrive(i32 num+64)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ConvertLayoutOpToLLVM.cpp
+    symbol: GVMArriveOpConversion
+- mapping_id: sync.barrier
+  source:
+    apis:
+    - tle.gpu.metax.barrier
+    ir_ops:
+    - ttg.barrier
+  conditions:
+  - MetaX TLE operation
+  - required constexpr operands preserved
+  llvm: call llvm.mxc.barrier.inst()
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ConvertLayoutOpToLLVM.cpp
+    symbol: BarrierOpConversion
+- mapping_id: sync.barrier_shared
+  source:
+    apis:
+    - tle.gpu.metax.barrier_shared
+    ir_ops:
+    - ttg.barrier_shared
+  conditions:
+  - MetaX TLE operation
+  - required constexpr operands preserved
+  llvm: call llvm.mxc.barrier.shared()
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ConvertLayoutOpToLLVM.cpp
+    symbol: BarrierSharedOpConversion
+- mapping_id: sync.iglp
+  source:
+    apis:
+    - tle.gpu.metax.iglp
+    ir_ops:
+    - ttg.iglp
+  conditions:
+  - MetaX TLE operation
+  - required constexpr operands preserved
+  llvm: call llvm.mxc.igroup.config(eight i32 constexpr arguments)
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ConvertLayoutOpToLLVM.cpp
+    symbol: IGLPOpConversion
+- mapping_id: sync.sched_bound
+  source:
+    apis:
+    - tle.gpu.metax.sched_bound
+    ir_ops:
+    - ttg.sched_bound
+  conditions:
+  - MetaX TLE operation
+  - required constexpr operands preserved
+  llvm: call llvm.mxc.schedbound.begin()
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ConvertLayoutOpToLLVM.cpp
+    symbol: SchedBoundOpConversion
+- mapping_id: layout.block
+  source:
+    apis:
+    - layout conversion
+    ir_ops:
+    - ttg.convert_layout
+  conditions:
+  - layout relation selects block
+  llvm: store values into ptr addrspace(3); call llvm.mxc.barrier.inst(); load swizzled values from ptr addrspace(3)
+  source_reference:
+  - path: lib/Conversion/TritonGPUToLLVM/ConvertLayoutOpToLLVM.cpp
+    symbol: ConvertLayoutOpConversion
+- mapping_id: reduce.block
+  source:
+    apis:
+    - tl.sum
+    - tl.max
+    - tl.min
+    - tl.reduce
+    ir_ops:
+    - tt.reduce
+  conditions:
+  - axis/layout group selects block
+  - packed sum uses f32 pairs and requires optimization enabled
+  llvm: AS3 partial stores + barriers + AS3 loads + warp reduction
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ReduceOpToLLVM.cpp
+    symbol: ReduceOpConversion
+- mapping_id: reduce.packed_sum
+  source:
+    apis:
+    - tl.sum
+    - tl.max
+    - tl.min
+    - tl.reduce
+    ir_ops:
+    - tt.reduce
+  conditions:
+  - axis/layout group selects packed_sum
+  - packed sum uses f32 pairs and requires optimization enabled
+  llvm: llvm.mxc.pk.fma.f32(A,<1,1>,C) + remaining reduce
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ReduceOpToLLVM.cpp
+    symbol: ReduceOpConversion
+- mapping_id: reduce.thread
+  source:
+    apis:
+    - tl.sum
+    - tl.max
+    - tl.min
+    - tl.reduce
+    ir_ops:
+    - tt.reduce
+  conditions:
+  - axis/layout group selects thread
+  - packed sum uses f32 pairs and requires optimization enabled
+  llvm: inline combine region over per-thread LLVM values
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ReduceOpToLLVM.cpp
+    symbol: ReduceOpConversion
+- mapping_id: reduce.warp
+  source:
+    apis:
+    - tl.sum
+    - tl.max
+    - tl.min
+    - tl.reduce
+    ir_ops:
+    - tt.reduce
+  conditions:
+  - axis/layout group selects warp
+  - packed sum uses f32 pairs and requires optimization enabled
+  llvm: bsm.bpermute XOR slices + inline combine region
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/ReduceOpToLLVM.cpp
+    symbol: ReduceOpConversion
+- mapping_id: histogram
+  source:
+    apis:
+    - tl.histogram
+    ir_ops:
+    - tt.histogram
+  conditions:
+  - supported 32-bit bins and thread layout
+  llvm: ballot predicate with model 33 -> ctpop -> AS3 atomic add -> barriers -> shared load
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/HistogramOpToLLVM.cpp
+    symbol: HistogramOpConversion
+- mapping_id: atomic.atomic_add.floating
+  source:
+    apis:
+    - tl.atomic_add
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - floating T in the ordinary scalar LLVM fadd branch; BF16 intrinsic and f16 tuple handling are not this rule
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw fadd ptr addrspace(1),typed value,order
+
+    scalar used result: AS3 store -> barrier -> AS3 load -> barrier broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.atomic_add.integer
+  source:
+    apis:
+    - tl.atomic_add
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - integer T
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw add ptr addrspace(1),typed value,order
+
+    scalar used result: AS3 store -> barrier -> AS3 load -> barrier broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.atomic_and
+  source:
+    apis:
+    - tl.atomic_and
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - legal dtype and operation
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw and ptr addrspace(1),typed value,order
+
+    scalar returned result may use AS3 store/barrier/load broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.atomic_max.signed
+  source:
+    apis:
+    - tl.atomic_max
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - signed integer T
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw max ptr addrspace(1),typed value,order
+
+    scalar used result: AS3 store -> barrier -> AS3 load -> barrier broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.atomic_max.unsigned
+  source:
+    apis:
+    - tl.atomic_max
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - unsigned integer T
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw umax ptr addrspace(1),typed value,order
+
+    scalar used result: AS3 store -> barrier -> AS3 load -> barrier broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.atomic_min.signed
+  source:
+    apis:
+    - tl.atomic_min
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - signed integer T
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw min ptr addrspace(1),typed value,order
+
+    scalar used result: AS3 store -> barrier -> AS3 load -> barrier broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.atomic_min.unsigned
+  source:
+    apis:
+    - tl.atomic_min
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - unsigned integer T
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw umin ptr addrspace(1),typed value,order
+
+    scalar used result: AS3 store -> barrier -> AS3 load -> barrier broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.atomic_or
+  source:
+    apis:
+    - tl.atomic_or
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - legal dtype and operation
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw or ptr addrspace(1),typed value,order
+
+    scalar returned result may use AS3 store/barrier/load broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.atomic_xchg
+  source:
+    apis:
+    - tl.atomic_xchg
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - legal dtype and operation
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw xchg ptr addrspace(1),typed value,order
+
+    scalar returned result may use AS3 store/barrier/load broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.atomic_xor
+  source:
+    apis:
+    - tl.atomic_xor
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - legal dtype and operation
+  - sem=relaxed/acquire/release/acq_rel maps to monotonic/acquire/release/acq_rel
+  - device syncscope
+  - mask and redundancy predicates preserved
+  llvm: 'atomicrmw xor ptr addrspace(1),typed value,order
+
+    scalar returned result may use AS3 store/barrier/load broadcast'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.bf16.add
+  source:
+    apis:
+    - tl.atomic_add
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - BF16 add
+  - two adjacent elements may pack into one 32-bit word
+  llvm: pack BF16 bits; call llvm.mxc.gvm.atomic.add.bf16.i16; extract result lanes
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.cas.scalar
+  source:
+    apis:
+    - tl.atomic_cas
+    ir_ops:
+    - tt.atomic_cas
+  conditions:
+  - scalar input
+  - single selected lane
+  - acq_rel success / monotonic failure
+  - result broadcasting only when result used
+  llvm: 'r = cmpxchg ptr AS1,compare,value acq_rel monotonic
+
+    used result: AS3 store -> llvm.mxc.arrive(0) + barrier -> AS3 load'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicCASOpConversion
+- mapping_id: atomic.cas.tensor
+  source:
+    apis:
+    - tl.atomic_cas
+    ir_ops:
+    - tt.atomic_cas
+  conditions:
+  - tensor result
+  - integer carrier, floating values bitcast
+  - success requested order, failure monotonic
+  llvm: 'r:{T,i1} = cmpxchg ptr AS1,compare:T,value:T syncscope(device) success_order monotonic
+
+    y:T = extractvalue r,0'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicCASOpConversion
+- mapping_id: atomic.float.max
+  source:
+    apis:
+    - tl.atomic_max
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - f32/f64
+  - sign-dependent predication
+  - return select and mask preserved
+  llvm: 'bitcast float value to integer
+
+    sign selects atomicrmw max/umin on integer bits
+
+    select returned bits and bitcast to floating result'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: atomic.float.min
+  source:
+    apis:
+    - tl.atomic_min
+    ir_ops:
+    - tt.atomic_rmw
+  conditions:
+  - f32/f64
+  - sign-dependent predication
+  - return select and mask preserved
+  llvm: 'bitcast float value to integer
+
+    sign selects atomicrmw min/umax on integer bits
+
+    select returned bits and bitcast to floating result'
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/LoadStoreOpToLLVM.cpp
+    symbol: AtomicRMWOpConversion
+- mapping_id: builtin.pack_bf16
+  source:
+    apis: []
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - literal compatibility callee __triton_maca_pack_f32_bf16x2
+  - eight f32 operands
+  llvm: eight llvm.mxc.cvt.f32tobf16 calls; pack pairs with insertelement/bitcast to four i32
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/BuiltinFuncToLLVMExt.cpp
+    symbol: CallOpConversion
+- mapping_id: builtin.unpack_bf16
+  source:
+    apis: []
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - literal compatibility callee __triton_maca_unpack_bf16x2_f32
+  - four i32 packed BF16 pairs
+  llvm: bitcast four i32 to BF16 pairs; extractelement; zext/shl16/bitcast to eight floats
+  source_reference:
+  - path: third_party/metax/plugin/lib/TritonMETAXGPUToLLVM/BuiltinFuncToLLVMExt.cpp
+    symbol: CallOpConversion
+- mapping_id: libdevice.byte_perm
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.byte_perm
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: int32 call @mc_math_func_byte_perm(int32, int32, int32)
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def byte_perm(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.ceil
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.ceil
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_ceilf(fp32)
+
+    fp64 call @mc_math_func_ceil(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def ceil(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.clz
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.clz
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'int32 call @mc_math_func_clz(int32)
+
+    int32 call @mc_math_func_clzll(int64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def clz(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.cos
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.cos
+    - tl.extra.cuda.libdevice.fast_cosf
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  - 'tl.extra.cuda.libdevice.fast_cosf is restricted to argument types: fp32'
+  llvm: 'fp32 call @mc_math_func_cosf(fp32)
+
+    fp64 call @mc_math_func_cos(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def cos(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def fast_cosf(
+- mapping_id: libdevice.div_rn
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.div_rn
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_fdiv_rn(fp32, fp32)
+
+    fp64 call @mc_math_func_ddiv_rn(fp64, fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def div_rn(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.erf
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.erf
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_erff(fp32)
+
+    fp64 call @mc_math_func_erf(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def erf(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.exp
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.exp
+    - tl.extra.cuda.libdevice.fast_expf
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  - 'tl.extra.cuda.libdevice.fast_expf is restricted to argument types: fp32'
+  llvm: 'fp32 call @mc_math_func_expf(fp32)
+
+    fp64 call @mc_math_func_exp(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def exp(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def fast_expf(
+- mapping_id: libdevice.exp2
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.exp2
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_exp2f(fp32)
+
+    fp64 call @mc_math_func_exp2(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def exp2(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.floor
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.floor
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_floorf(fp32)
+
+    fp64 call @mc_math_func_floor(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def floor(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.fma_rn
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.fma_rn
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_fmaf_rn(fp32, fp32, fp32)
+
+    fp64 call @mc_math_func_fma_rn(fp64, fp64, fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def fma_rn(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.log
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.log
+    - tl.extra.cuda.libdevice.fast_logf
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  - 'tl.extra.cuda.libdevice.fast_logf is restricted to argument types: fp32'
+  llvm: 'fp32 call @mc_math_func_logf(fp32)
+
+    fp64 call @mc_math_func_log(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def log(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def fast_logf(
+- mapping_id: libdevice.log2
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.log2
+    - tl.extra.cuda.libdevice.fast_log2f
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  - 'tl.extra.cuda.libdevice.fast_log2f is restricted to argument types: fp32'
+  llvm: 'fp32 call @mc_math_func_log2f(fp32)
+
+    fp64 call @mc_math_func_log2(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def log2(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def fast_log2f(
+- mapping_id: libdevice.popc
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.popc
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'int32 call @mc_math_func_popc(int32)
+
+    int32 call @mc_math_func_popcll(int64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def popc(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.rsqrt
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.rsqrt
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_rsqrtf(fp32)
+
+    fp64 call @mc_math_func_rsqrt(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def rsqrt(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.sin
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.sin
+    - tl.extra.cuda.libdevice.fast_sinf
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  - 'tl.extra.cuda.libdevice.fast_sinf is restricted to argument types: fp32'
+  llvm: 'fp32 call @mc_math_func_sinf(fp32)
+
+    fp64 call @mc_math_func_sin(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def sin(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def fast_sinf(
+- mapping_id: libdevice.sqrt
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.sqrt
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_sqrtf(fp32)
+
+    fp64 call @mc_math_func_sqrt(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def sqrt(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.tanh
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.tanh
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_tanhf(fp32)
+
+    fp64 call @mc_math_func_tanh(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def tanh(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map
+- mapping_id: libdevice.trunc
+  source:
+    apis:
+    - tl.extra.cuda.libdevice.trunc
+    ir_ops:
+    - tt.extern_elementwise
+  conditions:
+  - MetaX use_maca dispatch; pure extern_elementwise; frontend broadcasting applies
+  - only the listed typed signatures are included; helper internals remain in source audit
+  llvm: 'fp32 call @mc_math_func_truncf(fp32)
+
+    fp64 call @mc_math_func_trunc(fp64)'
+  source_reference:
+  - path: third_party/metax/language/cuda/libdevice.py
+    symbol: def trunc(
+  - path: third_party/metax/spec/triton/language/core.py
+    symbol: nv_to_maca_map

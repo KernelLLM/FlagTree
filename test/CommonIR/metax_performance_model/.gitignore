@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+*.so
+*.o
+*.fatbin
+*.elf
+*.log
+.triton/
+results/
