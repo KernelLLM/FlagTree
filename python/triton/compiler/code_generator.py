@@ -390,6 +390,12 @@ class CodeGenerator(ast.NodeVisitor):
         # convert_custom_types(input_tensor, dtype, fp_downcast_rounding=None, _builder=None)
         self.builder.codegen_fns = codegen_fns
         self.builder.module_map = {} if module_map is None else module_map
+        # Backend extensions are instance-local and must be ready before IR emission.
+        # Gluon keeps its own builder and semantics.
+        if not is_gluon:
+            initialize_builder = codegen_fns.get("initialize_builder")
+            if initialize_builder is not None:
+                initialize_builder(self.builder, context, options)
         self.module = self.builder.create_module() if module is None else module
         self.function_ret_types = {} if function_types is None else function_types
         self.prototype = prototype
