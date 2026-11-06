@@ -1309,8 +1309,10 @@ class CodeGenerator(ast.NodeVisitor):
         try:
             from ..experimental.tle import language as tle
             tle_dsa_pipeline = tle.dsa.pipeline
+            tle_dsa_parallel = getattr(tle.dsa, "parallel", None)
         except (ImportError, AttributeError):
             tle_dsa_pipeline = None
+            tle_dsa_parallel = None
 
         # flagtree ascend: load the extension only for Ascend builds.
         # Match the exact class rather than accepting arbitrary range subclasses.
@@ -1323,10 +1325,10 @@ class CodeGenerator(ast.NodeVisitor):
             is_ascend_parallel = IteratorClass is ascend_parallel
 
         # flagtree tle: check supported
-        if IteratorClass in (tle_pipeline, tle_range, tle_dsa_pipeline) and IteratorClass is not None:
+        if IteratorClass in (tle_pipeline, tle_range, tle_dsa_pipeline, tle_dsa_parallel) and IteratorClass is not None:
             self._require_tle_primitive(IteratorClass)
 
-        if (IteratorClass in [language.range, tle_pipeline, tle_range, tle_dsa_pipeline]
+        if (IteratorClass in [language.range, tle_pipeline, tle_range, tle_dsa_pipeline, tle_dsa_parallel]
                 or is_ascend_parallel):  # flagtree reorder-loop-loads / ascend
             iterator = IteratorClass(*iter_args, **iter_kwargs)
             # visit iterator arguments

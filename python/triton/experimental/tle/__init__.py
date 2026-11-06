@@ -215,3 +215,15 @@ __all__ = [
 
 if raw is not None:
     __all__.append("raw")
+
+
+def __getattr__(name):
+    # Keep the historical ``tle.<op>`` surface used by FlagTree kernels. The
+    # canonical definitions live under ``tle.language``; backend-provided
+    # extension APIs are resolved by ``tle.language.__getattr__``.
+    from . import language
+
+    try:
+        return getattr(language, name)
+    except AttributeError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None

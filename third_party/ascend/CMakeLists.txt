@@ -119,14 +119,24 @@ endif()
 add_triton_plugin(TritonAscend
   ${CMAKE_CURRENT_SOURCE_DIR}/triton_ascend.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/ascend_ir.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/tle_dsa/tle_ir.cc
   LINK_LIBS
+  CommonIRIR
   TritonToGraph
   TritonToLinalg
   BiShengIRScopeDialect
   BiShengIRHIVMDialect
+  MLIRMemRefDialect
+  MLIRTensorDialect
+  MLIRBufferizationDialect
+  MLIRArithDialect
 )
 
+target_compile_definitions(TritonAscend PRIVATE __TLE_DSA__)
 target_link_libraries(TritonAscend PRIVATE CommonIRToHIVM CommonIRTransforms)
+if(TARGET CommonIRIR)
+  add_dependencies(TritonAscend CommonIRIR)
+endif()
 
 option(TRITON_ENABLE_COVERAGE_LLVM_COV "Enable code llvm-cov coverage tool for Ascend plugin " OFF)
 if(TRITON_ENABLE_COVERAGE_LLVM_COV)
