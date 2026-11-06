@@ -24,6 +24,7 @@
 #include "triton/Dialect/TritonGPU/Transforms/Passes.h"
 #include "triton/Dialect/TritonGPU/Transforms/TritonGPUConversion.h"
 #include "triton/Dialect/TritonGPU/Transforms/Utility.h"
+#include "llvm/ADT/StringRef.h"
 #include <deque>
 
 namespace mlir::triton::gpu {
@@ -36,6 +37,8 @@ namespace mlir::triton::gpu {
 #define LDBG(X) LLVM_DEBUG(DBGS() << X << "\n")
 
 namespace {
+
+static constexpr llvm::StringLiteral kPinLayoutAttr = "pin_layout";
 
 #ifdef __TLE__
 static bool touchesTleRemotePointerPath(Value value, DenseSet<Value> &visited) {
@@ -91,9 +94,16 @@ class LayoutPropagation {
 public:
   // Structure to keep track of the layout associated to a value.
   struct LayoutInfo {
-    LayoutInfo(Attribute encoding) { encodings.insert(encoding); }
+    LayoutInfo(Attribute encoding, bool pinned = false) {
+      encodings.insert(encoding);
+      if (pinned)
+        pinnedEncodings.insert(encoding);
+    }
     LayoutInfo() {}
     llvm::SmallSetVector<Attribute, 8> encodings;
+    // Encodings that were explicitly pinned by `pin_layout` and must win over
+    // the default anchor propagation heuristics when resolving conflicts.
+    llvm::SmallSetVector<Attribute, 8> pinnedEncodings;
   };
   LayoutPropagation(FuncOp F) : funcOp(F) {}
   // Find the anchor ops and set their layout in the data structure.
@@ -213,6 +223,8 @@ void LayoutRematerialization::cleanup() {
 // Return true if the op is an op with a layout we don't want to change. We will
 // propagate the layout starting from anchor ops.
 bool isLayoutAnchor(Operation *op) {
+  if (op->hasAttr(kPinLayoutAttr))
+    return true;
   if (isa<DescriptorOpInterface>(op))
     return true;
   if (isa<LoadOp, StoreOp>(op))
@@ -235,9 +247,9 @@ bool isLayoutAnchor(Operation *op) {
 }
 
 void LayoutPropagation::initAnchorLayout() {
-  auto addAnchor = [&](Value v) {
+  auto addAnchor = [&](Value v, bool pinned = false) {
     if (auto tensorType = dyn_cast<RankedTensorType>(v.getType())) {
-      layouts.insert({v, LayoutInfo(tensorType.getEncoding())});
+      layouts.insert({v, LayoutInfo(tensorType.getEncoding(), pinned)});
     }
   };
 
@@ -250,8 +262,9 @@ void LayoutPropagation::initAnchorLayout() {
 
   funcOp.walk([&](Operation *op) {
     if (isLayoutAnchor(op)) {
+      bool pinned = op->hasAttr(kPinLayoutAttr);
       for (auto result : op->getResults()) {
-        addAnchor(result);
+        addAnchor(result, pinned);
       }
     }
   });
@@ -273,8 +286,9 @@ void LayoutPropagation::setEncoding(ValueRange values, LayoutInfo &info,
       } else {
         dstEncoding = inferDstEncoding(op, encoding);
       }
-      if (dstEncoding)
+      if (dstEncoding) {
         hasChanged |= layouts[value].encodings.insert(dstEncoding);
+      }
     }
     if (hasChanged)
       changed.push_back(value);
@@ -376,6 +390,15 @@ void LayoutPropagation::resolveConflicts() {
     LayoutInfo &info = it.second;
     if (info.encodings.size() <= 1)
       continue;
+    // Explicitly pinned layouts are stronger than the default heuristic below.
+    // This is the root fix for keeping a user-selected blocked layout through
+    // RemoveLayoutConversions instead of letting load/store anchors rewrite it.
+    if (!info.pinnedEncodings.empty()) {
+      Attribute pinnedEncoding = *info.pinnedEncodings.begin();
+      info.encodings.clear();
+      info.encodings.insert(pinnedEncoding);
+      continue;
+    }
     // Hacky resolve, prefer block encoding.
     // TODO: add a proper heuristic.
     Attribute encoding = *info.encodings.begin();
@@ -1042,6 +1065,11 @@ LogicalResult LayoutRematerialization::getRematerializableSlice(
   // Check if all the operations in the slice can be rematerialized.
   for (Value v : slice) {
     if (Operation *op = v.getDefiningOp()) {
+      // A pinned op must never be cloned into another layout by backward
+      // rematerialization.  Forward propagation already handles it by leaving a
+      // convert at the boundary; rewriting it here would undo the pin.
+      if (op->hasAttr(kPinLayoutAttr))
+        return failure();
       if (!canBeRemat(op))
         return failure();
     }
@@ -1160,7 +1188,8 @@ void LayoutRematerialization::backwardRematerialization(
   SetVector<Value> slice;
   DenseMap<Value, Attribute> layout;
   LogicalResult result = getRematerializableSlice(
-      convertOp.getSrcMutable(), targetType.getEncoding(), slice, layout);
+      convertOp.getSrcMutable(), targetType.getEncoding(), slice, layout,
+      [](Operation *op) { return op->hasAttr(kPinLayoutAttr); });
   if (result.failed()) {
     LDBG("  getRematerializableSlice failed");
     return;

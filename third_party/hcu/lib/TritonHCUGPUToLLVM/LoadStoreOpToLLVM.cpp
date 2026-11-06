@@ -1310,7 +1310,7 @@ struct StoreOpConversion : public ConvertOpToLLVMPattern<triton::StoreOp>,
     auto freeVarMasks = getFreeVariableMasks(valueTy);
     Value threadPred =
         emitRedundantThreadPredicate(freeVarMasks, rewriter, loc, targetInfo);
-    uint32_t regMask = freeVarMasks[str_attr("reg")];
+    uint32_t regMask = freeVarMasks.lookup(str_attr("register"));
     for (size_t vecStart = 0; vecStart < elemsPerThread; vecStart += vec) {
       if (!isCanonicalIndex(vecStart, regMask)) {
         // Don't emit store ops for redundant elements within a thread
@@ -1411,7 +1411,7 @@ struct BufferAtomicRMWOpConversion
     //        field particularly) should be considered.
     // Value rsrcDesc = bufferEmitter.createResourceDescriptor(llPtr, llStride);
     Value rsrcDesc = bufferEmitter.createResourceDescriptor(llPtr);
-    SmallVector<Value> loadedVals;
+    SmallVector<Value> loadedVals(numElems);
 
     // We need to manually emit memory fences (LLVM doesn't do this for buffer
     // ops) see: https://llvm.org/docs/HCUGPUUsage.html#memory-model-gfx942
@@ -1439,10 +1439,13 @@ struct BufferAtomicRMWOpConversion
     auto freeVarMasks = getFreeVariableMasks(valueTy);
     Value threadPred =
         emitRedundantThreadPredicate(freeVarMasks, rewriter, loc, targetInfo);
-    uint32_t regMask = freeVarMasks[str_attr("reg")];
+    uint32_t regMask = freeVarMasks.lookup(str_attr("register"));
     for (size_t vecStart = 0; vecStart < numElems; vecStart += vec) {
       if (!isCanonicalIndex(vecStart, regMask)) {
-        // Don't emit store ops for redundant elements within a thread
+        // Reuse the canonical atomic result as well as suppressing its side
+        // effect. The converted result still contains every register slot.
+        for (size_t ii = 0; ii < vec; ++ii)
+          loadedVals[vecStart + ii] = loadedVals[(vecStart & ~regMask) + ii];
         continue;
       }
 
@@ -1466,7 +1469,7 @@ struct BufferAtomicRMWOpConversion
         Value vecIdx = createIndexAttrConstant(
             rewriter, loc, getTypeConverter()->getIndexType(), ii);
         Value loaded = b.extract_element(valueElemTy, loadVal, vecIdx);
-        loadedVals.push_back(loaded);
+        loadedVals[vecStart + ii] = loaded;
       }
     } // end vec
 
@@ -1656,7 +1659,7 @@ struct BufferStoreOpConversion
     auto freeVarMasks = getFreeVariableMasks(valueTy);
     Value threadPred =
         emitRedundantThreadPredicate(freeVarMasks, rewriter, loc, targetInfo);
-    uint32_t regMask = freeVarMasks[str_attr("reg")];
+    uint32_t regMask = freeVarMasks.lookup(str_attr("register"));
     for (size_t vecStart = 0; vecStart < numElems; vecStart += vec) {
       if (!isCanonicalIndex(vecStart, regMask)) {
         // Don't emit store ops for redundant elements within a thread
@@ -1737,7 +1740,7 @@ struct AtomicCASOpConversion
     auto freeVarMasks = getFreeVariableMasks(op.getPtr().getType());
     Value threadPred =
         emitRedundantThreadPredicate(freeVarMasks, rewriter, loc, targetInfo);
-    uint32_t regMask = freeVarMasks[str_attr("reg")];
+    uint32_t regMask = freeVarMasks.lookup(str_attr("register"));
 
     // atomic ops
     for (size_t i = 0; i < elemsPerThread; i += 1) {

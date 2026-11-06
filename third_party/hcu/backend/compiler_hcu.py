@@ -2,7 +2,8 @@ from triton.backends.compiler import BaseBackend, GPUTarget, Language
 from triton._C.libtriton import ir, passes, llvm, hcu, distributed, tle
 from triton import knobs
 from triton.runtime.errors import HSACOError
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from .layout_num_warps import bind_num_warps, bind_mfma_warp_domain, search_num_warps
 from typing import Any, Dict, Tuple
 from types import ModuleType
 import hashlib
@@ -30,9 +31,35 @@ def is_in_thread_transpose_enabled(arch):
     return (arch == "gfx942") if knobs.hcu.use_in_thread_transpose is None else knobs.hcu.use_in_thread_transpose
 
 
+_LAYOUT_MODEL_STAGE = "after-f32-dot-tc-remove-layout-conversions-before-optimize-thread-locality-v1"
+
+
+def _layout_tuning_pass_kind():
+    if os.environ.get("FLAGTREE_LAYOUT_TUNING", "") in ("", "0", "false"):
+        return None
+    if os.environ.get("FLAGTREE_LAYOUT_TUNING_PASS", "model") != "model":
+        raise ValueError("this build provides only the frozen layout model pass")
+    if os.environ.get("FLAGTREE_LAYOUT_TUNING_MODE", "search") != "search":
+        raise ValueError("the frozen layout model supports search mode only")
+    if os.environ.get("FLAGTREE_LAYOUT_TUNING_ALGORITHM", "beam") != "beam":
+        raise ValueError("the frozen layout model supports beam search only")
+    if os.environ.get("FLAGTREE_LAYOUT_TUNING_CANDIDATE_POLICY", "balanced-coherent") != "balanced-coherent":
+        raise ValueError("the frozen layout model requires balanced-coherent candidates")
+    path = os.environ.get("FLAGTREE_LAYOUT_TUNING_JOINT_MODEL", "")
+    digest = os.environ.get("FLAGTREE_LAYOUT_TUNING_JOINT_MODEL_SHA256", "")
+    policy = os.environ.get("FLAGTREE_LAYOUT_TUNING_JOINT_POLICY", "")
+    if not path or len(digest) != 64 or policy != "generic-current-layout-v114":
+        raise ValueError("the layout model requires frozen weights, SHA256 and the matching input policy")
+    return "model"
+
+
 @dataclass(frozen=True)
 class HIPOptions:
+    # Canonical JIT-bound payload. Empty keeps the experiment disabled.
+    layout_execution_context: str = ""
     num_warps: int = 4
+    layout_num_warps: Tuple[int, ...] = ()
+    layout_mfma_warp_domain: bool = False
     waves_per_eu: int = 1
     num_stages: int = 2
     num_ctas: int = 1
@@ -106,6 +133,9 @@ class HIPOptions:
     wdra_num_mma_regs_tail: int = None
 
     def __post_init__(self):
+        if self.layout_execution_context:
+            from triton.runtime._layout_model_context import parse_context
+            parse_context(self.layout_execution_context)
         gfx_major = int(self.arch[3:-2])  # Drop "gfx" prefix and minor/patch number
         warp_size = 32 if gfx_major >= 10 else 64
         object.__setattr__(self, 'warp_size', warp_size)
@@ -130,11 +160,21 @@ class HIPOptions:
         # object.__setattr__(self, 'rocshmem_device_lib', rocshmem_device_lib)
 
     def hash(self):
-        key = '_'.join([f'{name}-{val}' for name, val in self.__dict__.items()])
+        key = '_'.join([f'{name}-{val}' for name, val in self.__dict__.items()
+                        if name not in ("layout_execution_context", "layout_num_warps", "layout_mfma_warp_domain") or val])
         return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
 class HIPBackend(BaseBackend):
+
+    def uses_layout_execution_context(self):
+        return _layout_tuning_pass_kind() == "model"
+
+    def bind_layout_num_warps(self, options):
+        enabled = (_layout_tuning_pass_kind() == "model" and
+                   os.environ.get("FLAGTREE_LAYOUT_TUNING_MODE", "search") == "search")
+        return {**bind_num_warps(options, enabled=enabled),
+                **bind_mfma_warp_domain(options, enabled=enabled)}
     instrumentation = None
     supports_native_tensor_specialization = False
 
@@ -184,6 +224,7 @@ class HIPBackend(BaseBackend):
 
         args.update({k: opts[k] for k in HIPOptions.__dataclass_fields__.keys() \
                      if k in opts and opts[k] is not None})
+        args.update(self.bind_layout_num_warps(opts))
 
         # Consume the legacy `instruction_sched_variant` option and map it to
         # `schedule_hint`. If both are present, keep the explicit schedule_hint.
@@ -401,7 +442,7 @@ class HIPBackend(BaseBackend):
         return mod
 
     @staticmethod
-    def make_ttgir(mod, metadata, options):
+    def _make_ttgir_before_layout_slot(mod, options):
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
         passes.ttir.add_convert_to_ttgpuir(pm, f"hip:{options.arch}", options.num_warps, options.warp_size,
@@ -421,16 +462,43 @@ class HIPBackend(BaseBackend):
         passes.ttgpuir.add_process_shared_memory_hint(pm)  # flagtree hints
         passes.ttgpuir.add_f32_dot_tc(pm, emuTF32)
         passes.ttgpuir.add_remove_layout_conversions(pm)
-        passes.ttgpuir.add_optimize_thread_locality(pm)
-        # begin flagtree tle
-        tle.passes.add_select_encodings(pm)
-        tle.passes.add_insert_local_pointer_barriers(pm)
-        tle.passes.add_optimize_local_pointer_loads(pm)
-        tle.passes.add_optimize_local_pointer_stores(pm)
-        # end flagtree tle
-        hcu.passes.ttgpuir.add_accelerate_matmul(pm, options.arch, options.matrix_instr_nonkdim, options.kpack,
-                                                 options.mmac_layout_force)
-        passes.ttgpuir.add_remove_layout_conversions(pm)
+        return pm
+
+    @staticmethod
+    def make_ttgir_layout_prefix(mod, options):
+        pm = HIPBackend._make_ttgir_before_layout_slot(mod, options)
+        pm.run(mod, 'make_ttgir_layout_prefix')
+
+    @staticmethod
+    def make_ttgir(mod, metadata, options):
+        if options.layout_num_warps:
+            return search_num_warps(mod, metadata, options, HIPBackend)
+        pm = HIPBackend._make_ttgir_before_layout_slot(mod, options)
+        # Both independent scoring passes run at the user-selected early slot.
+        # Model scoring has no operator-family or ProgramCost fallback route.
+        _layout_kind = _layout_tuning_pass_kind()
+        if _layout_kind == "model":
+            hcu.passes.ttgpuir.add_layout_model_tuning(
+                pm, options.num_stages, options.arch, options.matrix_instr_nonkdim,
+                options.kpack, options.mmac_layout_force, options.layout_execution_context)
+        return HIPBackend.make_ttgir_after_layout_slot(mod, metadata, options, pm)
+
+    @staticmethod
+    def make_ttgir_after_layout_slot(mod, metadata, options, pm=None):
+        """Shared production suffix starting at the layout tuning slot.
+
+        Ordinary compilation passes its existing manager to preserve the
+        complete pass sequence. Explicit candidate replay starts a manager
+        here and therefore runs exactly the same following transforms.
+        """
+        if pm is None:
+            pm = ir.pass_manager(mod.context)
+            pm.enable_debug()
+        # Same native builders as the model's read-only candidate projection.
+        hcu.passes.ttgpuir.add_layout_thread_locality_and_tle(pm)
+        hcu.passes.ttgpuir.add_layout_matmul_prefix(
+            pm, options.arch, options.matrix_instr_nonkdim,
+            options.kpack, options.mmac_layout_force)
         if options.optimize_epilogue:
             hcu.passes.ttgpuir.add_optimize_epilogue(pm)
         hcu.passes.ttgpuir.add_optimize_dot_operands(pm, options.arch)
@@ -817,14 +885,42 @@ class HIPBackend(BaseBackend):
             stages["ttir"] = lambda src, metadata: self.make_ttir(src, metadata, options)
             stages["ttgir"] = lambda src, metadata: self.make_ttgir(src, metadata, options)
         elif language == Language.GLUON:
+            if options.layout_num_warps:
+                raise ValueError("num_warps layout search requires the Triton TTIR frontend")
             stages["ttgir"] = lambda src, metadata: self.gluon_to_ttgir(src, metadata, options)
-        stages["llir"] = lambda src, metadata: self.make_llir(src, metadata, options)
-        stages["amdgcn"] = lambda src, metadata: self.make_amdgcn(src, metadata, options)
-        stages["hsaco"] = lambda src, metadata: self.make_hsaco(src, metadata, options)
+        def selected_options(metadata):
+            warps = metadata.get("num_warps", options.num_warps)
+            return options if warps == options.num_warps else replace(options, num_warps=warps)
+        stages["llir"] = lambda src, metadata: self.make_llir(src, metadata, selected_options(metadata))
+        stages["amdgcn"] = lambda src, metadata: self.make_amdgcn(src, metadata, selected_options(metadata))
+        stages["hsaco"] = lambda src, metadata: self.make_hsaco(src, metadata, selected_options(metadata))
         if knobs.runtime.add_stages_inspection_hook is not None:
             knobs.runtime.add_stages_inspection_hook(self, stages, options, language, None)
 
-    @functools.lru_cache()
     def hash(self):
         version = subprocess.check_output([HIPBackend.path_to_rocm_clang(), "--version"], encoding='utf-8')
-        return f'{version}-{self.target}'
+        base = f'{version}-{self.target}'
+        kind = _layout_tuning_pass_kind()
+        if kind is None:
+            return base
+        keys = ("MODE", "TRIALS", "CANDIDATES", "BEAM", "ALGORITHM", "CANDIDATE_POLICY", "CANDIDATE_POOL", "NUM_WARPS")
+        config = tuple((key, os.environ.get("FLAGTREE_LAYOUT_TUNING_" + key, "")) for key in keys)
+        revision = "v186"
+        payload = ("independent-layout-passes-" + revision, _LAYOUT_MODEL_STAGE, kind, config)
+        matrix_domain = os.environ.get("FLAGTREE_LAYOUT_TUNING_MFMA_WARP_DOMAIN", "0")
+        if matrix_domain not in ("0", "1"):
+            raise ValueError("MFMA warp domain must be 0 or 1")
+        if matrix_domain == "1":
+            payload += ("explicit-current-dot-mfma-warp-domain",)
+        if kind == "model":
+            payload += ("absolute-model-num-warps-search+all-branch-facts+native-unified183", "hcu-current-candidate-projection-v114",
+                        "native-prefix-through-first-post-slot-RLC+bounded-direct-call-expansion+symbol-dce+cse-licm-cse+exact-linearlayout-order-reuse-v25+execution-context-v1+distributed-reduce-gather-cat-v159+dot-operand-lds-lookahead-v163+declared-order-register-groups-v165+collective-primitive-pooling-v173")
+            model = tuple(os.environ.get("FLAGTREE_LAYOUT_TUNING_" + key, "")
+                          for key in ("JOINT_MODEL", "JOINT_MODEL_SHA256", "JOINT_POLICY"))
+            if any(model):
+                actual = hashlib.sha256(Path(model[0]).read_bytes()).hexdigest()
+                if actual != model[1]:
+                    raise ValueError("Learned layout deployment SHA256 mismatch")
+                payload += (model, actual)
+        # DUMP/TRACE paths affect diagnostics only, not the compiled cache key.
+        return base + "-layout-" + kind + "-" + revision + "-" + hashlib.sha256(repr(payload).encode()).hexdigest()

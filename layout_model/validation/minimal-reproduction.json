@@ -1,0 +1,1475 @@
+{
+  "status": "passed",
+  "target_commit": "663f84b539d4fbe910fcab8f2f976f306d436595",
+  "clean_full_build": true,
+  "native_sha256": "ea00edb367de81a412bd95a8ca2bd5e4c3008b70f6584d3fb565875935acb066",
+  "backend_sha256": "991cf8b0ea3d49f69237632e2e4c75ea5264afb1536f550e6391a0f5b1059241",
+  "weights_sha256": "8328f1f9a2d6f94ade3b03b8a8f8d67cb5833f48b37906a7b9508e5358a9428e",
+  "all_16_executable_identities_unchanged": true,
+  "removed_runtime_apis": [
+    "add_nice_tree_layout_dp",
+    "add_layout_program_cost_tuning",
+    "add_layout_tuning",
+    "diagnostic_candidate_context_score"
+  ],
+  "cases": [
+    {
+      "configuration": {
+        "dtype": "float16",
+        "index": 9,
+        "kind": "main",
+        "operator": "add_rms_norm",
+        "shape": "4096×256",
+        "tag": "add_rms_norm-9",
+        "upstream_row": [
+          "4096×256",
+          "FP16",
+          "256",
+          "18.007",
+          "18.110",
+          "17.757",
+          "1.0141×"
+        ]
+      },
+      "methods": {
+        "compiler": {
+          "numerical_passed": true,
+          "median_us": 23.520000278949738,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            4
+          ],
+          "old_num_warps": [
+            4
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "5a0eada99fbed541ab3d3bbccf2aef0f9aad65a2907df4e193bd83a0036bb435"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 1.0
+        },
+        "beam": {
+          "numerical_passed": true,
+          "median_us": 22.87999913096428,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            1
+          ],
+          "old_num_warps": [
+            1
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "d802b968fa1c02d2e808be6dd704e789c96c5e56bd1c89ab6d7f08cf32b4ec58"
+          ],
+          "model_scores": [
+            -12.697493783294966
+          ],
+          "selected_trials": [
+            0
+          ],
+          "speedup_vs_compiler": 1.0279720792086624
+        },
+        "repo-s4": {
+          "numerical_passed": true,
+          "median_us": 22.799999453127384,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            1
+          ],
+          "old_num_warps": [
+            1
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "426ed201e9cb62220e5edb33eac6b90c56661938c756cefdc2bc5d58e4e23d81"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 1.0315789843461418
+        },
+        "repo-s8": {
+          "numerical_passed": true,
+          "median_us": 23.120000027120113,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            1
+          ],
+          "old_num_warps": [
+            1
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "4266ecbdabd0b6d2d304b3b524483dbc8cbcbe1a968be38794770df8abccf56a"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 1.0173010489342742
+        }
+      },
+      "compiler_control_ratios": [
+        1.0034129554515923,
+        0.9958158677880465,
+        1.121848788820842
+      ],
+      "controls_passed": false,
+      "timing_policy": {
+        "graph": false,
+        "invocations": 1,
+        "processes": 3,
+        "samples": 10,
+        "schema": "readme-native-launch-5warm-10samples",
+        "source": "add_rms_norm/README.md §1; unmentioned graph means direct single-call GPU-event",
+        "warmups": 5
+      },
+      "input_hashes_unchanged": true
+    },
+    {
+      "configuration": {
+        "dtype": "bfloat16",
+        "index": 45,
+        "kind": "main",
+        "operator": "dequantize_and_gather_k_cache",
+        "shape": "1/6/3；4；64/16；0",
+        "tag": "dequantize_and_gather_k_cache-0",
+        "upstream_row": [
+          "1/6/3；4；64/16；0",
+          "3.799",
+          "3.855",
+          "3.806",
+          "0.9982×"
+        ]
+      },
+      "methods": {
+        "compiler": {
+          "numerical_passed": true,
+          "median_us": 6.560000125318766,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            4
+          ],
+          "old_num_warps": [
+            4
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "359d9855db5e762d620eb2befb32232fcaffcdd09a68568cc38e5c4593f20833"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 1.0
+        },
+        "beam": {
+          "numerical_passed": true,
+          "median_us": 6.719500059261918,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            1
+          ],
+          "old_num_warps": [
+            1
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "4079c6c12b5c9ab931e16e10d54706cff588b8a589def74acc1d51092fb0a07b"
+          ],
+          "model_scores": [
+            -16.445092897551916
+          ],
+          "selected_trials": [
+            0
+          ],
+          "speedup_vs_compiler": 0.9762631248550547
+        },
+        "repo-base": {
+          "numerical_passed": true,
+          "median_us": 6.560000125318766,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            4
+          ],
+          "old_num_warps": [
+            4
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "552d65d1c5dbb29cca73019cb056b006de411c8a9b08950ed0bff1fa3af46b19"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 1.0
+        },
+        "repo-opt": {
+          "numerical_passed": true,
+          "median_us": 6.479999981820583,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            1
+          ],
+          "old_num_warps": [
+            1
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "db142ec0313607a39303c73fc1d98e1374d1a02a1ffd2c66686331e844196253"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 1.0123457011917623
+        }
+      },
+      "compiler_control_ratios": [
+        0.68695649863212,
+        1.384615364523983,
+        0.9879518207478962
+      ],
+      "controls_passed": false,
+      "timing_policy": {
+        "graph": false,
+        "invocations": 1,
+        "processes": 3,
+        "samples": 10,
+        "schema": "readme-native-launch-5warm-10samples",
+        "source": "dequantize_and_gather_k_cache/README.md §1; unmentioned graph means direct single-call GPU-event",
+        "warmups": 5
+      },
+      "input_hashes_unchanged": true
+    },
+    {
+      "configuration": {
+        "dtype": "bfloat16",
+        "index": 114,
+        "kind": "main",
+        "operator": "mhc_post",
+        "shape": "4096×1280×2",
+        "tag": "mhc_post-0",
+        "upstream_row": [
+          "4096×1280×2",
+          "85.676",
+          "85.675",
+          "70.654",
+          "1.2126×"
+        ]
+      },
+      "methods": {
+        "compiler": {
+          "numerical_passed": true,
+          "median_us": 84.0156078338623,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            4
+          ],
+          "old_num_warps": [
+            4
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "2ae36ca90b988ff60efb723b622b02498ff3928b4dca5ce002912aa6c747bb6f"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 1.0
+        },
+        "beam": {
+          "numerical_passed": true,
+          "median_us": 84.31434631347656,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            1
+          ],
+          "old_num_warps": [
+            1
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "44021354928c001d2522a67e9936825e4d4c6baf62975dbb800b1930ed25135f"
+          ],
+          "model_scores": [
+            -12.872142923146727
+          ],
+          "selected_trials": [
+            0
+          ],
+          "speedup_vs_compiler": 0.9964568487727633
+        },
+        "repo-base": {
+          "numerical_passed": true,
+          "median_us": 84.0706005692482,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            4
+          ],
+          "old_num_warps": [
+            4
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "98cc24961feb064d4e20fa48346f7ca5f33c3dd203bc7421d9160d9fff584536"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 0.9993458743601981
+        },
+        "repo-opt": {
+          "numerical_passed": true,
+          "median_us": 69.14998590946198,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            8
+          ],
+          "old_num_warps": [
+            8
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "13f38e7d44a2fb7732f7037d03d71e176598dee86bca5821384b04511fc85c23"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 1.214976499689586
+        }
+      },
+      "compiler_control_ratios": [
+        0.999985234295809,
+        0.9999701619814253,
+        0.9998885003321272
+      ],
+      "controls_passed": true,
+      "timing_policy": {
+        "graph": true,
+        "invocations": 128,
+        "processes": 3,
+        "samples": 10,
+        "schema": "readme-native-launch-5warm-10samples",
+        "source": "mhc_post/README.md §1; unmentioned graph means direct single-call GPU-event",
+        "warmups": 5
+      },
+      "input_hashes_unchanged": true
+    },
+    {
+      "configuration": {
+        "dtype": "bfloat16",
+        "index": 212,
+        "kind": "main",
+        "operator": "router_gemm",
+        "shape": "1×256×7168",
+        "tag": "router_gemm-0",
+        "upstream_row": [
+          "1×256×7168",
+          "43.856",
+          "73.877",
+          "64.847",
+          "0.6763×"
+        ]
+      },
+      "methods": {
+        "compiler": {
+          "numerical_passed": true,
+          "median_us": 72.19061627984047,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            2
+          ],
+          "old_num_warps": [
+            2
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "e937f46021b5ad8a7df97af7aee9e650557cc61d304ae2b1498bfb9c32da35d6"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 1.0
+        },
+        "beam": {
+          "numerical_passed": true,
+          "median_us": 62.51436099410057,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            4
+          ],
+          "old_num_warps": [
+            4
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "eebdcba064656a7d23f6f6cda62f73473b83a067aa564894f84c16aa6886281f"
+          ],
+          "model_scores": [
+            13.25225032625463
+          ],
+          "selected_trials": [
+            0
+          ],
+          "speedup_vs_compiler": 1.1547845188188526
+        },
+        "repo-base": {
+          "numerical_passed": true,
+          "median_us": 129.8806071281433,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            2
+          ],
+          "old_num_warps": [
+            2
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "8e99f80713695af71be29c2408d4667b86bd238cbc77008603620da8e0c0b475"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 0.5558229044049315
+        },
+        "repo-opt": {
+          "numerical_passed": true,
+          "median_us": 90.62124043703079,
+          "samples": 30,
+          "model_score_unchanged": true,
+          "num_warps": [
+            2
+          ],
+          "old_num_warps": [
+            2
+          ],
+          "execution_identical": true,
+          "execution_sha256": [
+            "407d593e2fae9401e433bc9ab3a97d40be74ceb596ae6870fcd21e6adb991736"
+          ],
+          "model_scores": [
+            null
+          ],
+          "selected_trials": [
+            null
+          ],
+          "speedup_vs_compiler": 0.7966191582866596
+        }
+      },
+      "compiler_control_ratios": [
+        0.9997749794595246,
+        0.9999393852759045,
+        1.0001991691990875
+      ],
+      "controls_passed": true,
+      "timing_policy": {
+        "graph": true,
+        "invocations": 128,
+        "processes": 3,
+        "samples": 10,
+        "schema": "readme-native-launch-5warm-10samples",
+        "source": "router_gemm/README.md §1; unmentioned graph means direct single-call GPU-event",
+        "warmups": 5
+      },
+      "input_hashes_unchanged": true
+    }
+  ],
+  "unchanged_algorithm_proof": {
+    "identical_feature_and_projection_sources": [
+      "LayoutTuningFacts.cpp",
+      "LayoutTuningUnified.cpp",
+      "LayoutTuningLearned.cpp",
+      "LayoutTuningProjection.cpp",
+      "LayoutTuningDomain.cpp",
+      "LayoutTuningTransport.cpp",
+      "LayoutTuningCollective.cpp",
+      "LayoutExecutionContext.cpp",
+      "LayoutTuningResources.cpp"
+    ],
+    "layout_constraint_rewriter_identical": true,
+    "layout_constraint_source_sha256": "a54966c48003d78f8789ba7255bb19c03510cbb3733ea4bf5bf9d5a96da7883a",
+    "beam_search_body_identical_after_removing_local_width_switch": true,
+    "beam_body_sha256": "057d0bd3598b28ab7c5158cb6583036eefc72f784ccff87d8ae9563c80611af0",
+    "original_search_lines": 2902,
+    "minimal_search_lines": 1230
+  },
+  "training_included": false,
+  "training_data_included": false,
+  "source_worktree": "/das/ts02/home/luanxinya/Layout/KernelLLM-FlagTree-layout-8328",
+  "raw_evidence_remote": "/data/lxy_hcu/kernelllm-8328-minimal-20261106",
+  "raw_evidence_archive_sha256": "cd90af4153731f0ac0574eb0e1305f4758ee8a70b96f6ce070f0721643362e85",
+  "validation_kind": "numerical, score, warp and executable reproduction",
+  "performance_controls_passed": 2,
+  "performance_status": "short-kernel-control-variability",
+  "base_binding_preservation": {
+    "original_bindings_preserved": [
+      "add_accelerate_matmul",
+      "add_allocate_shared_memory",
+      "add_block_pingpong",
+      "add_builtin_func_to_llvmir",
+      "add_canonicalize_pointers",
+      "add_coalesce_async_copy",
+      "add_convert_to_buffer_ops",
+      "add_fold_true_cmpi",
+      "add_hoist_layout_conversions",
+      "add_in_thread_transpose",
+      "add_mls_encoding_insertion",
+      "add_mls_lowering_pass",
+      "add_mls_stream_pipeline",
+      "add_optimize_dot_operands",
+      "add_optimize_epilogue",
+      "add_optimize_lds_usage",
+      "add_pipeline",
+      "add_reorder_instructions",
+      "add_scalarize_packed_fops_llvm_pass",
+      "add_schedule_loops",
+      "add_to_llvmir",
+      "add_update_async_wait_count",
+      "add_warp_specialize_to_llvm",
+      "assemble_amdgcn",
+      "attach_target_triple",
+      "cleanup_bitcode_metadata",
+      "disable_print_inline",
+      "has_architected_sgprs",
+      "insert_instruction_sched_hints",
+      "link_hsaco",
+      "load_dialects",
+      "lower_instruction_sched_hints",
+      "need_extern_lib",
+      "set_abi_version",
+      "set_all_fn_arg_inreg",
+      "set_bool_control_constant",
+      "set_func_inline_attrs",
+      "set_isa_version",
+      "supports_multi_cta_launch"
+    ],
+    "new_bindings": [
+      "add_layout_matmul_prefix",
+      "add_layout_model_tuning",
+      "add_layout_thread_locality_and_tle",
+      "run_layout_model_search"
+    ]
+  },
+  "build_method": "Fresh target build directory; all target sources compiled, then two original pass bindings restored and rebuilt incrementally.",
+  "gluon_direct_numerics_quick_check": {
+    "schema": "minimal-layout-gluon-direct-numerics-quick-v1",
+    "status": "passed",
+    "native_sha256": "ea00edb367de81a412bd95a8ca2bd5e4c3008b70f6584d3fb565875935acb066",
+    "weights_sha256": "8328f1f9a2d6f94ade3b03b8a8f8d67cb5833f48b37906a7b9508e5358a9428e",
+    "backend_sha256": "991cf8b0ea3d49f69237632e2e4c75ea5264afb1536f550e6391a0f5b1059241",
+    "physical_device": 0,
+    "processes_per_configuration": 1,
+    "warmups": 5,
+    "samples_per_method": 10,
+    "target_recompilation": false,
+    "same_admitted_binaries": true,
+    "numerical_comparison": "direct model-vs-compiler/Gluon at existing dtype tolerances, plus independent PyTorch checks before/after timing",
+    "timing_interpretation": "single-process quick timing; no performance-stability claim",
+    "cases": [
+      {
+        "configuration": {
+          "dtype": "float16",
+          "index": 9,
+          "kind": "main",
+          "operator": "add_rms_norm",
+          "shape": "4096×256",
+          "tag": "add_rms_norm-9",
+          "upstream_row": [
+            "4096×256",
+            "FP16",
+            "256",
+            "18.007",
+            "18.110",
+            "17.757",
+            "1.0141×"
+          ]
+        },
+        "methods": {
+          "compiler": {
+            "median_us": 19.039999693632126,
+            "samples_us": [
+              19.039999693632126,
+              23.840000852942467,
+              19.039999693632126,
+              19.039999693632126,
+              18.880000337958336,
+              19.200000911951065,
+              18.880000337958336,
+              19.039999693632126,
+              19.200000911951065,
+              19.200000911951065
+            ],
+            "binary_sha256": [
+              "3d4837460fe707659681a7bf17705ddeb9912727f4b3ee1ea7d23b6370f3c0ac"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.0
+          },
+          "beam": {
+            "median_us": 18.400000408291817,
+            "samples_us": [
+              22.87999913096428,
+              18.239999189972878,
+              18.400000408291817,
+              18.400000408291817,
+              18.400000408291817,
+              18.400000408291817,
+              18.400000408291817,
+              18.400000408291817,
+              18.400000408291817,
+              18.239999189972878
+            ],
+            "binary_sha256": [
+              "ef036bbda48572fecacb93be8b5cfa2ecef3bec0ade0a698eccf2628c669f106"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.0347825690836343
+          },
+          "repo-s4": {
+            "median_us": 18.400000408291817,
+            "samples_us": [
+              18.400000408291817,
+              23.19999970495701,
+              18.239999189972878,
+              18.400000408291817,
+              18.400000408291817,
+              18.239999189972878,
+              23.04000034928322,
+              23.04000034928322,
+              18.400000408291817,
+              22.87999913096428
+            ],
+            "binary_sha256": [
+              "c5a7390e22b75d6117945b0efe59df4a5f5e0726fbb705b3f2d1102b4fea168c"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.0347825690836343
+          },
+          "repo-s8": {
+            "median_us": 20.960000343620777,
+            "samples_us": [
+              23.360000923275948,
+              23.19999970495701,
+              23.04000034928322,
+              18.559999763965607,
+              18.880000337958336,
+              18.559999763965607,
+              23.19999970495701,
+              23.19999970495701,
+              18.559999763965607,
+              18.559999763965607
+            ],
+            "binary_sha256": [
+              "dc18802685777c61c1311c9bef2172d9e1cbf2a9201b0e04ed1b5babe4ce04e3"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 0.9083969170557286
+          }
+        },
+        "pairwise": [
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.001,
+                "bitwise_equal": false,
+                "dtype": "torch.float16",
+                "elements": 1048576,
+                "error": null,
+                "maximum_absolute_error": 0.00048828125,
+                "model_sha256": "2ebd87e4aca02a0efbf7d78095b5108dbe92df6fcdd526a0b37d9e451fa9a3d2",
+                "passed": true,
+                "reference_sha256": "bcbb3afeda27024aa7fbc0e71c2ccee669c0790b3bdd3c4ee281813091bef9cd",
+                "rtol": 0.01,
+                "shape": [
+                  4096,
+                  256
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "compiler"
+          },
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.001,
+                "bitwise_equal": true,
+                "dtype": "torch.float16",
+                "elements": 1048576,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "2ebd87e4aca02a0efbf7d78095b5108dbe92df6fcdd526a0b37d9e451fa9a3d2",
+                "passed": true,
+                "reference_sha256": "2ebd87e4aca02a0efbf7d78095b5108dbe92df6fcdd526a0b37d9e451fa9a3d2",
+                "rtol": 0.01,
+                "shape": [
+                  4096,
+                  256
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "repo-s4"
+          },
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.001,
+                "bitwise_equal": false,
+                "dtype": "torch.float16",
+                "elements": 1048576,
+                "error": null,
+                "maximum_absolute_error": 0.000244140625,
+                "model_sha256": "2ebd87e4aca02a0efbf7d78095b5108dbe92df6fcdd526a0b37d9e451fa9a3d2",
+                "passed": true,
+                "reference_sha256": "802d49f0c224a740c6e9a39d7e89f95758ad797f00cf7e9689be44930f40f75d",
+                "rtol": 0.01,
+                "shape": [
+                  4096,
+                  256
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "repo-s8"
+          }
+        ],
+        "independent_pytorch_checks": [
+          {
+            "maximum_absolute_errors": [
+              0.00048828125
+            ],
+            "mode": "compiler",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              0.000244140625
+            ],
+            "mode": "beam",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              0.000244140625
+            ],
+            "mode": "repo-s4",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              0.000244140625
+            ],
+            "mode": "repo-s8",
+            "passed": true
+          }
+        ],
+        "compiler_control_ratio": 0.8150684478210202,
+        "compiler_control_within_3pct": false,
+        "timing_policy": {
+          "graph": false,
+          "invocations": 1,
+          "processes": 1,
+          "samples": 10,
+          "schema": "readme-native-launch-5warm-10samples",
+          "source": "add_rms_norm/README.md §1; unmentioned graph means direct single-call GPU-event",
+          "warmups": 5
+        }
+      },
+      {
+        "configuration": {
+          "dtype": "bfloat16",
+          "index": 45,
+          "kind": "main",
+          "operator": "dequantize_and_gather_k_cache",
+          "shape": "1/6/3；4；64/16；0",
+          "tag": "dequantize_and_gather_k_cache-0",
+          "upstream_row": [
+            "1/6/3；4；64/16；0",
+            "3.799",
+            "3.855",
+            "3.806",
+            "0.9982×"
+          ]
+        },
+        "methods": {
+          "compiler": {
+            "median_us": 10.56000031530857,
+            "samples_us": [
+              6.0800001956522465,
+              10.879999957978725,
+              10.71999967098236,
+              10.56000031530857,
+              10.71999967098236,
+              6.240000016987324,
+              6.0800001956522465,
+              11.04000024497509,
+              10.56000031530857,
+              10.400000028312206
+            ],
+            "binary_sha256": [
+              "ce8ad05f46197a6a04fe33b02c3d8e27be05eeac91f2e7786601f5f584841d24"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.0
+          },
+          "beam": {
+            "median_us": 10.71999967098236,
+            "samples_us": [
+              10.879999957978725,
+              6.0800001956522465,
+              10.71999967098236,
+              10.71999967098236,
+              10.56000031530857,
+              10.71999967098236,
+              10.879999957978725,
+              6.0800001956522465,
+              10.71999967098236,
+              10.56000031530857
+            ],
+            "binary_sha256": [
+              "f89a05d9792c4f558ca8938f657b8a252edaa89d7d108530041f094cc40213be"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 0.9850746865126416
+          },
+          "repo-base": {
+            "median_us": 10.480000171810389,
+            "samples_us": [
+              10.879999957978725,
+              10.71999967098236,
+              6.240000016987324,
+              10.879999957978725,
+              6.240000016987324,
+              10.56000031530857,
+              10.400000028312206,
+              6.240000016987324,
+              6.0800001956522465,
+              10.56000031530857
+            ],
+            "binary_sha256": [
+              "a06c5ffdb8150e544c63061f94005817ef2155b8a034529b07c164657ce75631"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.007633601353688
+          },
+          "repo-opt": {
+            "median_us": 10.56000031530857,
+            "samples_us": [
+              6.240000016987324,
+              10.56000031530857,
+              10.71999967098236,
+              6.240000016987324,
+              10.879999957978725,
+              10.71999967098236,
+              10.56000031530857,
+              10.56000031530857,
+              10.71999967098236,
+              6.399999838322401
+            ],
+            "binary_sha256": [
+              "5e1c647369cd1dba792b21439e08b3c46779f7d1c7566ab60f544453cd2c337c"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.0
+          }
+        },
+        "pairwise": [
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.01,
+                "bitwise_equal": true,
+                "dtype": "torch.bfloat16",
+                "elements": 240,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "6ef0e31a922c43b3ab0d44dd9b5467718d48de71a597600801d4524a8410b346",
+                "passed": true,
+                "reference_sha256": "6ef0e31a922c43b3ab0d44dd9b5467718d48de71a597600801d4524a8410b346",
+                "rtol": 0.02,
+                "shape": [
+                  1,
+                  3,
+                  80
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "compiler"
+          },
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.01,
+                "bitwise_equal": true,
+                "dtype": "torch.bfloat16",
+                "elements": 240,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "6ef0e31a922c43b3ab0d44dd9b5467718d48de71a597600801d4524a8410b346",
+                "passed": true,
+                "reference_sha256": "6ef0e31a922c43b3ab0d44dd9b5467718d48de71a597600801d4524a8410b346",
+                "rtol": 0.02,
+                "shape": [
+                  1,
+                  3,
+                  80
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "repo-base"
+          },
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.01,
+                "bitwise_equal": true,
+                "dtype": "torch.bfloat16",
+                "elements": 240,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "6ef0e31a922c43b3ab0d44dd9b5467718d48de71a597600801d4524a8410b346",
+                "passed": true,
+                "reference_sha256": "6ef0e31a922c43b3ab0d44dd9b5467718d48de71a597600801d4524a8410b346",
+                "rtol": 0.02,
+                "shape": [
+                  1,
+                  3,
+                  80
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "repo-opt"
+          }
+        ],
+        "independent_pytorch_checks": [
+          {
+            "maximum_absolute_errors": [
+              0.0
+            ],
+            "mode": "compiler",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              0.0
+            ],
+            "mode": "beam",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              0.0
+            ],
+            "mode": "repo-base",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              0.0
+            ],
+            "mode": "repo-opt",
+            "passed": true
+          }
+        ],
+        "compiler_control_ratio": 1.269230803673172,
+        "compiler_control_within_3pct": false,
+        "timing_policy": {
+          "graph": false,
+          "invocations": 1,
+          "processes": 1,
+          "samples": 10,
+          "schema": "readme-native-launch-5warm-10samples",
+          "source": "dequantize_and_gather_k_cache/README.md §1; unmentioned graph means direct single-call GPU-event",
+          "warmups": 5
+        }
+      },
+      {
+        "configuration": {
+          "dtype": "bfloat16",
+          "index": 114,
+          "kind": "main",
+          "operator": "mhc_post",
+          "shape": "4096×1280×2",
+          "tag": "mhc_post-0",
+          "upstream_row": [
+            "4096×1280×2",
+            "85.676",
+            "85.675",
+            "70.654",
+            "1.2126×"
+          ]
+        },
+        "methods": {
+          "compiler": {
+            "median_us": 84.03371647000313,
+            "samples_us": [
+              84.03747528791428,
+              84.03497189283371,
+              84.02872085571289,
+              84.01872217655182,
+              84.06496793031693,
+              84.03246104717255,
+              84.0287134051323,
+              84.03120934963226,
+              84.0362161397934,
+              84.06371623277664
+            ],
+            "binary_sha256": [
+              "184613d63116041c97e20ec1d3065ea0992291ff12044ccdc98c51b3d4f139c3"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.0
+          },
+          "beam": {
+            "median_us": 84.44247022271156,
+            "samples_us": [
+              84.21121537685394,
+              83.94622057676315,
+              84.42746847867966,
+              178.8511872291565,
+              84.46621149778366,
+              84.3149721622467,
+              84.4787135720253,
+              84.48746055364609,
+              84.35621857643127,
+              84.45747196674347
+            ],
+            "binary_sha256": [
+              "0e8c520292d83d0b065c4b46931e3324b954c77b41f39011985b6832639ab0f7"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 0.9951593818651874
+          },
+          "repo-base": {
+            "median_us": 84.07996594905853,
+            "samples_us": [
+              84.08746868371964,
+              84.07996594905853,
+              84.07996594905853,
+              275.0886380672455,
+              84.07746255397797,
+              84.09371972084045,
+              84.0987116098404,
+              84.06747877597809,
+              84.05622839927673,
+              84.05996859073639
+            ],
+            "binary_sha256": [
+              "125f96fbb0a0b357862329f34eb7b2782effab3d1a2d8d24233db10eb73e1546"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 0.9994499346124447
+          },
+          "repo-opt": {
+            "median_us": 69.16997209191322,
+            "samples_us": [
+              69.13497298955917,
+              69.13872063159943,
+              69.17372345924377,
+              69.16996836662292,
+              69.17371600866318,
+              69.18372213840485,
+              69.1874697804451,
+              69.15246695280075,
+              69.1487267613411,
+              69.16997581720352
+            ],
+            "binary_sha256": [
+              "e6a42b19f91f2b91872dee783e54ec93340446ef222e9574e8101abaae250a40"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.2148872397742032
+          }
+        },
+        "pairwise": [
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.01,
+                "bitwise_equal": true,
+                "dtype": "torch.bfloat16",
+                "elements": 10485760,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "f3c8af7eb2dabacd14158e161f4a5658059535be7e4c79b4c0fae332b0498e34",
+                "passed": true,
+                "reference_sha256": "f3c8af7eb2dabacd14158e161f4a5658059535be7e4c79b4c0fae332b0498e34",
+                "rtol": 0.02,
+                "shape": [
+                  4096,
+                  2,
+                  1280
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "compiler"
+          },
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.01,
+                "bitwise_equal": true,
+                "dtype": "torch.bfloat16",
+                "elements": 10485760,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "f3c8af7eb2dabacd14158e161f4a5658059535be7e4c79b4c0fae332b0498e34",
+                "passed": true,
+                "reference_sha256": "f3c8af7eb2dabacd14158e161f4a5658059535be7e4c79b4c0fae332b0498e34",
+                "rtol": 0.02,
+                "shape": [
+                  4096,
+                  2,
+                  1280
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "repo-base"
+          },
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.01,
+                "bitwise_equal": true,
+                "dtype": "torch.bfloat16",
+                "elements": 10485760,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "f3c8af7eb2dabacd14158e161f4a5658059535be7e4c79b4c0fae332b0498e34",
+                "passed": true,
+                "reference_sha256": "f3c8af7eb2dabacd14158e161f4a5658059535be7e4c79b4c0fae332b0498e34",
+                "rtol": 0.02,
+                "shape": [
+                  4096,
+                  2,
+                  1280
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "repo-opt"
+          }
+        ],
+        "independent_pytorch_checks": [
+          {
+            "maximum_absolute_errors": [
+              0.0009765625
+            ],
+            "mode": "compiler",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              0.0009765625
+            ],
+            "mode": "beam",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              0.0009765625
+            ],
+            "mode": "repo-base",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              0.0009765625
+            ],
+            "mode": "repo-opt",
+            "passed": true
+          }
+        ],
+        "compiler_control_ratio": 1.0000594956075883,
+        "compiler_control_within_3pct": true,
+        "timing_policy": {
+          "graph": true,
+          "invocations": 128,
+          "processes": 1,
+          "samples": 10,
+          "schema": "readme-native-launch-5warm-10samples",
+          "source": "mhc_post/README.md §1; unmentioned graph means direct single-call GPU-event",
+          "warmups": 5
+        }
+      },
+      {
+        "configuration": {
+          "dtype": "bfloat16",
+          "index": 212,
+          "kind": "main",
+          "operator": "router_gemm",
+          "shape": "1×256×7168",
+          "tag": "router_gemm-0",
+          "upstream_row": [
+            "1×256×7168",
+            "43.856",
+            "73.877",
+            "64.847",
+            "0.6763×"
+          ]
+        },
+        "methods": {
+          "compiler": {
+            "median_us": 72.16746732592583,
+            "samples_us": [
+              72.3949670791626,
+              72.20622152090073,
+              72.12746143341064,
+              72.1074566245079,
+              72.17621803283691,
+              72.20496237277985,
+              72.07996398210526,
+              72.15871661901474,
+              72.21996039152145,
+              72.05371558666229
+            ],
+            "binary_sha256": [
+              "8dd32fe65a31b030f964d9149e54717ac828c8a613780ba5a70e60934629c829"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.0
+          },
+          "beam": {
+            "median_us": 62.43059225380421,
+            "samples_us": [
+              62.687478959560394,
+              62.566228210926056,
+              62.388718128204346,
+              62.43746727705002,
+              62.45121732354164,
+              62.423717230558395,
+              62.327466905117035,
+              62.38246709108353,
+              62.48496100306511,
+              62.364961951971054
+            ],
+            "binary_sha256": [
+              "3290e0ba7fe708fc7bc5c86f8c96986ab8d59c4c8231d9578e4eaefad043c782"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 1.1559632020234167
+          },
+          "repo-base": {
+            "median_us": 130.01243770122528,
+            "samples_us": [
+              130.15618920326233,
+              130.07619976997375,
+              130.17994165420532,
+              130.04744052886963,
+              129.85119223594666,
+              129.97743487358093,
+              129.81243431568146,
+              129.96616959571838,
+              129.82867658138275,
+              130.09868562221527
+            ],
+            "binary_sha256": [
+              "f2a6a834f3a97f57fb49504e20ea6804261d54069710964b6621560c8804664a"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 0.5550812568545948
+          },
+          "repo-opt": {
+            "median_us": 90.67370370030403,
+            "samples_us": [
+              90.71245044469833,
+              90.73121100664139,
+              90.78746289014816,
+              90.69369733333588,
+              90.88996052742004,
+              90.58620780706406,
+              90.65371006727219,
+              90.65120667219162,
+              90.64244478940964,
+              90.61620384454727
+            ],
+            "binary_sha256": [
+              "d2247645b8e4bcd9a7e1e6c5cd61c356d3df9599cae73fd8641521186e321e76"
+            ],
+            "numerical_vs_pytorch_passed": true,
+            "speedup_vs_compiler": 0.7959029396709627
+          }
+        },
+        "pairwise": [
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.0003,
+                "bitwise_equal": true,
+                "dtype": "torch.float32",
+                "elements": 256,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "c9f36747d418059489d49dc7434d8883a0dbd0f83f8bc48c610d48f7d3e41e2c",
+                "passed": true,
+                "reference_sha256": "c9f36747d418059489d49dc7434d8883a0dbd0f83f8bc48c610d48f7d3e41e2c",
+                "rtol": 0.003,
+                "shape": [
+                  1,
+                  256
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "compiler"
+          },
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.0003,
+                "bitwise_equal": true,
+                "dtype": "torch.float32",
+                "elements": 256,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "c9f36747d418059489d49dc7434d8883a0dbd0f83f8bc48c610d48f7d3e41e2c",
+                "passed": true,
+                "reference_sha256": "c9f36747d418059489d49dc7434d8883a0dbd0f83f8bc48c610d48f7d3e41e2c",
+                "rtol": 0.003,
+                "shape": [
+                  1,
+                  256
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "repo-base"
+          },
+          {
+            "model": "beam",
+            "outputs": [
+              {
+                "atol": 0.0003,
+                "bitwise_equal": true,
+                "dtype": "torch.float32",
+                "elements": 256,
+                "error": null,
+                "maximum_absolute_error": 0.0,
+                "model_sha256": "c9f36747d418059489d49dc7434d8883a0dbd0f83f8bc48c610d48f7d3e41e2c",
+                "passed": true,
+                "reference_sha256": "c9f36747d418059489d49dc7434d8883a0dbd0f83f8bc48c610d48f7d3e41e2c",
+                "rtol": 0.003,
+                "shape": [
+                  1,
+                  256
+                ]
+              }
+            ],
+            "passed": true,
+            "reference": "repo-opt"
+          }
+        ],
+        "independent_pytorch_checks": [
+          {
+            "maximum_absolute_errors": [
+              1.2874603271484375e-05
+            ],
+            "mode": "compiler",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              1.2874603271484375e-05
+            ],
+            "mode": "beam",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              1.2874603271484375e-05
+            ],
+            "mode": "repo-base",
+            "passed": true
+          },
+          {
+            "maximum_absolute_errors": [
+              1.2874603271484375e-05
+            ],
+            "mode": "repo-opt",
+            "passed": true
+          }
+        ],
+        "compiler_control_ratio": 0.9994807137124393,
+        "compiler_control_within_3pct": true,
+        "timing_policy": {
+          "graph": true,
+          "invocations": 128,
+          "processes": 1,
+          "samples": 10,
+          "schema": "readme-native-launch-5warm-10samples",
+          "source": "router_gemm/README.md §1; unmentioned graph means direct single-call GPU-event",
+          "warmups": 5
+        }
+      }
+    ],
+    "raw_evidence_remote": "/data/lxy_hcu/kernelllm-8328-minimal-20261106/gluon-quick-v1",
+    "raw_archive_sha256": "85463c1de49dcaf49be93da2610d0e8cd72febe0a98f20e5def5dc0d9d5bc52d"
+  }
+}

@@ -282,6 +282,14 @@ warpsPerTile(Operation *dotOp, ArrayRef<int64_t> shape, int numWarps,
 SmallVector<unsigned, 3>
 warpsPerTileMFMA(Operation *dotOp, ArrayRef<int64_t> shape, int numWarps,
                  std::pair<int64_t, int64_t> shapePerWarp) {
+  // A candidate carries its explicit current matrix layout through the same
+  // lowering used by both read-only scoring projection and final compilation.
+  // Validation in the pass rejects unsupported hints before any rewriting.
+  if (auto hint = dotOp->getAttrOfType<DenseI32ArrayAttr>(
+          "hcu.layout.mfma_warps_per_cta")) {
+    auto values = hint.asArrayRef();
+    return {static_cast<unsigned>(values[0]), static_cast<unsigned>(values[1])};
+  }
   return warpsPerTile(dotOp, shape, numWarps, shapePerWarp);
 }
 
@@ -1941,6 +1949,32 @@ struct TritonHCUGPUAccelerateMatmulPass
     MLIRContext *context = &getContext();
     ModuleOp m = getOperation();
 
+    bool invalidHint = false;
+    m.walk([&](Operation *op) {
+      Attribute raw = op->getAttr("hcu.layout.mfma_warps_per_cta");
+      if (!raw) return;
+      auto hint = dyn_cast<DenseI32ArrayAttr>(raw);
+      auto dot = dyn_cast<tt::DotOp>(op);
+      bool valid = archGenerationName == "gfx936" && dot && hint && hint.size() == 2;
+      if (valid) {
+        auto type = dyn_cast<RankedTensorType>(dot.getType());
+        auto a = dot.getA().getType().getElementType();
+        auto b = dot.getB().getType().getElementType();
+        auto values = hint.asArrayRef();
+        auto powerOfTwo = [](int32_t n) { return n > 0 && !(n & (n - 1)); };
+        valid = type && type.getRank() == 2 && type.getElementType().isF32() &&
+                isa_and_nonnull<ttg::BlockedEncodingAttr>(type.getEncoding()) &&
+                ((a.isBF16() && b.isBF16()) || (a.isF16() && b.isF16())) &&
+                powerOfTwo(values[0]) && powerOfTwo(values[1]) &&
+                int64_t(values[0]) * values[1] == ttg::lookupNumWarps(op);
+      }
+      if (!valid) {
+        op->emitError("unsupported MFMA warp hint: expected gfx936 rank-2 blocked f16/bf16 dot to f32 and positive power-of-two factors of num-warps");
+        invalidHint = true;
+      }
+    });
+    if (invalidHint) { signalPassFailure(); return; }
+
     RewritePatternSet mfmaPatterns(context);
     auto features = triton::HCU::deduceHCUISAFeature(archGenerationName);
     auto mmacLayout = mmacLayoutForce != -1
@@ -1970,8 +2004,18 @@ struct TritonHCUGPUAccelerateMatmulPass
     default:
       break;
     }
-    if (applyPatternsGreedily(m, std::move(mfmaPatterns)).failed())
-      signalPassFailure();
+    if (applyPatternsGreedily(m, std::move(mfmaPatterns)).failed()) {
+      signalPassFailure(); return;
+    }
+    // A hinted dot must actually use MFMA. Do not silently legalize it as an
+    // ordinary FMA dot and score a matrix distribution that was never applied.
+    m.walk([&](Operation *op) {
+      if (op->hasAttr("hcu.layout.mfma_warps_per_cta")) {
+        op->emitError("MFMA warp hint was not consumed by MFMA acceleration");
+        invalidHint = true;
+      }
+    });
+    if (invalidHint) { signalPassFailure(); return; }
 
     RewritePatternSet patterns(context);
     patterns.add<AccelerateBlocked>(context, archGenerationName, /*benefit=*/1);
