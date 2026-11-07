@@ -66,13 +66,32 @@ from .distributed import (
 )
 from . import communication
 from .communication import get_mem_pool, init_communicator, cleanup_communicator
+from triton._flagtree_backend import FLAGTREE_BACKEND
 
+if FLAGTREE_BACKEND == "ascend":
+    # The 3.5 Ascend tutorials use the SHMEM/HCCL communicator and the
+    # symm_at/get_rank distributed primitives, not the FlagCX path above.
+    from .dsa.legacy.ascend.distributed import MeshConfig, device_mesh, remote, shard_id, distributed_barrier
 
-def create_dist_tensor(buf_tensor):
-    """Create a distributed tensor context and bind it to ``buf_tensor``."""
-    ctx = communication.create_dist_tensor(buf_tensor)
-    ctx.register_buffer(buf_tensor)
-    return ctx
+    def _ascend_communication():
+        from .dsa.legacy.ascend import communication as legacy_communication
+        return legacy_communication
+
+    def init_communicator(*args, **kwargs):
+        return _ascend_communication().init_communicator(*args, **kwargs)
+
+    def create_dist_tensor(buf_tensor):
+        return _ascend_communication().create_dist_tensor(buf_tensor)
+
+    def cleanup_communicator(peer_mem):
+        return _ascend_communication().cleanup_communicator(peer_mem)
+else:
+
+    def create_dist_tensor(buf_tensor):
+        """Create a distributed tensor context and bind it to ``buf_tensor``."""
+        ctx = communication.create_dist_tensor(buf_tensor)
+        ctx.register_buffer(buf_tensor)
+        return ctx
 
 
 _EXTENSION_APIS = frozenset({

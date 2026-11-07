@@ -47,7 +47,7 @@ def swiglu_kernel(
             x_b = tl.load(input_b_ptr + input_offset, mask=mask, other=0.0)
 
             tmp = x_a * x_b
-            sig = 1.0 / (1.0 + math.exp(-1 * x_a * beta))
+            sig = 1.0 / (1.0 + math.exp((-1.0 * x_a * beta).to(tl.float32)))
             out = tmp * sig.to(tl.float16)
 
             output_offset = offs_m[:, None] * output_stride_m + offs_h[None, :]

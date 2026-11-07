@@ -301,7 +301,7 @@ def rms_norm_kernel(
                 if IS_ALIGNED:
                     # Get global token position in KV cache
                     value_reload = tle.dsa.extract_slice(y, (i, 0), (1, BLOCK_SIZE), (1, 1))
-                    tl.compile_hint(value_reload, "disable_bubble_up")
+                    tle.dsa.ascend.compile_hint(value_reload, "disable_bubble_up")
                     value_reload = tl.reshape(value_reload, (BLOCK_SIZE))
 
                     offset_kv_cache = tle.dsa.extract_element(index_value, (i, ))
@@ -311,7 +311,7 @@ def rms_norm_kernel(
                 else:
                     if offset_i < token_num:
                         value_reload = tle.dsa.extract_slice(y, (i, 0), (1, BLOCK_SIZE), (1, 1))
-                        tl.compile_hint(value_reload, "disable_bubble_up")
+                        tle.dsa.ascend.compile_hint(value_reload, "disable_bubble_up")
                         value_reload = tl.reshape(value_reload, (BLOCK_SIZE))
 
                         offset_kv_cache = tle.dsa.extract_element(index_value, (i, ))
