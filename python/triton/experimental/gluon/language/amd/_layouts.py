@@ -207,3 +207,8 @@ class AMDWMMALayout(DistributedLayout):
     @property
     def rank(self):
         return len(self.warps_per_cta)
+
+
+# HCU binding constructor aliases; identical AMD encoding fields.
+HCUMFMALayout = AMDMFMALayout
+HCUWMMALayout = AMDWMMALayout

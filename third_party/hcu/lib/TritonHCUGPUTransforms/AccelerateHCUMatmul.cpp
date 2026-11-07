@@ -1,5 +1,6 @@
 #include "TritonHCUGPUToLLVM/TargetUtils.h"
 #include "TritonHCUGPUTransforms/MfmaGroup.h"
+#include "TritonHCUGPUTransforms/LayoutTuningProjection.h"
 #include "TritonHCUGPUTransforms/Passes.h"
 #include "TritonHCUGPUTransforms/WmmaGroup.h"
 #include "Utility.h"
@@ -282,6 +283,14 @@ warpsPerTile(Operation *dotOp, ArrayRef<int64_t> shape, int numWarps,
 SmallVector<unsigned, 3>
 warpsPerTileMFMA(Operation *dotOp, ArrayRef<int64_t> shape, int numWarps,
                  std::pair<int64_t, int64_t> shapePerWarp) {
+  // A candidate carries its explicit current matrix layout through the same
+  // lowering used by both read-only scoring projection and final compilation.
+  // Validation in the pass rejects unsupported hints before any rewriting.
+  if (auto hint = dotOp->getAttrOfType<DenseI32ArrayAttr>(
+          "hcu.layout.mfma_warps_per_cta")) {
+    auto values = hint.asArrayRef();
+    return {static_cast<unsigned>(values[0]), static_cast<unsigned>(values[1])};
+  }
   return warpsPerTile(dotOp, shape, numWarps, shapePerWarp);
 }
 
@@ -1941,6 +1950,11 @@ struct TritonHCUGPUAccelerateMatmulPass
     MLIRContext *context = &getContext();
     ModuleOp m = getOperation();
 
+    if (failed(layoutdp::validateLayoutMFMAHints(m, archGenerationName))) {
+      signalPassFailure();
+      return;
+    }
+
     RewritePatternSet mfmaPatterns(context);
     auto features = triton::HCU::deduceHCUISAFeature(archGenerationName);
     auto mmacLayout = mmacLayoutForce != -1
@@ -1970,8 +1984,13 @@ struct TritonHCUGPUAccelerateMatmulPass
     default:
       break;
     }
-    if (applyPatternsGreedily(m, std::move(mfmaPatterns)).failed())
+    if (applyPatternsGreedily(m, std::move(mfmaPatterns)).failed()) {
+      signalPassFailure(); return;
+    }
+    if (failed(layoutdp::validateLayoutMFMAHints(m, archGenerationName, true))) {
       signalPassFailure();
+      return;
+    }
 
     RewritePatternSet patterns(context);
     patterns.add<AccelerateBlocked>(context, archGenerationName, /*benefit=*/1);
