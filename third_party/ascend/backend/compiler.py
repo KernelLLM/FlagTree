@@ -623,7 +623,13 @@ def bc_to_linalg_by_bishengir_opt(bc_data: bytes, metadata, opt):
         if opt.debug:
             cmd += ["--mlir-print-debuginfo"]
         cmd += ["-o", mlir_path]
-        subprocess.run(cmd, env=env, capture_output=True, check=True, text=True)
+        proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"bishengir-opt failed with exit code {proc.returncode}\n"
+                f"command: {shlex.join(cmd)}\n"
+                f"stdout:\n{proc.stdout}\n"
+                f"stderr:\n{proc.stderr}")
 
         # Read the generated MLIR text
         linalg_text = Path(mlir_path).read_text()

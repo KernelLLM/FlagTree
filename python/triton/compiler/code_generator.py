@@ -1908,6 +1908,17 @@ class CodeGenerator(ast.NodeVisitor):
 
 
 def ast_to_ttir(fn, src, context, options, codegen_fns, module_map, module=None):
+    # Ascend pipe event ids are allocated per kernel compilation. Reset the
+    # allocator here so compiling the same kernel for a second shape cannot
+    # collide with the previous compilation's ranges.
+    try:
+        from triton._flagtree_backend import FLAGTREE_BACKEND
+        if FLAGTREE_BACKEND == "ascend":
+            from triton.experimental.tle.language.dsa.legacy.ascend.pipe import reset_pipe_event_allocator
+            reset_pipe_event_allocator()
+    except ImportError:
+        pass
+
     arg_types = [None] * len(fn.arg_names)
 
     for k, v in src.signature.items():

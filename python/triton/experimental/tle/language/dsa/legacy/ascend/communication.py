@@ -20,6 +20,10 @@ def _get_ash_ip_port():
 
 def init_communicator(ip_port=None, ash_size=None, engine_type=None):
     global _g_pe, _g_world_size, _g_mem_count
+    if "LOCAL_RANK" not in os.environ:
+        raise RuntimeError(
+            "tle.init_communicator() must be launched with torchrun "
+            "(for example: torchrun --nproc-per-node=2 <script>); LOCAL_RANK is unset")
     local_rank = int(os.environ["LOCAL_RANK"])
     torch.npu.set_device(local_rank)
     dist.init_process_group(backend="hccl", rank=local_rank)
