@@ -308,6 +308,43 @@ void addLayoutThreadLocalityAndTLE(mlir::OpPassManager &pm) {
   pm.addPass(mlir::triton::tle::createTritonTleOptimizeLocalPointerStores());
 }
 
+mlir::LogicalResult validateLayoutMFMAHints(mlir::ModuleOp module,
+    llvm::StringRef arch, bool requireConsumed) {
+  using namespace mlir;
+  namespace tt = mlir::triton;
+  namespace ttg = mlir::triton::gpu;
+  bool invalid = false;
+  module.walk([&](Operation *op) {
+    Attribute raw = op->getAttr("hcu.layout.mfma_warps_per_cta");
+    if (!raw) return;
+    if (requireConsumed) {
+      op->emitError("MFMA warp hint was not consumed by MFMA acceleration");
+      invalid = true;
+      return;
+    }
+    auto hint = dyn_cast<DenseI32ArrayAttr>(raw);
+    auto dot = dyn_cast<tt::DotOp>(op);
+    bool valid = arch == "gfx936" && dot && hint && hint.size() == 2;
+    if (valid) {
+      auto type = dyn_cast<RankedTensorType>(dot.getType());
+      auto a = dot.getA().getType().getElementType();
+      auto b = dot.getB().getType().getElementType();
+      auto values = hint.asArrayRef();
+      auto powerOfTwo = [](int32_t n) { return n > 0 && !(n & (n - 1)); };
+      valid = type && type.getRank() == 2 && type.getElementType().isF32() &&
+              isa_and_nonnull<ttg::BlockedEncodingAttr>(type.getEncoding()) &&
+              ((a.isBF16() && b.isBF16()) || (a.isF16() && b.isF16())) &&
+              powerOfTwo(values[0]) && powerOfTwo(values[1]) &&
+              int64_t(values[0]) * values[1] == ttg::lookupNumWarps(op);
+    }
+    if (!valid) {
+      op->emitError("unsupported MFMA warp hint: expected gfx936 rank-2 blocked f16/bf16 dot to f32 and positive power-of-two factors of num-warps");
+      invalid = true;
+    }
+  });
+  return failure(invalid);
+}
+
 void addLayoutMatmulPrefix(mlir::OpPassManager &pm,
                           const LayoutProjectionConfig &config) {
   mlir::TritonHCUGPUAccelerateMatmulOptions options;

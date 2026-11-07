@@ -22,6 +22,10 @@ struct LayoutProjectionConfig {
   std::string executionContext;
 };
 
+// Keep model-specific hint validation outside the upstream matmul pass.
+mlir::LogicalResult validateLayoutMFMAHints(mlir::ModuleOp module,
+    llvm::StringRef arch, bool requireConsumed = false);
+
 // These exact two builders are also called by HIPBackend.make_ttgir.
 void addLayoutThreadLocalityAndTLE(mlir::OpPassManager &pm);
 void addLayoutMatmulPrefix(mlir::OpPassManager &pm,
