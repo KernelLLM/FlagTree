@@ -36,6 +36,11 @@ try:
     import vllm  # noqa: F401
     if vllm.__version__ < "0.17.0":
         enable_vllm = False
+    else:
+        from vllm_ascend.utils import enable_custom_op
+        if not enable_custom_op():
+            print("vllm-ascend custom ops are disabled; using the torch reference.")
+            enable_vllm = False
 
 except ImportError:
     print("vllm does not enabled.")

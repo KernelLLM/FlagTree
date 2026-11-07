@@ -555,9 +555,9 @@ struct LowerPtrTensorCastToMemref
         /*padding=*/std::optional<triton::PaddingOption>(),
         triton::CacheModifier::NONE, triton::EvictionPolicy::NORMAL,
         /*isVolatile=*/false);
-    // %m = bufferization.to_buffer %t
+    // %m = bufferization.to_memref %t
     Value asMemref =
-        rewriter.create<bufferization::ToBufferOp>(loc, outMemref, loaded);
+        rewriter.create<bufferization::ToMemrefOp>(loc, outMemref, loaded);
     rewriter.replaceOp(op, asMemref);
     return success();
   }
