@@ -17,6 +17,7 @@
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
 
@@ -108,6 +109,84 @@ static mlir::triton::tile::MemorySpace attrToMemSpace(Attribute attr) {
   return MS::UB;
 }
 
+#endif
+
+#ifdef __TLE_DSA__
+static std::string getShmemTypeName(Type type) {
+  if (auto fpTy = llvm::dyn_cast<FloatType>(type)) {
+    if (fpTy.isBF16())
+      return "bfloat16";
+    if (fpTy.isF16())
+      return "half";
+    if (fpTy.isF32())
+      return "float";
+  }
+  if (auto intTy = llvm::dyn_cast<IntegerType>(type)) {
+    switch (intTy.getWidth()) {
+    case 8:
+      return "int8";
+    case 16:
+      return "int16";
+    case 32:
+      return "int32";
+    case 64:
+      return "int64";
+    }
+  }
+  return "unknown";
+}
+
+// Lower the 3.5 distributed primitives directly to hivm.custom ops, matching
+// the conversion that ran in the 3.5 TleToHIVM pass.
+static OpState createDistributedCustomOp(TritonOpBuilder &self,
+                                         TypeRange resultTypes,
+                                         const std::string &symbol,
+                                         ValueRange operands, bool isPure,
+                                         const std::string &libName = "",
+                                         const std::string &libPath = "") {
+  auto &builder = self.getBuilder();
+  auto *ctx = builder.getContext();
+  auto op = self.create<hivm::CustomOp>(resultTypes, "dist." + symbol,
+                                        operands, ValueRange{}, ValueRange{});
+  Operation *customOp = op.getOperation();
+  auto funcOp = customOp->getParentOfType<triton::FuncOp>();
+
+  bool hasDot = false;
+  if (funcOp) {
+    funcOp.walk([&](Operation *nested) {
+      if (isa<triton::DotOp>(nested))
+        hasDot = true;
+    });
+  }
+  auto coreType =
+      hasDot ? hivm::TCoreType::CUBE_AND_VECTOR : hivm::TCoreType::VECTOR;
+  op->setAttr(hivm::TCoreTypeAttr::name,
+              hivm::TCoreTypeAttr::get(ctx, coreType));
+  op->setAttr("hivm.is_distributed", builder.getUnitAttr());
+  op.setPipe(hivm::PIPE::PIPE_S);
+  op.setVFMode(hivm::VFMode::SIMD);
+  op->setAttr("symbol", builder.getStringAttr(symbol));
+  if (!libName.empty())
+    op->setAttr("libname", builder.getStringAttr(libName));
+  if (!libPath.empty())
+    op->setAttr("libpath", builder.getStringAttr(libPath));
+  if (isPure)
+    op->setAttr("no_side_effect", builder.getUnitAttr());
+
+  llvm::SmallVector<int32_t> gmAddrArgs;
+  if (funcOp) {
+    for (auto &&[idx, operand] : llvm::enumerate(customOp->getOperands())) {
+      if (!llvm::isa<triton::PointerType>(operand.getType()))
+        continue;
+      if (auto arg = llvm::dyn_cast<BlockArgument>(operand);
+          arg && arg.getOwner() == &funcOp.getFunctionBody().front())
+        gmAddrArgs.push_back(idx);
+    }
+  }
+  op->setAttr("gm_addr_args_indices",
+              DenseI32ArrayAttr::get(ctx, gmAddrArgs));
+  return op;
+}
 #endif
 
 void init_tle_dsa_ir(py::module &&m) {
@@ -329,6 +408,37 @@ void init_tle_dsa_ir(py::module &&m) {
   // ============================================================================
 
 #ifdef __TLE_DSA__
+  // 3.5 distributed primitives. These used to be TleDSA dialect ops converted
+  // by TleToHIVM; emit the resulting hivm.custom op directly instead.
+  tle_cls
+      ->def("create_get_rank",
+            [](TritonOpBuilder &self, Value axis) -> Value {
+              auto resultTy = self.getBuilder().getI32Type();
+              auto op = createDistributedCustomOp(self, TypeRange{resultTy},
+                                                  "aclshmem_my_pe",
+                                                  ValueRange{axis}, true);
+              return op->getResult(0);
+            })
+      .def("create_symm_at",
+           [](TritonOpBuilder &self, Value ptr, Value rank) -> Value {
+             auto elemTy =
+                 llvm::cast<triton::PointerType>(ptr.getType()).getPointeeType();
+             auto symbol = "aclshmem_ptr_" + getShmemTypeName(elemTy);
+             auto op = createDistributedCustomOp(self, TypeRange{ptr.getType()},
+                                                 symbol, ValueRange{ptr, rank},
+                                                 true);
+             return op->getResult(0);
+           })
+      .def("create_extern_call",
+           [](TritonOpBuilder &self, const std::string &libName,
+              const std::string &libPath, const std::string &symbol,
+              std::vector<Value> &argList, const std::vector<Type> &retTypes,
+              bool isPure) -> OpState {
+             return createDistributedCustomOp(self, TypeRange(retTypes), symbol,
+                                              ValueRange(argList), isPure,
+                                              libName, libPath);
+           });
+
   // Helper: load CommonIR dialect into context
   m.def("load_tile_dialects", [](MLIRContext &context) {
     DialectRegistry registry;
