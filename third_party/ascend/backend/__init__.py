@@ -107,6 +107,42 @@ def _apply_ascend_patch():
         TritonSemantic.dot = _patched_dot
         TritonSemantic._ascend_dot_patch_applied = True
 
+    # The core logical operators bitcast operands to i1, which fails for
+    # wider integers. Use the existing truth-value cast for Ascend only:
+    # TritonSemantic is shared by all backends in the current process.
+    if not getattr(TritonSemantic, "_ascend_logical_patch_applied", False):
+        from triton.language import core as _logical_core
+
+        _original_logical_and = TritonSemantic.logical_and
+        _original_logical_or = TritonSemantic.logical_or
+
+        def _uses_ascend_options(semantic):
+            # Resolve lazily: compiler.py invokes this patch while creating
+            # NPUOptions, and imports must not introduce an eager cycle.
+            from triton.backends.ascend.compiler import NPUOptions
+
+            return isinstance(getattr(semantic.builder, "options", None), NPUOptions)
+
+        def _patched_logical_and(self, input, other):
+            if not _uses_ascend_options(self):
+                return _original_logical_and(self, input, other)
+            return self.and_(
+                self.cast(input, _logical_core.int1),
+                self.cast(other, _logical_core.int1),
+            )
+
+        def _patched_logical_or(self, input, other):
+            if not _uses_ascend_options(self):
+                return _original_logical_or(self, input, other)
+            return self.or_(
+                self.cast(input, _logical_core.int1),
+                self.cast(other, _logical_core.int1),
+            )
+
+        TritonSemantic.logical_and = _patched_logical_and
+        TritonSemantic.logical_or = _patched_logical_or
+        TritonSemantic._ascend_logical_patch_applied = True
+
     # Install the unified, non-intrusive dtype interception for operators
     # whose dtypes are unsupported on Ascend. The rules live in
     # triton.backends.ascend.op_dtype_config, next to this backend.
@@ -119,86 +155,38 @@ def _apply_ascend_patch():
         except Exception as e:
             logging.warning(f"[Ascend Patch] Failed to install dtype guard: {e}")
 
-    # Hand the math builtins' dtype admission over to the Ascend rules.
-    #
-    # ``triton.language.math`` wraps these builtins in ``_check_dtype``, whose
-    # whitelist describes libdevice on GPUs. It is both redundant and wrong
-    # here: ``exp`` is listed as ``["fp32", "fp64"]`` while Ascend supports
-    # fp16 and rejects fp64 (see the ``exp`` rule in op_dtype_config), so
-    # ``tl.exp`` on an fp16 tensor is refused by the core whitelist before the
-    # backend ever sees it. The core check is also bypassed for the member-call
-    # form: ``_tensor_member_fn`` binds the undecorated function onto
-    # ``tensor``, so ``x.exp()`` already compiles on fp16 while ``tl.exp(x)``
-    # does not.
-    #
-    # Unwrapping ``_check_dtype`` removes that inconsistent second gate and
-    # leaves dtype admission to the single Ascend source of truth. dtype_guard
-    # intercepts both the named-builtin and the member-call form, and keeps
-    # rejecting every dtype listed as unsupported (fp64 included). Note that
-    # its decision is a blacklist: ``validate`` only rejects dtypes present in
-    # ``unsupported``, and the ``supported`` list merely formats the message.
-    # So for ops whose rule omits fp16 from both lists (``log``, ``sqrt``,
-    # ``floor``, ``erf``), unwrapping does admit fp16. Add fp16 to those rules'
-    # ``unsupported`` list if the hardware cannot run them, rather than relying
-    # on the core whitelist to reject them as a side effect.
-    #
-    # Only builtins that have an Ascend rule are unwrapped, so every op keeps
-    # at least one gate; ``div_rn`` has no rule and therefore keeps the core
-    # check.
-    if not getattr(CodeGenerator, "_ascend_math_dtype_unwrapped", False):
-        try:
-            import functools
-            from triton import language as _language
-            from triton.language import core as _core
-            from triton.language import math as _math
-            from triton.backends.ascend.op_dtype_config import RULES_BY_NAME
+    # exp(fp16) is verified on A5, but the core whitelist rejects it.
+    # Keep every other dtype and target on the original implementation.
+    if not getattr(CodeGenerator, "_ascend_exp_fp16_patch_applied", False):
+        from functools import wraps
+        from triton import language as _language
+        from triton.language import core as _core
+        from triton.language import math as _math
 
-            def _unwrap_check_dtype(fn):
-                """Return the builtin with the ``_check_dtype`` layer removed.
+        _original_exp = _math.exp
+        _exp_check = getattr(_original_exp, "__wrapped__", None)
+        _exp_body = getattr(_exp_check, "__wrapped__", None)
+        if not callable(_exp_body) or getattr(_exp_check, "__name__", None) != "exp":
+            raise RuntimeError("Unexpected decorator structure for triton.language.math.exp")
 
-                ``math`` builds each op as ``core.builtin(_check_dtype(...)(
-                _add_math_*_docstr(...)(fn)))``. Only the ``_check_dtype`` frame
-                is dropped; the ``@core.builtin`` contract (the ``_semantic``
-                keyword requirement and the ``TRITON_BUILTIN`` marker the AST
-                tracer dispatches on) is rebuilt around the inner function.
-                Builtins without both wrapper layers (``fma``) are left alone.
-                """
-                inner = getattr(fn, "__wrapped__", None)
-                if inner is None:
-                    return None
-                inner = getattr(inner, "__wrapped__", None)
-                if inner is None:
-                    return None
+        @_core.builtin
+        @wraps(_original_exp)
+        def _patched_exp(x, _semantic=None):
+            # Resolve lazily to avoid an import cycle with NPUOptions.
+            from triton.backends.ascend.compiler import NPUOptions
+            from triton.backends.ascend.utils import is_compile_on_910_95
+            options = getattr(_semantic.builder, "options", None)
+            if (isinstance(options, NPUOptions)
+                    and is_compile_on_910_95(options.arch)
+                    and isinstance(x, _core.tensor)
+                    and x.dtype == _core.float16):
+                return _exp_body(x, _semantic=_semantic)
+            return _original_exp(x, _semantic=_semantic)
 
-                @functools.wraps(inner)
-                def unchecked(*args, **kwargs):
-                    if kwargs.get("_semantic") is None:
-                        raise ValueError("Did you forget to add @triton.jit ? "
-                                         "(`_semantic` argument must be provided "
-                                         "outside of JIT functions.)")
-                    return inner(*args, **kwargs)
-
-                setattr(unchecked, _core.TRITON_BUILTIN, True)
-                return unchecked
-
-            for _name in sorted(set(dir(_math))):
-                if f"triton.language.{_name}" not in RULES_BY_NAME:
-                    continue
-                _original = getattr(_math, _name, None)
-                if not callable(_original) or not getattr(_original, _core.TRITON_BUILTIN, False):
-                    continue
-                _unchecked = _unwrap_check_dtype(_original)
-                if _unchecked is None:
-                    continue
-                # ``triton.language`` re-exports the same object; rebind both so
-                # ``tl.exp`` and ``triton.language.math.exp`` stay identical.
-                setattr(_math, _name, _unchecked)
-                if getattr(_language, _name, None) is _original:
-                    setattr(_language, _name, _unchecked)
-
-            CodeGenerator._ascend_math_dtype_unwrapped = True
-        except Exception as e:
-            logging.warning(f"[Ascend Patch] Failed to defer math dtype checks: {e}")
+        _math.exp = _patched_exp
+        if _language.exp is _original_exp:
+            _language.exp = _patched_exp
+        CodeGenerator._ascend_exp_fp16_patch_applied = True
 
 
 __all__ = ["do_bench_npu"]

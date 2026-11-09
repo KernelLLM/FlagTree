@@ -530,7 +530,7 @@ class CompiledKernel:
         else:
             self.module, self.function, self.n_regs, self.n_spills, self.n_max_threads = \
                 kernel_driver.utils.load_binary(self.name, self.kernel, self.metadata.shared, device)
-        warp_size = self.metadata.target.warp_size
+        warp_size = driver.active.get_current_target().warp_size
         if self.metadata.num_warps * warp_size > self.n_max_threads \
             and self.metadata.target.backend != "maca":  # flagtree metax
             raise_(OutOfResources(self.metadata.num_warps * warp_size, self.n_max_threads, "threads"))
