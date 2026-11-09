@@ -44,6 +44,18 @@ class IncompatibleTypeErrorImpl(Exception):
         super(IncompatibleTypeErrorImpl, self).__init__(self.message)
 
 
+# flagtree: arange's power-of-2 restriction is a SIMT lowering constraint.
+# Prefer the builder's mode query when available (e.g. Ascend interpreter).
+# Otherwise use compilation options, keeping the strict default.
+def _requires_power_of_two_range(builder) -> bool:
+    is_simt_mode = getattr(builder, "is_simt_mode", None)
+    if callable(is_simt_mode):
+        return is_simt_mode()
+
+    options = getattr(builder, "options", None)
+    return getattr(options, "parallel_mode", "simt") != "simd"
+
+
 class TritonSemantic(Generic[TensorTy]):
     tensor: Type[TensorTy] = tl.tensor
     lang = tl
@@ -601,7 +613,10 @@ class TritonSemantic(Generic[TensorTy]):
         if end <= start:
             raise ValueError("arange's end argument must be greater than the start argument")
         range = end - start
-        if (range & (range - 1)) != 0:
+        # The power-of-2 restriction only applies to SIMT lowering. Backends that
+        # lower through a SIMD pipeline (e.g. ascend, whose options report
+        # parallel_mode == "simd") accept arbitrary ranges.
+        if (range & (range - 1)) != 0 and _requires_power_of_two_range(self.builder):
             raise ValueError("arange's range must be a power of 2")
         shape = [range]
         if ret_ty is None:

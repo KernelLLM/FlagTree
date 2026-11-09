@@ -469,8 +469,12 @@ class CompiledKernel:
         # stores the text of each level of IR that was generated during compilation
         asm_files = [Path(p) for c, p in metadata_group.items() if not c.endswith(".json")]
         binary_ext = backend.binary_ext
+        # A backend may emit more than one binary artifact (e.g. the ascend
+        # backend caches the MLIR bytecode stage as .mlirbc alongside .npubin);
+        # those must be read as bytes, not decoded as UTF-8 text.
+        binary_exts = set(getattr(backend, "binary_extensions", None) or {binary_ext})
         self.asm = AsmDict({
-            file.suffix[1:]: file.read_bytes() if file.suffix[1:] == binary_ext else file.read_text()
+            file.suffix[1:]: file.read_bytes() if file.suffix[1:] in binary_exts else file.read_text()
             for file in asm_files
         })
         self.metadata_group = metadata_group
@@ -516,8 +520,16 @@ class CompiledKernel:
         if knobs.runtime.kernel_load_start_hook is not None:
             knobs.runtime.kernel_load_start_hook(self.module, self.function, self.name, self.metadata_group, self.hash)
         # TODO: n_regs, n_spills should be metadata generated when calling `ptxas`
-        self.module, self.function, self.n_regs, self.n_spills, self.n_max_threads = kernel_driver.utils.load_binary(
-            self.name, self.kernel, self.metadata.shared, device)
+        # The ascend backend's load_binary needs the kernel's mix_mode (aiv/aic/mix)
+        # to pick the launch path, and keys the binary by the mangled kernel_name
+        # rather than the Python function name.
+        if hasattr(self.metadata, "mix_mode"):
+            self.module, self.function, self.n_regs, self.n_spills, self.n_max_threads = \
+                kernel_driver.utils.load_binary(self.metadata.kernel_name, self.kernel, self.metadata.shared, device,
+                                                self.metadata.mix_mode)
+        else:
+            self.module, self.function, self.n_regs, self.n_spills, self.n_max_threads = \
+                kernel_driver.utils.load_binary(self.name, self.kernel, self.metadata.shared, device)
         warp_size = self.metadata.target.warp_size
         if self.metadata.num_warps * warp_size > self.n_max_threads \
             and self.metadata.target.backend != "maca":  # flagtree metax

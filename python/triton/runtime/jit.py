@@ -428,6 +428,13 @@ def create_function_from_signature(sig, kparams, backend):
     assert len(sig.parameters) == len(kparams)
     # Create the function argument list and the dict entries for the return statement
     specialization = []
+    # Whether alignment specialization applies can depend on the launch options
+    # so the backend is asked once per binder call rather than baked in when
+    # the binder is generated.
+    uses_alignment_specialization = False
+    alignment_specialization_name = "__triton_alignment_specialization"
+    while alignment_specialization_name in sig.parameters:
+        alignment_specialization_name += "_"
     # signature
     for name, kp in zip(sig.parameters.keys(), kparams):
         if kp.is_constexpr:
@@ -435,14 +442,20 @@ def create_function_from_signature(sig, kparams, backend):
         else:
             is_const = 'True' if kp.is_const else 'False'
             specialize = 'False' if kp.do_not_specialize else 'True'
-            align = 'False' if kp.do_not_specialize_on_alignment else 'True'
-            ret = f"specialize_impl(backend, {name}, {is_const}, {specialize}, {align})"
+            # `specialize` is emitted into generated source, so the string
+            # "False" is truthy here; keep the decision on a real boolean.
+            specializes_value = not kp.do_not_specialize
+            align = not kp.do_not_specialize_on_alignment
+            effective_align = alignment_specialization_name if align and specializes_value else 'False'
+            ret = f"specialize_impl(backend, {name}, {is_const}, {specialize}, {effective_align})"
             if kp.annotation_type:
                 if isinstance(kp.annotation_type, str):
                     if kp.annotation_type == "u1" or kp.annotation_type[:2] in ["fp", "bf"]:
                         # we do not specialize non-constexpr floats and bools:
                         specialize = False
                 if specialize:
+                    uses_alignment_specialization = (uses_alignment_specialization
+                                                     or (align and specializes_value))
                     # Prefer constexpr over annotation type to avoid downgrading
                     # compile-time constants to runtime-specialized types
                     specialization.append(
@@ -451,13 +464,18 @@ def create_function_from_signature(sig, kparams, backend):
                     # skip runtime specialization:
                     specialization.append(f'("{kp.annotation_type}", None)')
             else:
+                uses_alignment_specialization = (uses_alignment_specialization
+                                                 or (align and specializes_value))
                 specialization.append(f"{ret}")
 
     # compute argument string for a given parameter
     arg = lambda x: x[0] if x[1].default is inspect.Parameter.empty else f"{x[0]}=default_{x[0]}"
+    alignment_specialization_init = (f"    {alignment_specialization_name} = "
+                                     "backend.use_alignment_specialization(options)\n"
+                                     if uses_alignment_specialization else "")
     func_body = f"""
 def dynamic_func({", ".join(list(map(arg, sig.parameters.items())) + ["**options"])}):
-    params = {{{', '.join([f"'{name}': {name}" for name in sig.parameters.keys()])}}}
+{alignment_specialization_init}    params = {{{', '.join([f"'{name}': {name}" for name in sig.parameters.keys()])}}}
     specialization = [{','.join(specialization)}]
     return params, specialization, options
 """

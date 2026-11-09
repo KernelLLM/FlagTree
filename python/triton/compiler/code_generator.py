@@ -390,6 +390,12 @@ class CodeGenerator(ast.NodeVisitor):
         # convert_custom_types(input_tensor, dtype, fp_downcast_rounding=None, _builder=None)
         self.builder.codegen_fns = codegen_fns
         self.builder.module_map = {} if module_map is None else module_map
+        # Backend extensions are instance-local and must be ready before IR emission.
+        # Gluon keeps its own builder and semantics.
+        if not is_gluon:
+            initialize_builder = codegen_fns.get("initialize_builder")
+            if initialize_builder is not None:
+                initialize_builder(self.builder, context, options)
         self.module = self.builder.create_module() if module is None else module
         self.function_ret_types = {} if function_types is None else function_types
         self.prototype = prototype
@@ -1107,6 +1113,23 @@ class CodeGenerator(ast.NodeVisitor):
                 return self.visit(node.orelse)
 
     def visit_With(self, node):
+        # Let backends lower specialized context managers before invoking
+        # the standard context manager protocol.
+        with_handlers = self.builder.codegen_fns.get("with_handlers", {})
+        if with_handlers and len(node.items) == 1:
+            item = node.items[0]
+            if isinstance(item.context_expr, ast.Call):
+                context_type = self.visit(item.context_expr.func)
+                handler = with_handlers.get(context_type)
+                if handler is not None:
+                    if item.optional_vars is not None:
+                        raise self._unsupported(
+                            node, "`as` bindings are not supported for backend-specific `with` statements")
+                    if ContainsReturnChecker(self.gscope).visit(node):
+                        raise self._unsupported(
+                            node, "Cannot have `return` statements inside `with` statements in triton ")
+                    return handler(self, node)
+
         # Lower `with` statements by constructing context managers and calling their enter/exit hooks
         # Instantiate each context manager with builder injection
         cm_list = []
