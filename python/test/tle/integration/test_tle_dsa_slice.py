@@ -1,5 +1,5 @@
 # flagtree tle
-"""TLE DSA slice family tests on tsingmicro (txda).
+"""TLE DSA slice family tests, portable across tsingmicro (txda) and Ascend NPU.
 
 Covers `tle.dsa.extract_slice`/`insert_slice` (element-level strided slicing)
 and the generic tle-lite `tle.extract_tile`/`tle.insert_tile` grid-coordinate
@@ -8,23 +8,16 @@ dsa.extract_slice / dsa.insert_slice IR ops on this backend.
 """
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
 
 import triton
 import triton.experimental.tle.language as tle
 import triton.language as tl
 
+from .._dsa_backend import get_dsa_backend
 
-def _is_txda():
-    try:
-        import torch_txda  # noqa: F401
-    except ImportError:
-        return False
-    target = triton.runtime.driver.active.get_current_target()
-    return getattr(target, "backend", None) == "txda"
-
-
-pytestmark = pytest.mark.skipif(not _is_txda(), reason="TLE DSA tests require TsingMicro (txda) backend")
+BACKEND, DEVICE, SPACE = get_dsa_backend()
 
 
 @triton.jit
@@ -151,36 +144,36 @@ class TestTile:
 
     def test_extract_scalar(self):
         torch.manual_seed(42)
-        x = torch.randn(*TILE_SRC, device="txda", dtype=torch.float32)
+        x = torch.randn(*TILE_SRC, device=DEVICE, dtype=torch.float32)
 
         # LIN=15 == linear id of [1,1,1,1]
-        out = torch.zeros(*TILE, device="txda", dtype=torch.float32)
+        out = torch.zeros(*TILE, device=DEVICE, dtype=torch.float32)
         extract_scalar[(1, )](x, out, TILE_SRC, TILE, 15)
         torch.testing.assert_close(out, x[16:32, 16:32, 16:32, 8:16])
 
     def test_extract_dyn_multi(self):
         torch.manual_seed(42)
-        x = torch.randn(*TILE_SRC, device="txda", dtype=torch.float32)
+        x = torch.randn(*TILE_SRC, device=DEVICE, dtype=torch.float32)
 
         # mixed: dims 0,1 dynamic, dims 2,3 static
-        out = torch.zeros(*TILE, device="txda", dtype=torch.float32)
+        out = torch.zeros(*TILE, device=DEVICE, dtype=torch.float32)
         extract_dyn_multi[(1, )](x, out, TILE_SRC, TILE, 1, 1, 0, 0)
         torch.testing.assert_close(out, x[16:32, 16:32, 0:16, 0:8])
 
     def test_insert_multi(self):
         torch.manual_seed(44)
         shape, tile = (16, 16, 16, 16), (8, 8, 8, 8)
-        x = torch.randn(*shape, device="txda", dtype=torch.float32)
+        x = torch.randn(*shape, device=DEVICE, dtype=torch.float32)
 
         # identity: extract [0,0,0,0], +1.0, insert back at [0,0,0,0]
-        out = torch.zeros(*shape, device="txda", dtype=torch.float32)
+        out = torch.zeros(*shape, device=DEVICE, dtype=torch.float32)
         insert_multi[(1, )](x, out, shape, tile, 0, 0, 0, 0, 0, 0, 0, 0)
         expected = x.clone()
         expected[0:8, 0:8, 0:8, 0:8] += 1.0
         torch.testing.assert_close(out, expected)
 
         # relocate: extract [1,1,1,1], +1.0, insert at [0,0,0,0]
-        out = torch.zeros(*shape, device="txda", dtype=torch.float32)
+        out = torch.zeros(*shape, device=DEVICE, dtype=torch.float32)
         insert_multi[(1, )](x, out, shape, tile, 1, 1, 1, 1, 0, 0, 0, 0)
         expected = x.clone()
         expected[0:8, 0:8, 0:8, 0:8] = x[8:16, 8:16, 8:16, 8:16] + 1.0
@@ -189,8 +182,8 @@ class TestTile:
     def test_insert_oop(self):
         torch.manual_seed(47)
         shape, tile = (16, 16, 16, 16), (8, 8, 8, 8)
-        x2 = torch.randn(*shape, device="txda", dtype=torch.float32)
-        out = torch.zeros(*shape, device="txda", dtype=torch.float32)
+        x2 = torch.randn(*shape, device=DEVICE, dtype=torch.float32)
+        out = torch.zeros(*shape, device=DEVICE, dtype=torch.float32)
         insert_oop[(1, )](x2, out, shape, tile, 1, 1, 1, 1)
         src = x2[0:8, 0:8, 0:8, 0:8]
         expected = x2.clone()
@@ -203,10 +196,10 @@ class TestTile:
         shape, tile = (16, 16, 16, 16), (8, 8, 8, 8)
 
         # Runtime indices (5=[0,1,0,1], 10=[1,0,1,0]) exercise the div/mod path.
-        x = torch.randn(*shape, device="txda", dtype=torch.float32)
-        idx_src = torch.tensor(5, device="txda", dtype=torch.int32)
-        idx_dst = torch.tensor(10, device="txda", dtype=torch.int32)
-        out = torch.zeros(*shape, device="txda", dtype=torch.float32)
+        x = torch.randn(*shape, device=DEVICE, dtype=torch.float32)
+        idx_src = torch.tensor(5, device=DEVICE, dtype=torch.int32)
+        idx_dst = torch.tensor(10, device=DEVICE, dtype=torch.int32)
+        out = torch.zeros(*shape, device=DEVICE, dtype=torch.float32)
         insert_dyn_scalar[(1, )](x, idx_src, idx_dst, out, shape, tile)
         expected = x.clone()
         expected[8:16, 0:8, 8:16, 0:8] = x[0:8, 8:16, 0:8, 8:16] + 1.0
@@ -217,39 +210,39 @@ class TestSlice:
 
     def test_extract_static(self):
         torch.manual_seed(42)
-        x = torch.randn(*SLICE, device="txda", dtype=torch.float32)
+        x = torch.randn(*SLICE, device=DEVICE, dtype=torch.float32)
 
         # stride 1
-        out = torch.zeros(8, 8, 8, 8, device="txda", dtype=torch.float32)
+        out = torch.zeros(8, 8, 8, 8, device=DEVICE, dtype=torch.float32)
         extract_static[(1, )](x, out, SLICE, (4, 4, 4, 4), (8, 8, 8, 8), (1, 1, 1, 1))
         torch.testing.assert_close(out, x[4:12, 4:12, 4:12, 4:12])
 
         # stride 2
-        out = torch.zeros(8, 8, 8, 8, device="txda", dtype=torch.float32)
+        out = torch.zeros(8, 8, 8, 8, device=DEVICE, dtype=torch.float32)
         extract_static[(1, )](x, out, SLICE, (0, 0, 0, 0), (8, 8, 8, 8), (2, 2, 2, 2))
         torch.testing.assert_close(out, x[0:16:2, 0:16:2, 0:16:2, 0:16:2])
 
     def test_extract_dyn(self):
         torch.manual_seed(42)
-        x = torch.randn(*SLICE, device="txda", dtype=torch.float32)
-        o0 = torch.tensor(4, device="txda", dtype=torch.int32)
-        o1 = torch.tensor(4, device="txda", dtype=torch.int32)
+        x = torch.randn(*SLICE, device=DEVICE, dtype=torch.float32)
+        o0 = torch.tensor(4, device=DEVICE, dtype=torch.int32)
+        o1 = torch.tensor(4, device=DEVICE, dtype=torch.int32)
 
         # all-dynamic offsets on dims 0,1
-        out = torch.zeros(8, 8, 8, 8, device="txda", dtype=torch.float32)
+        out = torch.zeros(8, 8, 8, 8, device=DEVICE, dtype=torch.float32)
         extract_dyn[(1, )](x, o0, o1, out, SLICE, (8, 8, 8, 8))
         torch.testing.assert_close(out, x[4:12, 4:12, 0:8, 0:8])
 
         # mixed: dynamic dim0, static dim1 (=8)
-        out = torch.zeros(8, 8, 8, 8, device="txda", dtype=torch.float32)
+        out = torch.zeros(8, 8, 8, 8, device=DEVICE, dtype=torch.float32)
         extract_mixed[(1, )](x, o0, out, SLICE, (8, 8, 8, 8), 8)
         torch.testing.assert_close(out, x[4:12, 8:16, 0:8, 0:8])
 
     def test_insert_default(self):
         torch.manual_seed(44)
-        x = torch.randn(*SLICE, device="txda", dtype=torch.float32)
+        x = torch.randn(*SLICE, device=DEVICE, dtype=torch.float32)
 
-        out = torch.zeros(*SLICE, device="txda", dtype=torch.float32)
+        out = torch.zeros(*SLICE, device=DEVICE, dtype=torch.float32)
         insert_default[(1, )](x, out, SLICE, (8, 8, 8, 8))
         expected = x.clone()
         expected[8:12, 8:12, 8:12, 8:12] = x[0:4, 0:4, 0:4, 0:4] + 1.0
@@ -257,9 +250,9 @@ class TestSlice:
 
     def test_insert_strided(self):
         torch.manual_seed(44)
-        x = torch.randn(*SLICE, device="txda", dtype=torch.float32)
+        x = torch.randn(*SLICE, device=DEVICE, dtype=torch.float32)
 
-        out = torch.zeros(*SLICE, device="txda", dtype=torch.float32)
+        out = torch.zeros(*SLICE, device=DEVICE, dtype=torch.float32)
         insert_strided[(1, )](x, out, SLICE, (4, 4, 4, 4))
         expected = x.clone()
         expected[4:12:2, 4:12:2, 4:12:2, 4:12:2] = x[0:4, 0:4, 0:4, 0:4] + 1.0
@@ -267,9 +260,9 @@ class TestSlice:
 
     def test_member(self):
         torch.manual_seed(44)
-        x = torch.randn(*SLICE, device="txda", dtype=torch.float32)
+        x = torch.randn(*SLICE, device=DEVICE, dtype=torch.float32)
 
-        out = torch.zeros(*SLICE, device="txda", dtype=torch.float32)
+        out = torch.zeros(*SLICE, device=DEVICE, dtype=torch.float32)
         member_roundtrip[(1, )](x, out, SLICE, (8, 8, 8, 8))
         expected = x.clone()
         expected[8:16, 8:16, 8:16, 8:16] = x[0:8, 0:8, 0:8, 0:8] + 1.0
