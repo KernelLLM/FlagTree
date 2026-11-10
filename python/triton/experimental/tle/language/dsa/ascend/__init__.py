@@ -9,6 +9,20 @@ from .distributed import (MeshConfig, device_mesh, remote, shard_id, distributed
                           gemm_swizzle2d_Nz)
 from . import custom_ops
 
+# ``custom_ops`` and ``core`` import the CANN language extension, which
+# registers its own ``tensor.extract_slice`` / ``tensor.insert_slice`` members.
+# Those require explicit sizes/strides and cannot take constexpr-tuple offsets.
+# Register the TLE slice frontends afterwards so the member forms follow the
+# portable ``tle.dsa`` API on Ascend as well.
+from triton._flagtree_backend import FLAGTREE_BACKEND
+
+if FLAGTREE_BACKEND == "ascend":
+    import triton.language.core as _tl
+    from . import compat as _compat
+
+    _tl._tensor_member_fn(_compat.extract_slice)
+    _tl._tensor_member_fn(_compat.insert_slice)
+
 __all__ = [
     "UB",
     "L1",

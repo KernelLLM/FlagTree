@@ -540,7 +540,7 @@ def _check_static_slice_bounds(fn, src_shape, static_offsets, sizes, strides):
 
 @tl._tensor_member_fn
 @tl.builtin
-def extract_slice(x: tl.tensor, offsets, sizes, strides, _semantic=None) -> tl.tensor:
+def extract_slice(x: tl.tensor, offsets, sizes, strides=None, _semantic=None) -> tl.tensor:
     """Extract a strided slice from ``x``.
 
     Args:
@@ -549,7 +549,7 @@ def extract_slice(x: tl.tensor, offsets, sizes, strides, _semantic=None) -> tl.t
             a scalar ``tl.tensor`` (dynamic).
         sizes:   Per-dim slice sizes (compile-time constants); this is the
             result shape (``tensor.extract_slice`` semantics).
-        strides: Per-dim strides (compile-time constants).
+        strides: Per-dim strides (compile-time constants); defaults to all ones.
 
     Returns a tensor whose shape is ``sizes``.
     """
@@ -562,7 +562,7 @@ def extract_slice(x: tl.tensor, offsets, sizes, strides, _semantic=None) -> tl.t
 
     src_shape = _static_dims(x.type.shape, "extract_slice")
     sizes = _static_dims(sizes, "extract_slice")
-    strides = _static_dims(strides, "extract_slice")
+    strides = [1] * len(src_shape) if strides is None else _static_dims(strides, "extract_slice")
     offsets = tl._unwrap_if_constexpr(offsets)
     if len(offsets) != len(src_shape) or len(sizes) != len(src_shape) \
             or len(strides) != len(src_shape):

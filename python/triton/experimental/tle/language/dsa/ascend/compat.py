@@ -272,28 +272,52 @@ setattr(hint, TRITON_BUILTIN, True)
 setattr(hint, TLE_BUILTIN, True)
 
 
+def _unwrap_slice_meta(value):
+    """Unwrap a constexpr/list/tuple so slice metadata can be iterated."""
+    value = _unwrap_if_constexpr(value)
+    if isinstance(value, tl.tuple):
+        return list(value)
+    return value
+
+
 @builtin
-def insert_slice(ful: tensor, sub: tensor, offsets: List[tensor], sizes: List[int], strides: List[int],
-                 _semantic=None) -> tensor:
+def insert_slice(ful: tensor, sub: tensor, offsets, sizes=None, strides=None, _semantic=None) -> tensor:
     """
     Insert a tensor to another tensor as specified by the operation’s offsets, sizes and strides arguments.
+
+    ``sizes`` defaults to ``sub.shape`` and ``strides`` defaults to all ones,
+    matching the portable 3.6 ``tle.dsa.insert_slice`` API.
     """
     assert len(ful.shape) > 0
     assert len(ful.shape) == len(sub.shape)
+    offsets = _unwrap_slice_meta(offsets)
+    sizes = _unwrap_slice_meta(sizes)
+    strides = _unwrap_slice_meta(strides)
+    if sizes is None:
+        sizes = [_unwrap_if_constexpr(dim) for dim in sub.shape]
+    if strides is None:
+        strides = [1] * len(sizes)
     assert (len(ful.shape) == len(sizes))
     assert (len(ful.shape) == len(strides))
-    new_offsets = [_semantic.to_tensor(o) if isinstance(o, constexpr) else o for o in offsets]
+    new_offsets = [_semantic.to_tensor(o) for o in offsets]
     out = tle_semantic.insert_slice(ful, sub, new_offsets, sizes, strides, _semantic.builder)
     return out
 
 
 @builtin
-def extract_slice(ful, offsets, sizes, strides, _semantic=None, _generator=None) -> tensor:
+def extract_slice(ful, offsets, sizes, strides=None, _semantic=None, _generator=None) -> tensor:
     """
     Extract a tensor from another tensor as specified by the operation’s offsets, sizes and strides arguments.
+
+    ``strides`` defaults to all ones.
     """
     assert len(ful.shape) > 0
-    new_offsets = [_semantic.to_tensor(o) if isinstance(o, constexpr) else o for o in offsets]
+    offsets = _unwrap_slice_meta(offsets)
+    sizes = _unwrap_slice_meta(sizes)
+    strides = _unwrap_slice_meta(strides)
+    if strides is None:
+        strides = [1] * len(sizes)
+    new_offsets = [_semantic.to_tensor(o) for o in offsets]
     sub = tle_semantic.extract_slice(ful, new_offsets, sizes, strides, _semantic.builder)
     return sub
 

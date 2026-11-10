@@ -58,7 +58,7 @@ def insert_slice(ful, sub, offsets, sizes, strides, _semantic=None, _generator=N
 
     assert len(ful.shape) > 0
     assert len(ful.shape) == len(sub.shape)
-    new_offsets = [_semantic.to_tensor(o) if isinstance(o, constexpr) else o for o in offsets]
+    new_offsets = [_semantic.to_tensor(o) for o in _unwrap_if_constexpr(offsets)]
     out = insert_slice_impl(ful, sub, new_offsets, sizes, strides, _semantic.builder)
     return out
 
@@ -103,7 +103,7 @@ def extract_slice(ful, offsets, sizes, strides, _semantic=None, _generator=None)
         return tensor(out, ret_type)
 
     assert len(ful.shape) > 0
-    new_offsets = [_semantic.to_tensor(o) if isinstance(o, constexpr) else o for o in offsets]
+    new_offsets = [_semantic.to_tensor(o) for o in _unwrap_if_constexpr(offsets)]
     sub = extract_slice_impl(ful, new_offsets, sizes, strides, _semantic.builder)
     return sub
 
