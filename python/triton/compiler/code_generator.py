@@ -1914,7 +1914,7 @@ def ast_to_ttir(fn, src, context, options, codegen_fns, module_map, module=None)
     try:
         from triton._flagtree_backend import FLAGTREE_BACKEND
         if FLAGTREE_BACKEND == "ascend":
-            from triton.experimental.tle.language.dsa.legacy.ascend.pipe import reset_pipe_event_allocator
+            from triton.experimental.tle.language.dsa.ascend.pipe import reset_pipe_event_allocator
             reset_pipe_event_allocator()
     except ImportError:
         pass

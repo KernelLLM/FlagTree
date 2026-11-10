@@ -5,6 +5,8 @@ from .core import (UB, L1, L0A, L0B, L0C, PIPE, SyncSpec, sub_vec_id, sub_vec_nu
                    sync_block_all, compile_hint, raw, multibuffer)
 from .pipe import (PipeScheduler, pipe_reader, pipe_slot, pipe_value, pipe_wait_result, pipe_writer, pipe_scheduler,
                    run_pipe, reset_pipe_event_allocator)
+from .distributed import (MeshConfig, device_mesh, remote, shard_id, distributed_barrier, swizzle2d_Nz,
+                          gemm_swizzle2d_Nz)
 from . import custom_ops
 
 __all__ = [
@@ -32,4 +34,12 @@ __all__ = [
     "pipe_scheduler",
     "run_pipe",
     "reset_pipe_event_allocator",
+    "MeshConfig",
+    "device_mesh",
+    "remote",
+    "shard_id",
+    "distributed_barrier",
+    "swizzle2d_Nz",
+    "gemm_swizzle2d_Nz",
+    "custom_ops",
 ]

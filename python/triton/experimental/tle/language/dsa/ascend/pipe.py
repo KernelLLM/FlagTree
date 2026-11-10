@@ -7,7 +7,7 @@ from typing import Any, Dict
 import triton.language.core as tl
 from triton.language.core import _unwrap_if_constexpr
 
-from ..core import Workspace, builtin
+from .compat import Workspace, builtin
 from .core import PIPE, SyncSpec, sync_block_set, sync_block_wait
 
 _pipe_event_ranges = []

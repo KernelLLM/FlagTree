@@ -521,3 +521,40 @@ def tile_load(src, index=None, dst_space=None, _semantic=None, _generator=None) 
 def tile_store(src, value=None, index=None, dst=None, src_space=None, _semantic=None, _generator=None):
     """Store a tile into an encoded tensor_view via tile.store."""
     tle_semantic.tile_store(src, dst, value, index, _semantic.builder, src_space)
+
+
+__all__ = [
+    "Workspace",
+    "alloc",
+    "copy",
+    "pipeline",
+    "parallel",
+    "to_tensor",
+    "to_buffer",
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "max",
+    "min",
+    "hint",
+    "extract_slice",
+    "insert_slice",
+    "extract_element",
+    "subview",
+    "tile_alloc",
+    "tile_copy",
+    "tile_subview",
+    "tile_to_tensor",
+    "tile_set_flag",
+    "tile_wait_flag",
+    "tile_pipe_barrier",
+    "tile_gm_offset",
+    "tile_cube_launch",
+    "tile_cube_wait",
+    "tile_load",
+    "tile_store",
+    "tensor_to_tile",
+    "from_buffer_to_tensor_pointer",
+    "workspace",
+]

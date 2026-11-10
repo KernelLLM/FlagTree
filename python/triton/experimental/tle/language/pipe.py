@@ -114,7 +114,7 @@ def pipe(
     # the GPU field validation below, which only accepts gpu.buffered_tensor.
     from triton._flagtree_backend import FLAGTREE_BACKEND
     if FLAGTREE_BACKEND == "ascend":
-        from .dsa.legacy.ascend.pipe import _deferred_pipe
+        from .dsa.ascend.pipe import _deferred_pipe
         return _deferred_pipe(capacity=capacity, scope=scope, name=name, readers=readers, one_shot=one_shot,
                               _semantic=_semantic, **fields)
 

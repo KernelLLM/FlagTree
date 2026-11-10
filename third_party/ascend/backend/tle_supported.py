@@ -57,4 +57,7 @@ TLE_SUPPORTED_PRIMITIVES = [
     "dsa.tile_cube_launch",
     "dsa.tile_cube_wait",
     "dsa.workspace",
+    # TLE-Raw on Ascend: tle.raw.call("ascend_<op>", ...) dispatches to the
+    # Ascend custom ops (same IR as the legacy tle.dsa.ascend.raw entry).
+    "raw.call",
 ]
