@@ -1312,14 +1312,25 @@ class CodeGenerator(ast.NodeVisitor):
         except (ImportError, AttributeError):
             tle_dsa_pipeline = None
 
+        # flagtree ascend: load the extension only for Ascend builds.
+        # Match the exact class rather than accepting arbitrary range subclasses.
+        from triton._flagtree_backend import FLAGTREE_BACKEND
+
+        is_ascend_parallel = False
+        if FLAGTREE_BACKEND == "ascend":
+            from triton.language.extra.cann.extension import parallel as ascend_parallel
+
+            is_ascend_parallel = IteratorClass is ascend_parallel
+
         # flagtree tle: check supported
         if IteratorClass in (tle_pipeline, tle_range, tle_dsa_pipeline) and IteratorClass is not None:
             self._require_tle_primitive(IteratorClass)
 
-        if IteratorClass in [language.range, tle_pipeline, tle_range, tle_dsa_pipeline]:  # flagtree reorder-loop-loads
+        if (IteratorClass in [language.range, tle_pipeline, tle_range, tle_dsa_pipeline]
+                or is_ascend_parallel):  # flagtree reorder-loop-loads / ascend
             iterator = IteratorClass(*iter_args, **iter_kwargs)
             # visit iterator arguments
-            # note: only `range` iterator is supported now
+            # Supported range-like iterators share the same bounds.
             # collect lower bound (lb), upper bound (ub), and step
             lb = iterator.start
             ub = iterator.end
@@ -1397,6 +1408,8 @@ class CodeGenerator(ast.NodeVisitor):
                 for_op.set_attr("llvm.loop_annotation", self.builder.get_disable_loop_licm_attr())
             if reorder and _unwrap_if_constexpr(loop_unroll_factor) is not None:  # flagtree reorder-loop-loads
                 for_op.set_attr("tt.reorder", self.builder.get_bool_attr(True))  # flagtree reorder-loop-loads
+            if is_ascend_parallel:  # flagtree ascend
+                for_op.set_attr("hivm.parallel_loop", self.builder.get_unit_attr())
 
             self.scf_stack.append(node)
             for_op_body = for_op.get_body(0)
@@ -1458,7 +1471,7 @@ class CodeGenerator(ast.NodeVisitor):
         args = inspect.getcallargs(fn.fn, *args, **kwargs)
         args = [args[name] for name in fn.arg_names]
         for i, arg in enumerate(args):
-            if isinstance(arg, (language.dtype, float, int, bool, JITFunction)):
+            if isinstance(arg, (language.dtype, float, int, bool, JITFunction, language.PropagateNan)):
                 args[i] = language.core.constexpr(arg)
         args_cst = find_paths_if(args, lambda _, x: _is_constexpr(x))
         args_cst = {path: get_iterable_path(args, path) for path in args_cst}

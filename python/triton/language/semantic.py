@@ -253,7 +253,7 @@ class TritonSemantic(Generic[TensorTy]):
         min_value = self.scalar_constant(min_value, tl.int64)
         cond = self.and_(self.less_equal(ret, max_value), self.greater_equal(ret, min_value))
         msg = f"int{lhs_sca_ty.int_bitwidth} overflow detected for operation {binary_op.__name__}"
-        self.device_assert(cond, msg, None)
+        self.device_assert(cond, msg, None, auto_overflow=True)
 
     def add(self, input: TensorTy | numbers.Number, other: TensorTy | numbers.Number,
             sanitize_overflow: bool) -> TensorTy:
@@ -1077,6 +1077,11 @@ class TritonSemantic(Generic[TensorTy]):
                              "pointers or loading a scalar. Because the compiler does not know the boundary; please "
                              "use block pointers (defined by `make_block_ptr`) instead")
 
+        # Honor backend requirements for masked loads with no explicit fallback.
+        if mask is not None and other is None and getattr(self.builder, "masked_load_default_zero", False):
+            elt_ty = ptr.type.scalar.element_ty
+            other = self.to_tensor(0.0 if elt_ty.is_floating() else 0)
+
         # For a pointer of scalar, check the type of `mask` and `other`
         if not ptr.type.is_block():
             if mask and mask.type.is_block():
@@ -1122,7 +1127,14 @@ class TritonSemantic(Generic[TensorTy]):
                 self.builder.create_masked_load(ptr.handle, mask.handle, other.handle if other else None, cache,
                                                 eviction, is_volatile, flagtree_hints), dst_ty)
         if is_bool:
-            ret = self.cast(ret, tl.int1)
+            if getattr(self.builder, "bool_load_as_int8", False):
+                # Ascend keeps bool pointer loads as int8, matching
+                # triton-ascend's IR and Python tensor provenance markers.
+                ret.handle.set_attr("was_bool_to_int8", self.builder.get_bool_attr(True))
+                ret.was_bool_to_int8 = True
+            else:
+                # Preserve the standard bool result type for other builders.
+                ret = self.cast(ret, tl.int1)
         return ret
 
     def load(self, ptr: TensorTy, mask: Optional[TensorTy], other: Optional[TensorTy], boundary_check: Tuple,
@@ -1922,12 +1934,17 @@ class TritonSemantic(Generic[TensorTy]):
         is_signed = [arg.dtype.is_int_signed() for arg in args]
         return self.tensor(self.builder.create_print(prefix, hex, new_args, is_signed), tl.void)
 
-    def device_assert(self, cond: TensorTy, msg: str, mask: Optional[TensorTy]) -> TensorTy:
+    def device_assert(self, cond: TensorTy, msg: str, mask: Optional[TensorTy],
+                      auto_overflow: bool = False) -> TensorTy:
         if not self.builder.options.debug:
             return
         if mask is not None:
             cond = self.or_(cond, self.not_(mask))
-        return self.tensor(self.builder.create_assert(cond.handle, msg), tl.void)
+        if auto_overflow:
+            self.builder.create_auto_overflow_assert(cond.handle, msg)
+        else:
+            self.builder.create_assert(cond.handle, msg)
+        return self.tensor(None, tl.void)
 
     def assume(self, cond) -> TensorTy:
         return self.tensor(self.builder.create_assume(cond.handle), tl.void)
