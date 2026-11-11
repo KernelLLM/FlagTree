@@ -141,9 +141,9 @@ tile_k = tle_raw.call(
 
 相邻索引（`index[i + 1] == index[i] + 1`）会合并为一次两行搬运。
 
-> **重要**：调用本算子的 kernel 必须传编译选项 `enable_legacy_insert_load_store_for_mix_cv=True`（kernel launch kwarg，后端转发为 bishengir-compile 的 `--enable-legacy-insert-load-store-for-mix-cv`，把 `InsertLoadStoreForMixCV` 整个 pass 回退到重构前的老版本）。CANN 9.1.0（bishengir 1.2.0 正式版）重构了 `InsertLoadStoreForMixCV`，重构版对 custom op 的 memscope / coreType 推断仍有 bug：PIPE_MTE2 custom op 的 out 会被规划到 GM workspace（并误插 cbuf→cbuf load），与本算子 `__cbuf__` 的 C++ ABI 冲突；回退到老版本 pass 即可绕开。
+> **注意**：调用本算子的 kernel 必须传编译选项 `enable_legacy_insert_load_store_for_mix_cv=True`（kernel launch kwarg，后端转发为 bishengir-compile 的 `--enable-legacy-insert-load-store-for-mix-cv`，把 `InsertLoadStoreForMixCV` 整个 pass 回退到重构前的老版本）。CANN 9.1/9.2 重构了 `InsertLoadStoreForMixCV`，重构版把 PIPE_MTE2 custom op 的 out 规划到 GM workspace，并且 custom op 写入的 L1 buffer 不会被标记为 tightly-coupled；c310 上会报 `memref.alloc: read before first write`。回退到老版本 pass 即可绕开。
 >
-> **TODO**：用 `enable_legacy_insert_load_store_for_mix_cv=True`，目前用该option规避。等 bishengir 修复重构版 `InsertLoadStoreForMixCV` 对 custom op 的推断 bug 后，可去掉该 kwarg。
+> c310（950）目前**不支持**把 custom op 写入的 L1 tile 直接交给 `tl.dot`：BishengIR 只为 `hivm.copy` 的目的 buffer 打 tightly-coupled 标记，custom op 写入的 L1 buffer 在 AIC/AIV 拆分后无法配对（重构版报 `read before first write`，legacy 版则让 dot 读到未初始化的 L1，结果为 NaN）。`test_custom_ops.py` 因此在 c310 跳过本算子的 dot 用例，行 gather 的正确性由 `gather_gm_to_ub` 覆盖；c220 仍完整测试本算子。上游修复标记逻辑后可恢复。
 
 完整示例见 `python/tutorials/tle/custom/test_custom_ops.py`（`test_gather_gm_to_l1`）。
 
@@ -162,9 +162,7 @@ tile_v = tle_raw.call(
 
 参数含义与 `gather_gm_to_l1` 相同，区别是结果写入二维 UB half/bf16 张量。输出第一维 stride 不得小于 `D`。
 
-> **重要**：与 `gather_gm_to_l1` 相同，调用本算子的 kernel 必须传 `enable_legacy_insert_load_store_for_mix_cv=True`（PIPE_MTE2 + `__ubuf__` ABI，原因同上）。
->
-> **TODO**：去掉条件同 `gather_gm_to_l1`——等 `InsertLoadStoreForMixCV` 重构版对 custom op 的推断 bug 修复后，该 kwarg 可去掉。
+> **注意**：与 `gather_gm_to_l1` 相同，调用本算子的 kernel 必须传 `enable_legacy_insert_load_store_for_mix_cv=True`（PIPE_MTE2 + `__ubuf__` ABI，原因同上）。
 
 完整示例见 `python/tutorials/tle/custom/test_custom_ops.py`（`test_gather_gm_to_ub`）。
 
