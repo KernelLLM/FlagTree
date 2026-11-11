@@ -1,5 +1,8 @@
 # Copyright 2026- Xcoresigma Technology Co., Ltd
 from pathlib import Path
+import hashlib
+import os
+import tempfile
 
 import triton.language as tl
 import triton.language.extra.cann.extension as al
@@ -32,13 +35,44 @@ def custom_ops_arch_family() -> str:
     return "c220"
 
 
+def _content_addressed_bitcode(path: Path, family: str) -> Path:
+    """Return a path whose name changes when the bitcode contents change.
+
+    Triton's kernel cache keys the custom op on the bitcode *path*, not its
+    contents, so rebuilding ``custom_ops.<family>.bc`` in place would silently
+    reuse stale kernels. A per-content symlink alias gives each build a fresh
+    cache key while keeping a single real artifact.
+    """
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    alias_name = f"custom_ops.{family}.{digest}.bc"
+    alias = path.with_name(alias_name)
+    try:
+        if not alias.exists():
+            os.symlink(path.name, alias)
+        for stale in path.parent.glob(f"custom_ops.{family}.*.bc"):
+            if stale != alias:
+                stale.unlink(missing_ok=True)
+        return alias
+    except OSError:
+        # Read-only install: fall back to a writable temp directory.
+        fallback_dir = Path(tempfile.gettempdir()) / "triton_tle_custom_ops"
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        alias = fallback_dir / alias_name
+        try:
+            if not alias.exists():
+                os.symlink(path.resolve(), alias)
+        except OSError:
+            alias.write_bytes(path.read_bytes())
+        return alias
+
+
 def custom_ops_bitcode() -> str:
     """Resolve ``custom_ops.<family>.bc``, falling back to ``custom_ops.bc``."""
     family = custom_ops_arch_family()
     for name in (f"custom_ops.{family}.bc", "custom_ops.bc"):
         path = _CUSTOM_OPS_DIR / name
         if path.is_file():
-            return str(path.resolve())
+            return str(_content_addressed_bitcode(path, family))
     # Point at the expected per-arch artifact so the error is actionable.
     return str((_CUSTOM_OPS_DIR / f"custom_ops.{family}.bc").resolve())
 
