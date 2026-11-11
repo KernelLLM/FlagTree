@@ -4,7 +4,43 @@ from pathlib import Path
 import triton.language as tl
 import triton.language.extra.cann.extension as al
 
-CUSTOM_OPS_BITCODE = str(Path(__file__).with_name("custom_ops.bc").resolve())
+_CUSTOM_OPS_DIR = Path(__file__).parent
+
+# ``ccec`` aicore arch families. ``custom_ops.<family>.bc`` must be built for the same
+# family as the kernel (A2/A3 -> c220, A5/950 -> c310); otherwise the linker
+# fails with "Cannot select: intrinsic %llvm.hivm.*.V220" and a data-layout
+# mismatch warning.
+_CUSTOM_OPS_ARCH_FAMILY_BY_PREFIX = (
+    ("Ascend910_95", "c310"),
+    ("Ascend950", "c310"),
+)
+
+# Legacy single-arch build path, kept for backwards compatibility.
+CUSTOM_OPS_BITCODE = str((_CUSTOM_OPS_DIR / "custom_ops.bc").resolve())
+
+
+def custom_ops_arch_family() -> str:
+    """Return the ccec arch family of the active target (c310 for A5)."""
+    try:
+        import triton
+        arch = str(triton.runtime.driver.active.get_current_target().arch or "")
+    except Exception:
+        arch = ""
+    for prefix, family in _CUSTOM_OPS_ARCH_FAMILY_BY_PREFIX:
+        if arch.startswith(prefix):
+            return family
+    return "c220"
+
+
+def custom_ops_bitcode() -> str:
+    """Resolve ``custom_ops.<family>.bc``, falling back to ``custom_ops.bc``."""
+    family = custom_ops_arch_family()
+    for name in (f"custom_ops.{family}.bc", "custom_ops.bc"):
+        path = _CUSTOM_OPS_DIR / name
+        if path.is_file():
+            return str(path.resolve())
+    # Point at the expected per-arch artifact so the error is actionable.
+    return str((_CUSTOM_OPS_DIR / f"custom_ops.{family}.bc").resolve())
 
 _GATHER_SUFFIX_BY_DTYPE = {tl.float16: "half", tl.bfloat16: "bf16"}
 
@@ -62,7 +98,7 @@ class duplicate_bitwise_mask:
             self.symbol = "custom_duplicate_bitwise_mask_float"
         else:
             assert False, (f"duplicate_bitwise_mask does not support dtype {_element_dtype(out)} yet")
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
         self.extra_buffers = [(tl.float16, 0)]
 
 
@@ -106,7 +142,7 @@ class gather_gm_to_l1:
         assert _element_dtype(index) == tl.int32, (f"gather_gm_to_l1 requires int32 index, "
                                                    f"got {_element_dtype(index)}")
         self.symbol = ("custom_gather_gm_to_l1_" + _gather_dtype_suffix(src, "gather_gm_to_l1"))
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
 
 
 @al.register_custom_op
@@ -150,7 +186,7 @@ class gather_gm_to_ub:
         assert _element_dtype(index) == tl.int32, (f"gather_gm_to_ub requires int32 index, "
                                                    f"got {_element_dtype(index)}")
         self.symbol = ("custom_gather_gm_to_ub_" + _gather_dtype_suffix(src, "gather_gm_to_ub"))
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
 
 
 @al.register_custom_op
@@ -206,7 +242,7 @@ class gather_mask_builtin_pattern:
             self.symbol = "custom_gather_mask_builtin_pattern_int"
         else:
             assert False, (f"gather_mask_builtin_pattern src0 does not support dtype {_element_dtype(src0)}")
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
         self.extra_buffers = [(tl.float16, 0)]
 
 
@@ -271,7 +307,7 @@ class gather_mask_custom_pattern:
         else:
             assert False, (
                 f"gather_mask_custom_pattern src1_pattern does not support dtype {_element_dtype(src1_pattern)}")
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
         self.extra_buffers = [(tl.float16, 0)]
 
 
@@ -310,7 +346,7 @@ class pair_reduce_sum_continuous_mask:
             self.symbol = "custom_pair_reduce_sum_continuous_mask_float"
         else:
             assert False, (f"pair_reduce_sum_continuous_mask does not support dtype {_element_dtype(src)} yet")
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
         self.extra_buffers = [(tl.float16, 0)]
 
 
@@ -341,7 +377,7 @@ class sort32:
         assert out
         assert _element_dtype(out) == tl.float32, (f"sort32 only supports fp32 out, got {_element_dtype(out)}")
         self.symbol = "custom_sort32"
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
         self.extra_buffers = [(tl.float16, 0)]
 
 
@@ -383,7 +419,7 @@ class sort_1d_pack:
                                                        f"got {_element_dtype(tmp_buf)}")
         assert _element_dtype(out) == tl.float32, (f"sort_1d_pack only supports fp32 out, got {_element_dtype(out)}")
         self.symbol = "custom_sort_1d_pack_float"
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
         self.extra_buffers = [(tl.float16, 0)]
 
 
@@ -437,7 +473,7 @@ class merge_exhaust_sort4:
         assert _element_dtype(out[1]) == tl.int32, (f"merge_exhaust_sort4 only supports int32 out[1], "
                                                     f"got {_element_dtype(out[1])}")
         self.symbol = "custom_merge_exhaust_sort4_float"
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
         self.extra_buffers = [(tl.float16, 0)]
 
 
@@ -475,7 +511,7 @@ class mrgsort:
         assert out
         assert _element_dtype(out) == tl.float32, (f"mrgsort only supports fp32 out, got {_element_dtype(out)}")
         self.symbol = "custom_mrgsort"
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
         self.extra_buffers = [(tl.float16, 0)]
 
 
@@ -519,7 +555,7 @@ class unpack_sort:
         assert _element_dtype(out[1]) == tl.int32, (f"unpack_sort only supports int32 out[1], "
                                                     f"got {_element_dtype(out[1])}")
         self.symbol = "custom_unpack_sort_float"
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
         self.extra_buffers = [(tl.float16, 0)]
 
 
@@ -580,7 +616,7 @@ class compare_scalar:
         if out.dtype == tl.uint32:
             suffix += "_mask32"
         self.symbol = "custom_compare_scalar_" + suffix
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()
 
 
 @al.register_custom_op
@@ -621,4 +657,4 @@ class cast_int4_to_fp16:
         self.arg_type["roundMode"] = tl.int32
         self.arg_type["count"] = tl.int32
         self.symbol = "custom_cast_int4_to_fp16"
-        self.bitcode = CUSTOM_OPS_BITCODE
+        self.bitcode = custom_ops_bitcode()

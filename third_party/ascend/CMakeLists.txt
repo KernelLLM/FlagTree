@@ -138,6 +138,151 @@ if(TARGET CommonIRIR)
   add_dependencies(TritonAscend CommonIRIR)
 endif()
 
+# TLE DSA custom ops (``tle.dsa.ascend.raw`` / ``custom_ops.<arch>.bc``)
+#
+# The Python registry loads ``custom_ops.<arch-family>.bc`` from the source
+# tree. Build it from the device sources when the CANN ccec/llvm-link toolchain
+# is available. Otherwise skip the target: ``custom_ops/build_custom_ops.sh``
+# remains the manual path, and non-CANN builds keep working.
+#
+# The bitcode must be built for the same ccec arch family as the kernel:
+# c220 for A2/A3, c310 for A5/Ascend950. Configure with
+# ``-DASCEND_CUSTOM_OPS_ARCH_FAMILY=c310`` on a 950 build.
+set(ASCEND_CUSTOM_OPS_DIR "${PROJECT_SOURCE_DIR}/python/triton/experimental/tle/language/dsa/ascend/custom_ops")
+set(ASCEND_CUSTOM_OPS_ARCH_FAMILY "c220" CACHE STRING
+  "ccec aicore arch family for TLE custom ops (c220 for A2/A3, c310 for A5)")
+set(ASCEND_CUSTOM_OPS_BITCODE
+  "${ASCEND_CUSTOM_OPS_DIR}/custom_ops.${ASCEND_CUSTOM_OPS_ARCH_FAMILY}.bc")
+set(_ASCEND_TEMPLATE_ROOT "${ASCENDNPU_IR_SRC_DIR}/bishengir/lib/Template")
+set(_ASCEND_TEMPLATE_INCLUDE "${_ASCEND_TEMPLATE_ROOT}/include")
+
+find_program(ASCEND_CCEC_EXECUTABLE ccec)
+if(ASCEND_CCEC_EXECUTABLE)
+  get_filename_component(_ASCEND_CCEC_BIN_DIR "${ASCEND_CCEC_EXECUTABLE}" DIRECTORY)
+  find_program(ASCEND_LLVM_LINK_EXECUTABLE llvm-link HINTS "${_ASCEND_CCEC_BIN_DIR}")
+endif()
+
+if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_TEMPLATE_INCLUDE}")
+  set(ASCEND_CUSTOM_OPS_BC_DIR "${CMAKE_CURRENT_BINARY_DIR}/ascend_custom_ops")
+  set(CCEC_COMMON_FLAGS
+    -O2 -x cce --cce-auto-sync=off --cce-aicore-only
+    --cce-generic-addrspace=off -mllvm -disable-llvm-optzns
+    --cce-enable-print --cce-enable-sanitizer -std=c++17)
+
+  # Each custom op is implemented in its own .cpp and compiled into its own
+  # bitcode: "<src>::<arch>" — arch is the ccec aicore target for that op.
+  set(ASCEND_CUSTOM_OPS
+    "mem_ops/duplicate.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "mem_ops/gather_gm_to_l1.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-cube"
+    "mem_ops/gather_gm_to_ub.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "mem_ops/gather_mask.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "reduction_ops/pair_reduce_sum.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "sort_ops/sort32.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "sort_ops/sort_1d_pack.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "sort_ops/merge_pack_sort.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "sort_ops/mrgsort.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "sort_ops/unpack_sort.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "mask_ops/compare_scalar.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+    "cast_ops/cast_int4_to_fp16.cpp::dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec"
+  )
+
+  set(_ASCEND_SORT_OPS_DIR "${ASCEND_CUSTOM_OPS_DIR}/sort_ops")
+  set(OP_BITCODES "")
+  foreach(entry IN LISTS ASCEND_CUSTOM_OPS)
+    string(REPLACE "::" ";" entry_parts "${entry}")
+    list(GET entry_parts 0 src)
+    list(GET entry_parts 1 arch)
+
+    set(op_deps "")
+    if(src MATCHES "^sort_ops/")
+      list(APPEND op_deps "${_ASCEND_SORT_OPS_DIR}/sort_common.h")
+    endif()
+    if(src STREQUAL "sort_ops/sort_1d_pack.cpp")
+      list(APPEND op_deps
+        "${_ASCEND_SORT_OPS_DIR}/sort_base.h"
+        "${_ASCEND_SORT_OPS_DIR}/sort_s4096_k129_512.h"
+        "${_ASCEND_SORT_OPS_DIR}/sort_s4096_k1_128_k2048.h")
+    endif()
+
+    set(bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${ASCEND_CUSTOM_OPS_ARCH_FAMILY}/${src}.bc")
+    set(mix_bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${ASCEND_CUSTOM_OPS_ARCH_FAMILY}/${src}.mix.bc")
+    list(APPEND OP_BITCODES "${bc}" "${mix_bc}")
+    add_custom_command(
+      OUTPUT "${bc}"
+      COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${CCEC_COMMON_FLAGS}
+        --cce-aicore-arch=${arch}
+        -I "${_ASCEND_TEMPLATE_INCLUDE}"
+        "${ASCEND_CUSTOM_OPS_DIR}/${src}"
+        -emit-llvm -c -o "${bc}"
+      DEPENDS "${ASCEND_CUSTOM_OPS_DIR}/${src}" ${op_deps}
+      COMMENT "ccec ${src} (${arch})"
+      VERBATIM)
+    add_custom_command(
+      OUTPUT "${mix_bc}"
+      COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${CCEC_COMMON_FLAGS}
+        --cce-aicore-arch=${arch}
+        -cce-enable-mix -mllvm -enable-mix=true
+        -I "${_ASCEND_TEMPLATE_INCLUDE}"
+        "${ASCEND_CUSTOM_OPS_DIR}/${src}"
+        -emit-llvm -c -o "${mix_bc}"
+      DEPENDS "${ASCEND_CUSTOM_OPS_DIR}/${src}" ${op_deps}
+      COMMENT "ccec ${src} (${arch}, mix)"
+      VERBATIM)
+  endforeach()
+
+  set(ASCEND_TEMPLATE_OPS
+    "lib/Vector/Arange/Arange1D.cpp"
+    "lib/Vector/Elementwise/EltWise1D.cpp"
+    "lib/Vector/Sort/Sort1D.cpp"
+    "lib/DMA/Ubuf/Copy1D.cpp"
+  )
+  set(TEMPLATE_BITCODES "")
+  foreach(src IN LISTS ASCEND_TEMPLATE_OPS)
+    get_filename_component(name_we "${src}" NAME_WE)
+    set(bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${ASCEND_CUSTOM_OPS_ARCH_FAMILY}/template_${name_we}.bc")
+    set(mix_bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${ASCEND_CUSTOM_OPS_ARCH_FAMILY}/template_${name_we}.mix.bc")
+    list(APPEND TEMPLATE_BITCODES "${bc}" "${mix_bc}")
+    add_custom_command(
+      OUTPUT "${bc}"
+      COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${CCEC_COMMON_FLAGS}
+        --cce-aicore-arch=dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec
+        -I "${_ASCEND_TEMPLATE_INCLUDE}"
+        "${_ASCEND_TEMPLATE_ROOT}/${src}"
+        -emit-llvm -c -o "${bc}"
+      DEPENDS "${_ASCEND_TEMPLATE_ROOT}/${src}"
+      COMMENT "ccec Template ${src}"
+      VERBATIM)
+    add_custom_command(
+      OUTPUT "${mix_bc}"
+      COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${CCEC_COMMON_FLAGS}
+        --cce-aicore-arch=dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec
+        -cce-enable-mix -mllvm -enable-mix=true
+        -I "${_ASCEND_TEMPLATE_INCLUDE}"
+        "${_ASCEND_TEMPLATE_ROOT}/${src}"
+        -emit-llvm -c -o "${mix_bc}"
+      DEPENDS "${_ASCEND_TEMPLATE_ROOT}/${src}"
+      COMMENT "ccec Template ${src} (mix)"
+      VERBATIM)
+  endforeach()
+
+  add_custom_command(
+    OUTPUT "${ASCEND_CUSTOM_OPS_BITCODE}"
+    COMMAND "${ASCEND_LLVM_LINK_EXECUTABLE}" ${OP_BITCODES} ${TEMPLATE_BITCODES}
+      -o "${ASCEND_CUSTOM_OPS_BITCODE}"
+    DEPENDS ${OP_BITCODES} ${TEMPLATE_BITCODES}
+    COMMENT "llvm-link -> ${ASCEND_CUSTOM_OPS_BITCODE}"
+    VERBATIM)
+
+  add_custom_target(AscendCustomOpsBitcode DEPENDS "${ASCEND_CUSTOM_OPS_BITCODE}")
+  add_dependencies(TritonAscend AscendCustomOpsBitcode)
+  message(STATUS
+    "Ascend custom ops: custom_ops.${ASCEND_CUSTOM_OPS_ARCH_FAMILY}.bc will be built from ${ASCEND_CUSTOM_OPS_DIR}")
+else()
+  message(STATUS
+    "Ascend custom ops: ccec/llvm-link or the AscendNPU-IR Template dir is unavailable; "
+    "run python/triton/experimental/tle/language/dsa/ascend/custom_ops/build_custom_ops.sh manually")
+endif()
+
 option(TRITON_ENABLE_COVERAGE_LLVM_COV "Enable code llvm-cov coverage tool for Ascend plugin " OFF)
 if(TRITON_ENABLE_COVERAGE_LLVM_COV)
   message(STATUS "Enabling llvm-cov coverage tool flags for TritonAscend")
