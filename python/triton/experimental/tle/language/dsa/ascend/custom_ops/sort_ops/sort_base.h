@@ -7,6 +7,14 @@
 #include "Vector/Cast/CastUtils.h"
 #include "Vector/Sort/SortUtils.h"
 
+// c310 (A5) is reg-based: pipe_barrier only accepts the cross-pipe/all form,
+// so the vector-only barrier used by the c220 path is not available there.
+#if defined(__DAV_C310__)
+#define TLE_PIPE_BARRIER_V() INTRINSIC(pipe_barrier, PIPE_ALL)
+#else
+#define TLE_PIPE_BARRIER_V() INTRINSIC(pipe_barrier, PIPE_V)
+#endif
+
 template <typename T>
 __aiv__ __attribute__((always_inline)) void check_inputs_of_sort_1d_with_index(
     memref_t<__ubuf__ T, 1> *src, memref_t<__ubuf__ T, 1> *dst_value,
@@ -374,12 +382,12 @@ merge_sort(memref_t<__ubuf__ T, 1> *src, memref_t<__ubuf__ T, 1> *dst,
     // The main block requires 4 equal lengths, and the length of each path is
     // factor(32 << (i * 2))
     if (quotient_repeat > 0) {
-      INTRINSIC(pipe_barrier, PIPE_V);
+      TLE_PIPE_BARRIER_V();
       lower_vms_quotient(src, dst, merge_times, factor, sort_num);
     }
 
     // Processing 2/3/4-way merge of tail block
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     lower_vms_remainder(src, dst, merge_times, factor, sort_num,
                         &merge_remainder);
 
@@ -426,7 +434,7 @@ move_out_result(memref_t<__ubuf__ T, 1> *src,
   // Step2: If it is in ascending order, the data needs to be reversed to return
   // to the original data.
   if (!descending) {
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     if constexpr (sizeof(T) == 4) {
       memref_t<__ubuf__ int32_t, 1> dst_value_s32;
       view_as<T, int32_t, 1>(dst_value, &dst_value_s32);
@@ -481,7 +489,7 @@ __aiv__ __attribute__((always_inline)) void lower_sort_operation(
       tmp_buf->offset,
       {static_cast<int64_t>(sort_num * num_per_proposal)},
       {1}};
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   block_sort(descending ? src : &src_inverse, dst_index,
              &tmp_buf_for_block_sort, real_num, sort_num);
 
@@ -493,11 +501,11 @@ __aiv__ __attribute__((always_inline)) void lower_sort_operation(
       {static_cast<int64_t>(sort_num * num_per_proposal)},
       {1}};
   int64_t merge_times = 0;
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   merge_sort(&tmp_buf_for_block_sort, &tmp_buf_for_merge_sort, real_num,
              sort_num, merge_times);
 
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   // Step5: Process proposal data and move it to dst_value/dst_index
   move_out_result(merge_times % 2 ? &tmp_buf_for_merge_sort
                                   : &tmp_buf_for_block_sort,
@@ -698,7 +706,7 @@ sort_base_impl(memref_t<__ubuf__ float, 1> *src,
         proposals_a_offset,
         {static_cast<int64_t>(sort_num * num_per_proposal)},
         {1}};
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     block_sort(&src_inverse, &src_index, &proposals_a, real_num, sort_num);
 
     // --- Step4: Merge sort (vmrgsort4) ---
@@ -711,11 +719,11 @@ sort_base_impl(memref_t<__ubuf__ float, 1> *src,
         {static_cast<int64_t>(sort_num * num_per_proposal)},
         {1}};
     int64_t merge_times = 0;
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     merge_sort(&proposals_a, &proposals_b, real_num, sort_num, merge_times);
 
     // --- Step5: Truncate top-K proposals → dst_proposals (NO unpack) ---
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     int64_t copy_size = topk * num_per_proposal;
     memref_t<__ubuf__ float, 1> src_slice{
         (merge_times % 2) ? proposals_b.aligned : proposals_a.aligned,
@@ -740,7 +748,7 @@ sort_base_impl(memref_t<__ubuf__ float, 1> *src,
         proposals_a_offset,
         {static_cast<int64_t>(sort_num * num_per_proposal)},
         {1}};
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     block_sort(src, &src_index, &proposals_a, real_num, sort_num);
 
     // --- Step4: Merge sort (vmrgsort4) ---
@@ -753,11 +761,11 @@ sort_base_impl(memref_t<__ubuf__ float, 1> *src,
         {static_cast<int64_t>(sort_num * num_per_proposal)},
         {1}};
     int64_t merge_times = 0;
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     merge_sort(&proposals_a, &proposals_b, real_num, sort_num, merge_times);
 
     // --- Step5: Truncate top-K proposals → dst_proposals (NO unpack) ---
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     int64_t copy_size = topk * num_per_proposal;
     memref_t<__ubuf__ float, 1> src_slice{
         (merge_times % 2) ? proposals_b.aligned : proposals_a.aligned,

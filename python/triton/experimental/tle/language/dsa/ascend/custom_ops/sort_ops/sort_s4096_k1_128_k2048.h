@@ -25,7 +25,7 @@ copy_ub_float(__ubuf__ float *src, int64_t src_off, __ubuf__ float *dst,
   if (count <= 0) {
     return;
   }
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   memref_t<__ubuf__ float, 1> from{src, src, src_off, {count}, {1}};
   memref_t<__ubuf__ float, 1> to{dst, dst, dst_off, {count}, {1}};
   vector_eltwise_vs_1d<VectorOpTy::VADDS, float>(&from, 0.0f, &to);
@@ -103,7 +103,7 @@ merge_stage4_layered(memref_t<__ubuf__ float, 1> *src,
   uint64_t xm =
       ((list_num | (list_num << 16)) | (list_num << 32)) | (list_num << 48);
   uint64_t config = WAY4_CONFIG_MODE | (repeat & INTR_MAX_REPEAT_CNTS);
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   INTRINSIC(vmrgsort4, dst_ptr, xn, xm, config);
 }
 
@@ -130,7 +130,7 @@ merge_stage2_layered(memref_t<__ubuf__ float, 1> *src,
         src_ptr + (2 * r) * factor * LAYERED_NPP,
         src_ptr + (2 * r + 1) * factor * LAYERED_NPP,
     };
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     INTRINSIC(vmrgsort4, dst_ptr + (2 * r) * factor * LAYERED_NPP, xn, xm,
               config);
   }
@@ -458,7 +458,7 @@ __aiv__ __attribute__((always_inline)) void sort_s4096_k1_128_k2048_impl(
   prepare_index_layered(&src_index, real_num, sort_num, index_offset);
   prepare_desc_value_layered(src, real_num, sort_num);
 
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   block_sort_layered(src, &src_index, &proposals_a, sort_num);
 
   __ubuf__ float *group0 = tmp_buf->aligned + group0_offset;

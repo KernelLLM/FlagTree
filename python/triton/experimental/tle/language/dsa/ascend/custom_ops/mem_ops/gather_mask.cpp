@@ -1,5 +1,11 @@
 #include "Utils.h"
 
+#if defined(__DAV_C310__)
+// A5 reduce/gather-mask are reg-based; the mem-based vcpadd/vreducev2
+// intrinsics are unavailable.
+#include "kernel_operator_vec_gather_mask_intf.h"
+#endif
+
 __aiv__ __attribute__((always_inline)) void
 check_inputs_of_gather_mask(const uint8_t src1_pattern) {
 #ifdef ENABLE_CPU_TRACE_INTRINSIC
@@ -15,6 +21,21 @@ gather_mask_impl(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1,
                  const uint32_t mask, const uint8_t src0_block_stride,
                  const uint16_t repeat_times, const uint16_t src0_repeat_stride,
                  const uint8_t src1_repeat_stride, __ubuf__ int64_t *rsvd_cnt) {
+#if defined(__DAV_C310__)
+  // pattern_mode == 0 means the caller supplied a custom pattern tensor;
+  // 1..7 select an AscendC builtin pattern.
+  uint64_t rsvd = 0;
+  AscendC::GatherMaskParams params(src0_block_stride, repeat_times,
+                                   src0_repeat_stride, src1_repeat_stride);
+  if (pattern_mode == 0) {
+    AscendC::GatherMaskCal<T, T>(dst, src0, src1, reduce_mode, mask, params,
+                                 rsvd);
+  } else {
+    AscendC::GatherMaskCal<T>(dst, src0, pattern_mode, reduce_mode, mask,
+                              params, rsvd);
+  }
+  *rsvd_cnt = static_cast<int64_t>(rsvd);
+#else
   if (reduce_mode) {
     set_mask_count();
   } else {
@@ -25,6 +46,7 @@ gather_mask_impl(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1,
             src0_repeat_stride, src1_repeat_stride);
   *rsvd_cnt = get_rsvd_cnt();
   set_mask_norm();
+#endif
 }
 
 #define REGISTER_CIFACE_GATHER_MASK_BUILTIN_PATTERN(TYPE_NAME, T)              \

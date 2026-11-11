@@ -1,5 +1,10 @@
 #include "Utils.h"
 
+#if defined(__DAV_C310__)
+// A5 pair-reduce is reg-based; the mem-based vcpadd intrinsic is unavailable.
+#include "kernel_operator_vec_reduce_intf.h"
+#endif
+
 __aiv__ static inline __attribute__((always_inline)) void
 set_mask(int32_t len, int32_t dtype_size) {
   const int32_t DEFAULT_BLOCK_SIZE = 256;
@@ -34,9 +39,16 @@ pair_reduce_sum_impl(__ubuf__ T *dst_local, __ubuf__ T *src_local,
                      const int32_t repeat_times, const int32_t mask,
                      const int32_t dst_rep_stride, const int32_t src_blk_stride,
                      const int32_t src_rep_stride) {
+#if defined(__DAV_C310__)
+  // The A5 entry takes the element count and derives the mask internally.
+  AscendC::PairReduceSumImpl<T>(dst_local, src_local, repeat_times, mask,
+                                dst_rep_stride, src_blk_stride,
+                                src_rep_stride);
+#else
   set_mask(mask, sizeof(T));
   vcpadd(dst_local, src_local, repeat_times, dst_rep_stride, src_blk_stride,
          src_rep_stride);
+#endif
 }
 
 #define REGISTER_CIFACE_PAIR_REDUCE_SUM_CONTINUOUS_MASK(TYPE_NAME, T)          \

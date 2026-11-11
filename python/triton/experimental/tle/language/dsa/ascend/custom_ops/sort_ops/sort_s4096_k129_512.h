@@ -81,7 +81,7 @@ merge_sort_1024_smallk(memref_t<__ubuf__ float, 1> *src,
     };
     uint64_t xm = 32 | (32ull << 16) | (32ull << 32) | (32ull << 48);
     uint64_t config = WAY4_CONFIG_MODE | 8;
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     INTRINSIC(vmrgsort4, dst_ptr, xn, xm, config);
   }
 
@@ -95,7 +95,7 @@ merge_sort_1024_smallk(memref_t<__ubuf__ float, 1> *src,
     };
     uint64_t xm = 128 | (128ull << 16) | (128ull << 32) | (128ull << 48);
     uint64_t config = WAY4_CONFIG_MODE | 2;
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     INTRINSIC(vmrgsort4, src_ptr, xn, xm, config);
   }
 
@@ -107,7 +107,7 @@ merge_sort_1024_smallk(memref_t<__ubuf__ float, 1> *src,
     };
     uint64_t xm = 512 | (512ull << 16);
     uint64_t config = WAY2_CONFIG_MODE | 1;
-    INTRINSIC(pipe_barrier, PIPE_V);
+    TLE_PIPE_BARRIER_V();
     INTRINSIC(vmrgsort4, dst_ptr, xn, xm, config);
   }
 }
@@ -136,12 +136,12 @@ sort_1024_topk_smallk(memref_t<__ubuf__ float, 1> *src,
                                           {CHUNK * SMALLK_NPP},
                                           {1}};
 
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   block_sort_smallk(src, &src_index, &proposals_a, CHUNK);
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   merge_sort_1024_smallk(&proposals_a, &proposals_b);
 
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   memref_t<__ubuf__ float, 1> from{proposals_b.aligned,
                                    proposals_b.allocated,
                                    proposals_b.offset,
@@ -218,7 +218,7 @@ sort_s4096_k129_512_impl(memref_t<__ubuf__ float, 1> *src,
     topk = produced;
   }
 
-  INTRINSIC(pipe_barrier, PIPE_V);
+  TLE_PIPE_BARRIER_V();
   memref_t<__ubuf__ float, 1> from{tmp_buf->aligned,
                                    tmp_buf->allocated,
                                    merge_out_base,

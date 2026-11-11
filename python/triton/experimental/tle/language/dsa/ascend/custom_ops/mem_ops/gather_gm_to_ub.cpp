@@ -9,8 +9,20 @@ template <typename T>
 __aiv__ __attribute__((always_inline)) void
 copy_gm_to_ub_b16(__gm__ T *gm_ptr, __ubuf__ T *ub_ptr, uint16_t burst_cnt,
                   uint32_t burst_len, uint32_t src_gap, uint32_t dst_gap) {
+#if defined(__DAV_C310__)
+  // c310 uses copy_gm_to_ubuf_align_v2, whose stride arguments are the byte
+  // distance between consecutive burst starts (gap + burst length); the
+  // mem-based _b16 variant is not available on A5.
+  INTRINSIC(copy_gm_to_ubuf_align_v2,
+            reinterpret_cast<__ubuf__ uint16_t *>(ub_ptr),
+            reinterpret_cast<__gm__ uint16_t *>(gm_ptr), 0, burst_cnt, burst_len,
+            0, 0, false, 0,
+            static_cast<uint64_t>(src_gap) + burst_len,
+            static_cast<uint32_t>(dst_gap) + burst_len);
+#else
   INTRINSIC(copy_gm_to_ubuf_align_b16, ub_ptr, gm_ptr, 0, burst_cnt, burst_len,
             0, 0, src_gap, dst_gap);
+#endif
 }
 
 // Generic row gather: out row i <- src row index[i]. Both src rows and the

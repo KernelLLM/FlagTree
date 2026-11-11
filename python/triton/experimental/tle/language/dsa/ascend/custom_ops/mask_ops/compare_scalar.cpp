@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "Utils.h"
 
+#if defined(__DAV_C310__)
+// A5 compare is reg-based; the mem-based vcmpvs_* intrinsics are unavailable.
+#include "kernel_operator_vec_cmpsel_intf.h"
+#endif
+
 __aiv__ __attribute__((always_inline)) void
 check_mode_of_compare_scalar(const int32_t cmp_mode) {
 #ifdef ENABLE_CPU_TRACE_INTRINSIC
@@ -53,6 +58,14 @@ __aiv__ __attribute__((always_inline)) void
 compare_scalar_impl(memref_t<__ubuf__ T, 1> *src, float scalar,
                     int32_t cmp_mode, uint32_t count,
                     memref_t<__ubuf__ U, 1> *dst) {
+#if defined(__DAV_C310__)
+  // Count-based Level-2 compare; the A5 implementation packs the mask with
+  // Reg::CompareScalar/StoreUnAlign, so no manual repeat splitting is needed.
+  AscendC::VcmpvsImpl<T, uint8_t>(
+      reinterpret_cast<__ubuf__ uint8_t *>(dst->aligned + dst->offset),
+      src->aligned + src->offset, static_cast<T>(scalar),
+      static_cast<AscendC::CMPMODE>(cmp_mode), count);
+#else
   auto src0 = src->aligned + src->offset;
   auto dst_ptr =
       reinterpret_cast<__ubuf__ uint8_t *>(dst->aligned + dst->offset);
@@ -69,6 +82,7 @@ compare_scalar_impl(memref_t<__ubuf__ T, 1> *src, float scalar,
   compare_scalar_vcmpvs(dst_ptr + repeat_round * dst_offset,
                         src0 + repeat_round * src_offset, src1, cmp_mode,
                         static_cast<uint8_t>(repeat_tail));
+#endif
 }
 
 #define REGISTER_CIFACE_COMPARE_SCALAR(TYPE_NAME, T, U)                        \

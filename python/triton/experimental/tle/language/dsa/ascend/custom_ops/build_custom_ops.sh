@@ -46,6 +46,48 @@ if [[ ! -x "${LLVM_LINK}" ]]; then
   exit 1
 fi
 
+# c310 is a reg-based target where the legacy mem-based intrinsics are not
+# available. The c310 custom-op bodies use the AscendC/reg_compute API, so
+# locate the AscendC headers from the same CANN installation as ccec.
+ASCENDC_ROOT="${ASCENDC_ROOT:-${ASCEND_HOME_PATH:-}/asc}"
+if [[ ! -d "${ASCENDC_ROOT}/impl/basic_api" ]]; then
+  ASCENDC_ROOT="$(dirname -- "$(dirname -- "${CCEC}")")/asc"
+fi
+ASCENDC_EXTRA_ARGS=()
+if [[ "${ARCH_FAMILY}" == "c310" ]]; then
+  if [[ ! -d "${ASCENDC_ROOT}/impl/basic_api" ]]; then
+    echo "error: AscendC headers not found under '${ASCENDC_ROOT}'; set ASCENDC_ROOT" >&2
+    exit 1
+  fi
+  ASCENDC_EXTRA_ARGS=(
+    --cce-mask-opt
+    # Avoid the tentative `g_tilingKey` global in every translation unit
+    # (asc-devkit's own device build defines TILING_KEY_VAR the same way).
+    -DTILING_KEY_VAR=0
+    -I "${ASCENDC_ROOT}"
+    -I "${ASCENDC_ROOT}/impl/basic_api"
+    -I "${ASCENDC_ROOT}/include"
+    -I "${ASCENDC_ROOT}/include/basic_api"
+  )
+fi
+
+# c310 builds the shared Template helpers from the RegBase tree; the mem-based
+# lib/Vector sources are c220-only.
+TEMPLATE_INCLUDES=( -I "${TEMPLATE_INCLUDE}" )
+if [[ "${ARCH_FAMILY}" == "c310" ]]; then
+  TEMPLATE_SOURCES=(
+    "${TEMPLATE_ROOT}/lib/RegBase/Vector/Sort1D.cpp"
+    "${TEMPLATE_ROOT}/lib/RegBase/Vector/Copy1D.cpp"
+  )
+else
+  TEMPLATE_SOURCES=(
+    "${TEMPLATE_LIB}/Vector/Arange/Arange1D.cpp"
+    "${TEMPLATE_LIB}/Vector/Elementwise/EltWise1D.cpp"
+    "${TEMPLATE_LIB}/Vector/Sort/Sort1D.cpp"
+    "${TEMPLATE_LIB}/DMA/Ubuf/Copy1D.cpp"
+  )
+fi
+
 # Each custom op is implemented in its own .cpp and compiled into its own
 # bitcode: "<src>::<arch>" — arch is the ccec aicore target for that op.
 CUSTOM_OPS=(
@@ -69,6 +111,10 @@ if [[ ! -d "${TEMPLATE_INCLUDE}" ]]; then
 fi
 
 OP_BC=()
+FAILED_OPS=()
+# During the c310 port, set ALLOW_PARTIAL=1 to build the bitcode for the ops
+# that already have an A5 implementation and skip the rest with a warning.
+ALLOW_PARTIAL="${ALLOW_PARTIAL:-0}"
 for entry in "${CUSTOM_OPS[@]}"; do
   src="${entry%%:*}"
   arch="${entry##*:}"
@@ -80,44 +126,77 @@ for entry in "${CUSTOM_OPS[@]}"; do
   CCEC_COMMON_ARGS=( -O2 -x cce --cce-auto-sync=off --cce-aicore-only
     --cce-generic-addrspace=off -mllvm -disable-llvm-optzns
     --cce-aicore-arch="${arch}" --cce-enable-print
-    --cce-enable-sanitizer -std=c++17 -I "${TEMPLATE_INCLUDE}" )
+    --cce-enable-sanitizer -std=c++17 )
+  if [[ "${ARCH_FAMILY}" == "c310" ]]; then
+    case "${arch}" in
+      *-cube) REGBASE_INCLUDE="${TEMPLATE_ROOT}/lib/RegBase/Cube/include" ;;
+      *)      REGBASE_INCLUDE="${TEMPLATE_ROOT}/lib/RegBase/Vector/include" ;;
+    esac
+    CCEC_COMMON_ARGS+=( -I "${REGBASE_INCLUDE}" )
+  fi
+  CCEC_COMMON_ARGS+=( "${TEMPLATE_INCLUDES[@]}" "${ASCENDC_EXTRA_ARGS[@]}" )
 
   bc="${SCRIPT_DIR}/${src%.cpp}.bc"
   mix_bc="${SCRIPT_DIR}/${src%.cpp}.mix.bc"
-  OP_BC+=("${bc}" "${mix_bc}")
 
   echo "== ccec ${src} (${arch})"
-  "${CCEC}" "${CCEC_COMMON_ARGS[@]}" \
-    "${SCRIPT_DIR}/${src}" -emit-llvm -c -o "${bc}"
+  if ! "${CCEC}" "${CCEC_COMMON_ARGS[@]}" \
+    "${SCRIPT_DIR}/${src}" -emit-llvm -c -o "${bc}"; then
+    if [[ "${ALLOW_PARTIAL}" == "1" ]]; then
+      echo "warning: skipping ${src} (${arch}); no c310 implementation yet" >&2
+      FAILED_OPS+=("${src}")
+      rm -f "${bc}" "${mix_bc}"
+      continue
+    fi
+    exit 1
+  fi
 
   echo "== ccec ${src} (${arch}, mix)"
-  "${CCEC}" "${CCEC_COMMON_ARGS[@]}" -cce-enable-mix -mllvm -enable-mix=true \
-    "${SCRIPT_DIR}/${src}" -emit-llvm -c -o "${mix_bc}"
+  if ! "${CCEC}" "${CCEC_COMMON_ARGS[@]}" -cce-enable-mix -mllvm -enable-mix=true \
+    "${SCRIPT_DIR}/${src}" -emit-llvm -c -o "${mix_bc}"; then
+    if [[ "${ALLOW_PARTIAL}" == "1" ]]; then
+      echo "warning: skipping ${src} (${arch}, mix)" >&2
+      FAILED_OPS+=("${src} (mix)")
+      rm -f "${bc}" "${mix_bc}"
+      continue
+    fi
+    exit 1
+  fi
+  OP_BC+=("${bc}" "${mix_bc}")
 done
 
-TEMPLATE_SOURCES=(
-  "${TEMPLATE_LIB}/Vector/Arange/Arange1D.cpp"
-  "${TEMPLATE_LIB}/Vector/Elementwise/EltWise1D.cpp"
-  "${TEMPLATE_LIB}/Vector/Sort/Sort1D.cpp"
-  "${TEMPLATE_LIB}/DMA/Ubuf/Copy1D.cpp"
-)
+if [[ "${#FAILED_OPS[@]}" -gt 0 ]]; then
+  echo "warning: custom_ops.${ARCH_FAMILY}.bc omits ops without a ${ARCH_FAMILY} implementation:" >&2
+  printf '  - %s\n' "${FAILED_OPS[@]}" >&2
+fi
+
+TEMPLATE_BC=()
 TEMPLATE_MIX_BC=()
+TEMPLATE_CMD_INCLUDES=( "${TEMPLATE_INCLUDES[@]}" )
+if [[ "${ARCH_FAMILY}" == "c310" ]]; then
+  TEMPLATE_CMD_INCLUDES=( -I "${TEMPLATE_ROOT}/lib/RegBase/Vector/include" "${TEMPLATE_CMD_INCLUDES[@]}" )
+fi
 for i in "${!TEMPLATE_SOURCES[@]}"; do
-  echo "== ccec ${TEMPLATE_SOURCES[$i]}"
-  "${CCEC}" -O2 -x cce --cce-auto-sync=off --cce-aicore-only \
-    --cce-generic-addrspace=off -mllvm -disable-llvm-optzns \
-    --cce-aicore-arch=dav-${ARCH_FAMILY}-vec --cce-enable-print \
-    --cce-enable-sanitizer -std=c++17 -I "${TEMPLATE_INCLUDE}" \
-    "${TEMPLATE_SOURCES[$i]}" -emit-llvm -c -o "${TEMPLATE_BC[$i]}"
-  mix_bc="${TEMPLATE_BC[$i]%.bc}.mix.bc"
-  echo "== ccec ${TEMPLATE_SOURCES[$i]} (mix)"
-  "${CCEC}" -O2 -x cce --cce-auto-sync=off --cce-aicore-only \
-    --cce-generic-addrspace=off -mllvm -disable-llvm-optzns \
-    --cce-aicore-arch=dav-${ARCH_FAMILY}-vec --cce-enable-print \
-    --cce-enable-sanitizer -std=c++17 -I "${TEMPLATE_INCLUDE}" \
-    -cce-enable-mix -mllvm -enable-mix=true \
-    "${TEMPLATE_SOURCES[$i]}" -emit-llvm -c -o "${mix_bc}"
+  src="${TEMPLATE_SOURCES[$i]}"
+  bc="${SCRIPT_DIR}/template_$(basename -- "${src}" .cpp).bc"
+  mix_bc="${bc%.bc}.mix.bc"
+  TEMPLATE_BC+=("${bc}")
   TEMPLATE_MIX_BC+=("${mix_bc}")
+  echo "== ccec ${src}"
+  "${CCEC}" -O2 -x cce --cce-auto-sync=off --cce-aicore-only \
+    --cce-generic-addrspace=off -mllvm -disable-llvm-optzns \
+    --cce-aicore-arch=dav-${ARCH_FAMILY}-vec --cce-enable-print \
+    --cce-enable-sanitizer -std=c++17 "${TEMPLATE_CMD_INCLUDES[@]}" \
+    "${ASCENDC_EXTRA_ARGS[@]}" \
+    "${src}" -emit-llvm -c -o "${bc}"
+  echo "== ccec ${src} (mix)"
+  "${CCEC}" -O2 -x cce --cce-auto-sync=off --cce-aicore-only \
+    --cce-generic-addrspace=off -mllvm -disable-llvm-optzns \
+    --cce-aicore-arch=dav-${ARCH_FAMILY}-vec --cce-enable-print \
+    --cce-enable-sanitizer -std=c++17 "${TEMPLATE_CMD_INCLUDES[@]}" \
+    "${ASCENDC_EXTRA_ARGS[@]}" \
+    -cce-enable-mix -mllvm -enable-mix=true \
+    "${src}" -emit-llvm -c -o "${mix_bc}"
 done
 
 echo "== llvm-link -> ${CUSTOM_OPS_BC}"

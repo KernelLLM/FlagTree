@@ -169,6 +169,28 @@ if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_
     --cce-generic-addrspace=off -mllvm -disable-llvm-optzns
     --cce-enable-print --cce-enable-sanitizer -std=c++17)
 
+  # c310 is a reg-based target: the c310 custom-op bodies use the AscendC /
+  # reg_compute API, which needs the AscendC headers from the CANN install.
+  if(ASCEND_CUSTOM_OPS_ARCH_FAMILY STREQUAL "c310")
+    set(ASCENDC_ROOT "$ENV{ASCEND_HOME_PATH}/asc" CACHE PATH
+      "AscendC headers used by the c310 custom-op bodies")
+    if(NOT EXISTS "${ASCENDC_ROOT}/impl/basic_api")
+      get_filename_component(_ASCEND_CCEC_PREFIX "${ASCEND_CCEC_EXECUTABLE}" DIRECTORY)
+      get_filename_component(_ASCEND_CCEC_PREFIX "${_ASCEND_CCEC_PREFIX}" DIRECTORY)
+      set(ASCENDC_ROOT "${_ASCEND_CCEC_PREFIX}/asc")
+    endif()
+    if(NOT EXISTS "${ASCENDC_ROOT}/impl/basic_api")
+      message(FATAL_ERROR
+        "AscendC headers not found for the c310 custom ops; set -DASCENDC_ROOT=<cann>/asc")
+    endif()
+    list(APPEND CCEC_COMMON_FLAGS --cce-mask-opt
+      -DTILING_KEY_VAR=0
+      -I "${ASCENDC_ROOT}"
+      -I "${ASCENDC_ROOT}/impl/basic_api"
+      -I "${ASCENDC_ROOT}/include"
+      -I "${ASCENDC_ROOT}/include/basic_api")
+  endif()
+
   # Each custom op is implemented in its own .cpp and compiled into its own
   # bitcode: "<src>::<arch>" — arch is the ccec aicore target for that op.
   set(ASCEND_CUSTOM_OPS
@@ -193,6 +215,17 @@ if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_
     list(GET entry_parts 0 src)
     list(GET entry_parts 1 arch)
 
+    # Include order matters: the RegBase headers must win over the mem-based
+    # Template headers on c310.
+    set(_OP_INCLUDES -I "${_ASCEND_TEMPLATE_INCLUDE}")
+    if(ASCEND_CUSTOM_OPS_ARCH_FAMILY STREQUAL "c310")
+      if(arch MATCHES "-cube$")
+        list(PREPEND _OP_INCLUDES -I "${_ASCEND_TEMPLATE_ROOT}/lib/RegBase/Cube/include")
+      else()
+        list(PREPEND _OP_INCLUDES -I "${_ASCEND_TEMPLATE_ROOT}/lib/RegBase/Vector/include")
+      endif()
+    endif()
+
     set(op_deps "")
     if(src MATCHES "^sort_ops/")
       list(APPEND op_deps "${_ASCEND_SORT_OPS_DIR}/sort_common.h")
@@ -211,7 +244,7 @@ if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_
       OUTPUT "${bc}"
       COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${CCEC_COMMON_FLAGS}
         --cce-aicore-arch=${arch}
-        -I "${_ASCEND_TEMPLATE_INCLUDE}"
+        ${_OP_INCLUDES}
         "${ASCEND_CUSTOM_OPS_DIR}/${src}"
         -emit-llvm -c -o "${bc}"
       DEPENDS "${ASCEND_CUSTOM_OPS_DIR}/${src}" ${op_deps}
@@ -222,7 +255,7 @@ if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_
       COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${CCEC_COMMON_FLAGS}
         --cce-aicore-arch=${arch}
         -cce-enable-mix -mllvm -enable-mix=true
-        -I "${_ASCEND_TEMPLATE_INCLUDE}"
+        ${_OP_INCLUDES}
         "${ASCEND_CUSTOM_OPS_DIR}/${src}"
         -emit-llvm -c -o "${mix_bc}"
       DEPENDS "${ASCEND_CUSTOM_OPS_DIR}/${src}" ${op_deps}
@@ -230,12 +263,23 @@ if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_
       VERBATIM)
   endforeach()
 
-  set(ASCEND_TEMPLATE_OPS
-    "lib/Vector/Arange/Arange1D.cpp"
-    "lib/Vector/Elementwise/EltWise1D.cpp"
-    "lib/Vector/Sort/Sort1D.cpp"
-    "lib/DMA/Ubuf/Copy1D.cpp"
-  )
+  if(ASCEND_CUSTOM_OPS_ARCH_FAMILY STREQUAL "c310")
+    set(ASCEND_TEMPLATE_OPS
+      "lib/RegBase/Vector/Sort1D.cpp"
+      "lib/RegBase/Vector/Copy1D.cpp"
+    )
+  else()
+    set(ASCEND_TEMPLATE_OPS
+      "lib/Vector/Arange/Arange1D.cpp"
+      "lib/Vector/Elementwise/EltWise1D.cpp"
+      "lib/Vector/Sort/Sort1D.cpp"
+      "lib/DMA/Ubuf/Copy1D.cpp"
+    )
+  endif()
+  set(_TEMPLATE_INCLUDES -I "${_ASCEND_TEMPLATE_INCLUDE}")
+  if(ASCEND_CUSTOM_OPS_ARCH_FAMILY STREQUAL "c310")
+    list(PREPEND _TEMPLATE_INCLUDES -I "${_ASCEND_TEMPLATE_ROOT}/lib/RegBase/Vector/include")
+  endif()
   set(TEMPLATE_BITCODES "")
   foreach(src IN LISTS ASCEND_TEMPLATE_OPS)
     get_filename_component(name_we "${src}" NAME_WE)
@@ -246,7 +290,7 @@ if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_
       OUTPUT "${bc}"
       COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${CCEC_COMMON_FLAGS}
         --cce-aicore-arch=dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec
-        -I "${_ASCEND_TEMPLATE_INCLUDE}"
+        ${_TEMPLATE_INCLUDES}
         "${_ASCEND_TEMPLATE_ROOT}/${src}"
         -emit-llvm -c -o "${bc}"
       DEPENDS "${_ASCEND_TEMPLATE_ROOT}/${src}"
@@ -257,7 +301,7 @@ if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_
       COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${CCEC_COMMON_FLAGS}
         --cce-aicore-arch=dav-${ASCEND_CUSTOM_OPS_ARCH_FAMILY}-vec
         -cce-enable-mix -mllvm -enable-mix=true
-        -I "${_ASCEND_TEMPLATE_INCLUDE}"
+        ${_TEMPLATE_INCLUDES}
         "${_ASCEND_TEMPLATE_ROOT}/${src}"
         -emit-llvm -c -o "${mix_bc}"
       DEPENDS "${_ASCEND_TEMPLATE_ROOT}/${src}"

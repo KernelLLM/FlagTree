@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "Utils.h"
 
+#if defined(__DAV_C310__)
+// A5 cast is reg-based; the mem-based vconv_s42f16 intrinsic is unavailable.
+#include "kernel_operator_vec_vconv_intf.h"
+#endif
+
 // Based on CANN 9.1 dav_c220/kernel_operator_vec_vconv_impl.h: CastImpl
 // (Cast Level 2) and the int4b_t -> half CastIntrinsicsImpl specialization,
 // which only supports RoundMode::CAST_NONE on this device. Count mode with a
@@ -18,10 +23,19 @@ _mlir_ciface_custom_cast_int4_to_fp16(memref_t<__ubuf__ uint8_t, 1> *src,
          "on this device");
 #endif
   (void)round_mode;
+#if defined(__DAV_C310__)
+  // Level-2 cast; CastTypeTrait<int4b_t> maps the packed source to int4x2_t
+  // and the A5 implementation handles the packed-nibble expansion.
+  AscendC::CastImpl<half, int4b_t>(
+      dst->aligned + dst->offset,
+      reinterpret_cast<__ubuf__ int4b_t *>(src->aligned + src->offset),
+      AscendC::RoundMode::CAST_NONE, count);
+#else
   set_mask_count();
   set_vector_mask(0, count);
   vconv_s42f16(dst->aligned + dst->offset, src->aligned + src->offset, 1, 1, 1,
                8, 2);
   set_mask_norm();
   set_vector_mask(static_cast<uint64_t>(-1), static_cast<uint64_t>(-1));
+#endif
 }

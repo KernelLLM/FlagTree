@@ -425,6 +425,22 @@ CUSTOM_OPS_ARCH_FAMILY=c310 ./build_custom_ops.sh
 架构家族必须与 kernel 的编译目标一致（950 对应 `dav-c310-*`，A2/A3 对应 `dav-c220-*`），
 并且 `CCEC`/`LLVM_LINK` 应与 Triton 使用的 `bishengir-compile` 来自同一个 CANN/BiShengIR 版本。
 
+### c310 (A5) 适配状态
+
+c310 / Ascend950 是 reg-based 架构，旧的 mem-based intrinsic（`vector_dup`、
+`set_vector_mask`、`vcmpvs_*`、`vconv_s42f16`、`copy_gm_to_ubuf_align_b16` 等）
+在该目标上不可用。每个算子都需要一个基于 AscendC / reg_compute API 的 c310
+实现，参考 `${ASCEND_HOME_PATH}/asc`（或 asc-devkit）中的
+`impl/basic_api/dav_3510/`。
+
+当前已适配：`mem_ops/duplicate.cpp`。其余算子逐步适配；在全部完成前可用
+
+```bash
+CUSTOM_OPS_ARCH_FAMILY=c310 ALLOW_PARTIAL=1 ./build_custom_ops.sh
+```
+
+构建已适配算子的子集（脚本会列出被跳过的算子）。
+
 
 ## compare_scalar
 

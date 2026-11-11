@@ -25,6 +25,34 @@ template <typename T> struct nd2nz_intrin_args {
 template <typename T>
 __aicore__ __attribute__((always_inline)) void
 copy_gm_to_cbuf_intrin_core(nd2nz_intrin_args<T> args) {
+#if defined(__DAV_C310__)
+  // A5 exposes copy_gm_to_cbuf_multi_nd2nz with byte-based source strides and
+  // communicates the destination NZ layout through MTE2_NZ_PARA.
+  const uint16_t loop2DstStride = args.dstNzNStride;
+  const uint16_t loop3DstStride = args.dstNzC0Stride;
+  const uint16_t loop4DstStride =
+      static_cast<uint16_t>(args.dstNzMatrixStride * sizeof(T) / 32);
+  const uint64_t mte2NzPara =
+      (static_cast<uint64_t>(loop4DstStride) << 48) |
+      (static_cast<uint64_t>(loop3DstStride) << 32) |
+      (static_cast<uint64_t>(loop2DstStride) << 16) |
+      static_cast<uint64_t>(args.ndNum);
+  set_mte2_nz_para(mte2NzPara);
+
+  const uint64_t loop1SrcStride =
+      static_cast<uint64_t>(args.srcDValue) * sizeof(T);
+  const uint64_t loop4SrcStride =
+      static_cast<uint64_t>(args.srcNdMatrixStride) * sizeof(T);
+  if constexpr (sizeof(T) == 2) {
+    INTRINSIC(copy_gm_to_cbuf_multi_nd2nz, (__cbuf__ half *)args.dst_ptr,
+              (__gm__ half *)args.src_ptr, 0, loop1SrcStride, 0, args.nValue,
+              args.dValue, loop4SrcStride, false);
+  } else if constexpr (sizeof(T) == 4) {
+    INTRINSIC(copy_gm_to_cbuf_multi_nd2nz, (__cbuf__ float *)args.dst_ptr,
+              (__gm__ float *)args.src_ptr, 0, loop1SrcStride, 0, args.nValue,
+              args.dValue, loop4SrcStride, false);
+  }
+#else
   if constexpr (sizeof(T) == 2) {
     INTRINSIC(copy_gm_to_cbuf_multi_nd2nz_b16, args.dst_ptr, args.src_ptr,
               args.sid, args.ndNum, args.nValue, args.dValue,
@@ -36,6 +64,7 @@ copy_gm_to_cbuf_intrin_core(nd2nz_intrin_args<T> args) {
               args.srcNdMatrixStride, args.srcDValue, args.dstNzC0Stride,
               args.dstNzNStride, args.dstNzMatrixStride);
   }
+#endif
 }
 
 // Generic row gather: out row i <- src row index[i]. Both src rows and the
