@@ -7,6 +7,7 @@ from .pipe import (PipeScheduler, pipe_reader, pipe_slot, pipe_value, pipe_wait_
                    run_pipe, reset_pipe_event_allocator)
 from .distributed import (MeshConfig, device_mesh, remote, shard_id, distributed_barrier, swizzle2d_Nz,
                           gemm_swizzle2d_Nz)
+from triton.language.extra.cann.extension.scope import scope
 from . import custom_ops
 
 # ``custom_ops`` and ``core`` import the CANN language extension, which
@@ -38,6 +39,7 @@ __all__ = [
     "sync_block_all",
     "compile_hint",
     "raw",
+    "scope",
     "multibuffer",
     "PipeScheduler",
     "pipe_reader",
