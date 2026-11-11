@@ -17,7 +17,7 @@ import triton.language as tl
 
 from .._dsa_backend import get_dsa_backend
 
-_, DEVICE, _ = get_dsa_backend()
+BACKEND, DEVICE, _ = get_dsa_backend()
 
 
 @triton.jit
@@ -140,6 +140,8 @@ def member_roundtrip(x_ptr, out_ptr, shape: tl.constexpr, offsets: tl.constexpr)
     tl.store(out_ptr + _idx(shape), y)
 
 
+@pytest.mark.skipif(BACKEND in ("npu", "ascend"),
+                    reason="tle.extract_tile/insert_tile tile lowering is not supported on Ascend")
 class TestTile:
 
     def test_extract_scalar(self):
