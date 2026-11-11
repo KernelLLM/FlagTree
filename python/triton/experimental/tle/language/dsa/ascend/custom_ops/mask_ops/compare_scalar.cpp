@@ -5,6 +5,58 @@
 #if defined(__DAV_C310__)
 // A5 compare is reg-based; the mem-based vcmpvs_* intrinsics are unavailable.
 #include "kernel_operator_vec_cmpsel_intf.h"
+#include "reg_compute/kernel_reg_compute_intf.h"
+
+// A5 comparison modes treat NaN differently from the portable op (LE/GE and
+// possibly others are unordered, i.e. NaN compares true). Normalize every mode
+// to ordered semantics by AND-ing the comparison with (x == x): EQ with itself
+// is false for NaN and true otherwise.
+template <typename T, AscendC::CMPMODE cmpMode>
+__simd_vf__ inline void compare_scalar_ordered(__ubuf__ uint8_t *dst,
+                                               __ubuf__ T *src, T scalar,
+                                               uint32_t count) {
+  constexpr uint32_t elems = AscendC::GetVecLen() / sizeof(T);
+  uint32_t sreg = count;
+  AscendC::Reg::RegTensor<T> x;
+  AscendC::Reg::UnalignReg ureg;
+  for (int64_t i = 0; i < count; i += elems) {
+    AscendC::Reg::MaskReg active = AscendC::Reg::UpdateMask<T>(sreg);
+    AscendC::Reg::LoadAlign(x, src + i);
+    AscendC::Reg::MaskReg cmp, not_nan, result;
+    AscendC::Reg::CompareScalar<T, cmpMode>(cmp, x, scalar, active);
+    AscendC::Reg::Compare<T, AscendC::CMPMODE::EQ>(not_nan, x, x, active);
+    AscendC::Reg::And(result, cmp, not_nan, active);
+    // The mask store steps the destination pointer in T-sized elements (the
+    // AscendC Level-2 compare does the same); using uint32_t here corrupts the
+    // packing for 16-bit dtypes.
+    AscendC::Reg::StoreUnAlign((__ubuf__ T *&)dst, result, ureg);
+  }
+  AscendC::Reg::StoreUnAlignPost<uint8_t, AscendC::Reg::PostLiteral::POST_MODE_NORMAL>(
+      dst, ureg, 0);
+}
+
+// Every IEEE comparison against a NaN scalar is false. A5 CompareScalar is
+// unordered for LT/GT/LE/GE/NE, but EQ is ordered, so comparing against the
+// NaN scalar yields the required all-zero mask.
+template <typename T>
+__simd_vf__ inline void compare_scalar_nan(__ubuf__ uint8_t *dst,
+                                           __ubuf__ T *src, T scalar,
+                                           uint32_t count) {
+  constexpr uint32_t elems = AscendC::GetVecLen() / sizeof(T);
+  uint32_t sreg = count;
+  AscendC::Reg::RegTensor<T> x;
+  AscendC::Reg::UnalignReg ureg;
+  for (int64_t i = 0; i < count; i += elems) {
+    AscendC::Reg::MaskReg active = AscendC::Reg::UpdateMask<T>(sreg);
+    AscendC::Reg::LoadAlign(x, src + i);
+    AscendC::Reg::MaskReg result;
+    AscendC::Reg::CompareScalar<T, AscendC::CMPMODE::EQ>(result, x, scalar,
+                                                         active);
+    AscendC::Reg::StoreUnAlign((__ubuf__ T *&)dst, result, ureg);
+  }
+  AscendC::Reg::StoreUnAlignPost<uint8_t, AscendC::Reg::PostLiteral::POST_MODE_NORMAL>(
+      dst, ureg, 0);
+}
 #endif
 
 __aiv__ __attribute__((always_inline)) void
@@ -59,12 +111,46 @@ compare_scalar_impl(memref_t<__ubuf__ T, 1> *src, float scalar,
                     int32_t cmp_mode, uint32_t count,
                     memref_t<__ubuf__ U, 1> *dst) {
 #if defined(__DAV_C310__)
-  // Count-based Level-2 compare; the A5 implementation packs the mask with
+  // Count-based ordered compare; the A5 implementation packs the mask with
   // Reg::CompareScalar/StoreUnAlign, so no manual repeat splitting is needed.
-  AscendC::VcmpvsImpl<T, uint8_t>(
-      reinterpret_cast<__ubuf__ uint8_t *>(dst->aligned + dst->offset),
-      src->aligned + src->offset, static_cast<T>(scalar),
-      static_cast<AscendC::CMPMODE>(cmp_mode), count);
+  auto dst_byte =
+      reinterpret_cast<__ubuf__ uint8_t *>(dst->aligned + dst->offset);
+  auto src_ptr = src->aligned + src->offset;
+  const T scalar_value = static_cast<T>(scalar);
+  // Data-dependent control flow inside a __simd_vf__ function crashes the
+  // ccec VF compiler, so route the NaN scalar case here instead.
+  if (scalar != scalar) {
+    compare_scalar_nan<T>(dst_byte, src_ptr, scalar_value, count);
+    return;
+  }
+  switch (cmp_mode) {
+  case 0:
+    compare_scalar_ordered<T, AscendC::CMPMODE::LT>(dst_byte, src_ptr,
+                                                    scalar_value, count);
+    break;
+  case 1:
+    compare_scalar_ordered<T, AscendC::CMPMODE::GT>(dst_byte, src_ptr,
+                                                    scalar_value, count);
+    break;
+  case 2:
+    compare_scalar_ordered<T, AscendC::CMPMODE::EQ>(dst_byte, src_ptr,
+                                                    scalar_value, count);
+    break;
+  case 3:
+    compare_scalar_ordered<T, AscendC::CMPMODE::LE>(dst_byte, src_ptr,
+                                                    scalar_value, count);
+    break;
+  case 4:
+    compare_scalar_ordered<T, AscendC::CMPMODE::GE>(dst_byte, src_ptr,
+                                                    scalar_value, count);
+    break;
+  case 5:
+    compare_scalar_ordered<T, AscendC::CMPMODE::NE>(dst_byte, src_ptr,
+                                                    scalar_value, count);
+    break;
+  default:
+    break;
+  }
 #else
   auto src0 = src->aligned + src->offset;
   auto dst_ptr =

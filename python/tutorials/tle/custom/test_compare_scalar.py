@@ -85,7 +85,9 @@ def test_modes():
             for scalar in (0., 1.0003, np.inf, -np.inf, np.nan):
                 for mode, op in MODES.items():
                     compare_mode[(1, )](x, out, float(scalar), n, mode)
-                    np.testing.assert_array_equal(out.cpu().numpy(), _pack(op(values, dtype(scalar))))
+                    np.testing.assert_array_equal(
+                        out.cpu().numpy(), _pack(op(values, dtype(scalar))),
+                        err_msg=f"dtype={dtype} n={n} scalar={scalar} mode={mode}")
     print("[PASS] FP16/FP32 LT/GT/EQ/LE/GE/NE, including the 252-repeat boundary")
 
 
