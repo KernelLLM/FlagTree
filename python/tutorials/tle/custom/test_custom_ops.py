@@ -728,22 +728,40 @@ def test_duplicate():
 
 
 def main():
+    import traceback
+
     from test_cast_ops import main as test_cast_ops
     from test_compare_scalar import main as test_compare_scalar
 
+    failures = []
+
+    def run(name, fn, *args):
+        try:
+            fn(*args)
+        except Exception as exc:
+            failures.append((name, exc))
+            print(f"[FAIL] {name}: {type(exc).__name__}: {exc}")
+            traceback.print_exc()
+
     for torch_dtype, tol in ((torch.float16, 1e-3), (torch.bfloat16, 1e-2)):
-        test_gather_gm_to_ub(torch_dtype)
-        test_gather_gm_to_l1(torch_dtype, tol)
-    test_sort_1d_pack()
-    test_merge_exhaust_sort4()
-    test_unpack_sort()
-    test_compare_scalar()
-    test_cast_ops()
-    test_sort32()
-    test_mrgsort()
-    test_gather_mask()
-    test_pair_reduce_sum()
-    test_duplicate()
+        run(f"gather_gm_to_ub({torch_dtype})", test_gather_gm_to_ub, torch_dtype)
+        run(f"gather_gm_to_l1({torch_dtype})", test_gather_gm_to_l1, torch_dtype, tol)
+    run("sort_1d_pack", test_sort_1d_pack)
+    run("merge_exhaust_sort4", test_merge_exhaust_sort4)
+    run("unpack_sort", test_unpack_sort)
+    run("compare_scalar", test_compare_scalar)
+    run("cast_ops", test_cast_ops)
+    run("sort32", test_sort32)
+    run("mrgsort", test_mrgsort)
+    run("gather_mask", test_gather_mask)
+    run("pair_reduce_sum", test_pair_reduce_sum)
+    run("duplicate", test_duplicate)
+
+    if failures:
+        print(f"\n{len(failures)} custom op test group(s) failed:")
+        for name, exc in failures:
+            print(f"  - {name}: {type(exc).__name__}: {exc}")
+        raise SystemExit(1)
     print("\nAll custom op correctness tests passed.")
 
 
