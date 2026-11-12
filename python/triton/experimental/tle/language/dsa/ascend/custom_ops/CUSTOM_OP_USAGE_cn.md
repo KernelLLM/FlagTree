@@ -398,7 +398,7 @@ out[1] = UB int32 dst_index
 
 ### 默认自动编译
 
-正常构建工程时，CMake 会直接调用 `ccec` / `llvm-link` 生成或更新对应架构的 `custom_ops.<arch>.bc`。规则位于 `third_party/ascend/CMakeLists.txt`：架构家族由 `-DASCEND_CUSTOM_OPS_ARCH_FAMILY=c220|c310` 选择（950 用 `c310`，默认 `c220`）；每个算子的 `.cpp` 按各自 aicore 架构编译为独立 `.bc`（中间产物在构建目录 `ascend_custom_ops/` 下），4 个 Template 源码编译后一起 `llvm-link` 成 `custom_ops.<arch>.bc`。
+正常构建工程时，CMake 会直接调用 `ccec` / `llvm-link` 生成或更新**所有配置架构**的 `custom_ops.<arch>.bc`（默认 `c220;c310`，即一次构建同时产出 A2/A3 和 A5/950 两套 bitcode）。规则位于 `third_party/ascend/CMakeLists.txt`：架构列表由 `-DASCEND_CUSTOM_OPS_ARCH_FAMILIES=c220;c310` 选择；每个算子的 `.cpp` 按各自 aicore 架构编译为独立 `.bc`（中间产物在构建目录 `ascend_custom_ops/<family>/` 下），对应的 Template 源码编译后一起 `llvm-link` 成 `custom_ops.<family>.bc`。旧的单值 `-DASCEND_CUSTOM_OPS_ARCH_FAMILY` 已废弃并被忽略。
 
 ```bash
 rm -rf build
@@ -406,7 +406,7 @@ FLAGTREE_BACKEND=ascend MAX_JOBS=32 \
   python3 -m pip install -e . --no-build-isolation -v
 ```
 
-当对应架构的 `custom_ops.<arch>.bc` 不存在，或某个算子声明的 C++ 源码依赖发生变化时，CMake 只重新编译受影响的算子并重新 link。
+当某个架构的 `custom_ops.<arch>.bc` 不存在，或某个算子声明的 C++ 源码依赖发生变化时，CMake 只重新编译该架构受影响的算子并重新 link，另一架构不受影响。
 
 ### 修改 C++ 实现后手动编译
 
