@@ -119,14 +119,242 @@ endif()
 add_triton_plugin(TritonAscend
   ${CMAKE_CURRENT_SOURCE_DIR}/triton_ascend.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/ascend_ir.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/tle_dsa/tle_ir.cc
   LINK_LIBS
+  CommonIRIR
   TritonToGraph
   TritonToLinalg
   BiShengIRScopeDialect
   BiShengIRHIVMDialect
+  MLIRMemRefDialect
+  MLIRTensorDialect
+  MLIRBufferizationDialect
+  MLIRArithDialect
 )
 
+target_compile_definitions(TritonAscend PRIVATE __TLE_DSA__)
 target_link_libraries(TritonAscend PRIVATE CommonIRToHIVM CommonIRTransforms)
+if(TARGET CommonIRIR)
+  add_dependencies(TritonAscend CommonIRIR)
+endif()
+
+# TLE DSA custom ops (``tle.dsa.ascend.raw`` / ``custom_ops.<arch>.bc``)
+#
+# The Python registry loads ``custom_ops.<arch-family>.bc`` from the source
+# tree. Build every configured family from the device sources when the CANN
+# ccec/llvm-link toolchain is available. Otherwise skip the target:
+# ``custom_ops/build_custom_ops.sh`` remains the manual path, and non-CANN
+# builds keep working.
+#
+# c220 covers A2/A3, c310 covers A5/Ascend950. A single FlagTree build emits
+# both by default so one install can serve either target; the registry picks
+# the matching artifact at runtime.
+set(ASCEND_CUSTOM_OPS_DIR "${PROJECT_SOURCE_DIR}/python/triton/experimental/tle/language/dsa/ascend/custom_ops")
+# Drop artifacts from the old single-architecture build and the removed
+# content-addressed aliases; only custom_ops.<family>.bc is used now.
+file(GLOB _ASCEND_STALE_CUSTOM_OP_BITCODES
+  "${ASCEND_CUSTOM_OPS_DIR}/custom_ops.bc"
+  "${ASCEND_CUSTOM_OPS_DIR}/custom_ops.*.*.bc")
+if(_ASCEND_STALE_CUSTOM_OP_BITCODES)
+  file(REMOVE ${_ASCEND_STALE_CUSTOM_OP_BITCODES})
+endif()
+set(ASCEND_CUSTOM_OPS_ARCH_FAMILIES "c220;c310" CACHE STRING
+  "ccec aicore arch families for TLE custom ops (c220 for A2/A3, c310 for A5)")
+if(DEFINED ASCEND_CUSTOM_OPS_ARCH_FAMILY)
+  message(WARNING
+    "ASCEND_CUSTOM_OPS_ARCH_FAMILY is deprecated and ignored; "
+    "use ASCEND_CUSTOM_OPS_ARCH_FAMILIES (default c220;c310)")
+endif()
+foreach(_family IN LISTS ASCEND_CUSTOM_OPS_ARCH_FAMILIES)
+  if(NOT _family MATCHES "^c(220|310)$")
+    message(FATAL_ERROR "Unsupported ASCEND_CUSTOM_OPS_ARCH_FAMILIES entry: ${_family}")
+  endif()
+endforeach()
+set(_ASCEND_TEMPLATE_ROOT "${ASCENDNPU_IR_SRC_DIR}/bishengir/lib/Template")
+set(_ASCEND_TEMPLATE_INCLUDE "${_ASCEND_TEMPLATE_ROOT}/include")
+
+find_program(ASCEND_CCEC_EXECUTABLE ccec)
+if(ASCEND_CCEC_EXECUTABLE)
+  get_filename_component(_ASCEND_CCEC_BIN_DIR "${ASCEND_CCEC_EXECUTABLE}" DIRECTORY)
+  find_program(ASCEND_LLVM_LINK_EXECUTABLE llvm-link HINTS "${_ASCEND_CCEC_BIN_DIR}")
+endif()
+
+if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_TEMPLATE_INCLUDE}")
+  set(ASCEND_CUSTOM_OPS_BC_DIR "${CMAKE_CURRENT_BINARY_DIR}/ascend_custom_ops")
+  set(CCEC_COMMON_FLAGS
+    -O2 -x cce --cce-auto-sync=off --cce-aicore-only
+    --cce-generic-addrspace=off -mllvm -disable-llvm-optzns
+    --cce-enable-print --cce-enable-sanitizer -std=c++17)
+
+  # c310 is a reg-based target: its custom-op bodies use the AscendC /
+  # reg_compute API, which needs the AscendC headers from the CANN install.
+  if("c310" IN_LIST ASCEND_CUSTOM_OPS_ARCH_FAMILIES)
+    set(ASCENDC_ROOT "$ENV{ASCEND_HOME_PATH}/asc" CACHE PATH
+      "AscendC headers used by the c310 custom-op bodies")
+    if(NOT EXISTS "${ASCENDC_ROOT}/impl/basic_api")
+      get_filename_component(_ASCEND_CCEC_PREFIX "${ASCEND_CCEC_EXECUTABLE}" DIRECTORY)
+      get_filename_component(_ASCEND_CCEC_PREFIX "${_ASCEND_CCEC_PREFIX}" DIRECTORY)
+      set(ASCENDC_ROOT "${_ASCEND_CCEC_PREFIX}/asc")
+    endif()
+    if(NOT EXISTS "${ASCENDC_ROOT}/impl/basic_api")
+      message(FATAL_ERROR
+        "AscendC headers not found for the c310 custom ops; set -DASCENDC_ROOT=<cann>/asc")
+    endif()
+  endif()
+
+  set(ASCEND_CUSTOM_OPS_BITCODES "")
+  foreach(family IN LISTS ASCEND_CUSTOM_OPS_ARCH_FAMILIES)
+    file(MAKE_DIRECTORY "${ASCEND_CUSTOM_OPS_BC_DIR}/${family}")
+
+    set(_family_flags ${CCEC_COMMON_FLAGS})
+    if(family STREQUAL "c310")
+      list(APPEND _family_flags --cce-mask-opt
+        -DTILING_KEY_VAR=0
+        -I "${ASCENDC_ROOT}"
+        -I "${ASCENDC_ROOT}/impl/basic_api"
+        -I "${ASCENDC_ROOT}/include"
+        -I "${ASCENDC_ROOT}/include/basic_api")
+    endif()
+
+    # Each custom op is implemented in its own .cpp and compiled into its own
+    # bitcode: "<src>::<arch>" — arch is the ccec aicore target for that op.
+    set(_family_ops
+      "mem_ops/duplicate.cpp::dav-${family}-vec"
+      "mem_ops/gather_gm_to_l1.cpp::dav-${family}-cube"
+      "mem_ops/gather_gm_to_ub.cpp::dav-${family}-vec"
+      "mem_ops/gather_mask.cpp::dav-${family}-vec"
+      "reduction_ops/pair_reduce_sum.cpp::dav-${family}-vec"
+      "sort_ops/sort32.cpp::dav-${family}-vec"
+      "sort_ops/sort_1d_pack.cpp::dav-${family}-vec"
+      "sort_ops/merge_pack_sort.cpp::dav-${family}-vec"
+      "sort_ops/mrgsort.cpp::dav-${family}-vec"
+      "sort_ops/unpack_sort.cpp::dav-${family}-vec"
+      "mask_ops/compare_scalar.cpp::dav-${family}-vec"
+      "cast_ops/cast_int4_to_fp16.cpp::dav-${family}-vec"
+    )
+
+    set(_ASCEND_SORT_OPS_DIR "${ASCEND_CUSTOM_OPS_DIR}/sort_ops")
+    set(OP_BITCODES "")
+    foreach(entry IN LISTS _family_ops)
+      string(REPLACE "::" ";" entry_parts "${entry}")
+      list(GET entry_parts 0 op_src)
+      list(GET entry_parts 1 op_arch)
+
+      # Include order matters: the RegBase headers must win over the mem-based
+      # Template headers on c310.
+      set(_op_includes -I "${_ASCEND_TEMPLATE_INCLUDE}")
+      if(family STREQUAL "c310")
+        if(op_arch MATCHES "-cube$")
+          list(PREPEND _op_includes -I "${_ASCEND_TEMPLATE_ROOT}/lib/RegBase/Cube/include")
+        else()
+          list(PREPEND _op_includes -I "${_ASCEND_TEMPLATE_ROOT}/lib/RegBase/Vector/include")
+        endif()
+      endif()
+
+      set(op_deps "")
+      if(op_src MATCHES "^sort_ops/")
+        list(APPEND op_deps "${_ASCEND_SORT_OPS_DIR}/sort_common.h")
+      endif()
+      if(op_src STREQUAL "sort_ops/sort_1d_pack.cpp")
+        list(APPEND op_deps
+          "${_ASCEND_SORT_OPS_DIR}/sort_base.h"
+          "${_ASCEND_SORT_OPS_DIR}/sort_s4096_k129_512.h"
+          "${_ASCEND_SORT_OPS_DIR}/sort_s4096_k1_128_k2048.h")
+      endif()
+
+      set(op_bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${family}/${op_src}.bc")
+      set(op_mix_bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${family}/${op_src}.mix.bc")
+      get_filename_component(op_bc_dir "${op_bc}" DIRECTORY)
+      file(MAKE_DIRECTORY "${op_bc_dir}")
+      list(APPEND OP_BITCODES "${op_bc}" "${op_mix_bc}")
+      add_custom_command(
+        OUTPUT "${op_bc}"
+        COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${_family_flags}
+          --cce-aicore-arch=${op_arch}
+          ${_op_includes}
+          "${ASCEND_CUSTOM_OPS_DIR}/${op_src}"
+          -emit-llvm -c -o "${op_bc}"
+        DEPENDS "${ASCEND_CUSTOM_OPS_DIR}/${op_src}" ${op_deps}
+        COMMENT "ccec ${family} ${op_src} (${op_arch})"
+        VERBATIM)
+      add_custom_command(
+        OUTPUT "${op_mix_bc}"
+        COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${_family_flags}
+          --cce-aicore-arch=${op_arch}
+          -cce-enable-mix -mllvm -enable-mix=true
+          ${_op_includes}
+          "${ASCEND_CUSTOM_OPS_DIR}/${op_src}"
+          -emit-llvm -c -o "${op_mix_bc}"
+        DEPENDS "${ASCEND_CUSTOM_OPS_DIR}/${op_src}" ${op_deps}
+        COMMENT "ccec ${family} ${op_src} (${op_arch}, mix)"
+        VERBATIM)
+    endforeach()
+
+    if(family STREQUAL "c310")
+      set(_family_templates
+        "lib/RegBase/Vector/Sort1D.cpp"
+        "lib/RegBase/Vector/Copy1D.cpp")
+      set(_template_includes
+        -I "${_ASCEND_TEMPLATE_ROOT}/lib/RegBase/Vector/include"
+        -I "${_ASCEND_TEMPLATE_INCLUDE}")
+    else()
+      set(_family_templates
+        "lib/Vector/Arange/Arange1D.cpp"
+        "lib/Vector/Elementwise/EltWise1D.cpp"
+        "lib/Vector/Sort/Sort1D.cpp"
+        "lib/DMA/Ubuf/Copy1D.cpp")
+      set(_template_includes -I "${_ASCEND_TEMPLATE_INCLUDE}")
+    endif()
+
+    set(TEMPLATE_BITCODES "")
+    foreach(template_src IN LISTS _family_templates)
+      get_filename_component(name_we "${template_src}" NAME_WE)
+      set(template_bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${family}/template_${name_we}.bc")
+      set(template_mix_bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${family}/template_${name_we}.mix.bc")
+      list(APPEND TEMPLATE_BITCODES "${template_bc}" "${template_mix_bc}")
+      add_custom_command(
+        OUTPUT "${template_bc}"
+        COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${_family_flags}
+          --cce-aicore-arch=dav-${family}-vec
+          ${_template_includes}
+          "${_ASCEND_TEMPLATE_ROOT}/${template_src}"
+          -emit-llvm -c -o "${template_bc}"
+        DEPENDS "${_ASCEND_TEMPLATE_ROOT}/${template_src}"
+        COMMENT "ccec ${family} Template ${template_src}"
+        VERBATIM)
+      add_custom_command(
+        OUTPUT "${template_mix_bc}"
+        COMMAND "${ASCEND_CCEC_EXECUTABLE}" ${_family_flags}
+          --cce-aicore-arch=dav-${family}-vec
+          -cce-enable-mix -mllvm -enable-mix=true
+          ${_template_includes}
+          "${_ASCEND_TEMPLATE_ROOT}/${template_src}"
+          -emit-llvm -c -o "${template_mix_bc}"
+        DEPENDS "${_ASCEND_TEMPLATE_ROOT}/${template_src}"
+        COMMENT "ccec ${family} Template ${template_src} (mix)"
+        VERBATIM)
+    endforeach()
+
+    set(family_bitcode "${ASCEND_CUSTOM_OPS_DIR}/custom_ops.${family}.bc")
+    add_custom_command(
+      OUTPUT "${family_bitcode}"
+      COMMAND "${ASCEND_LLVM_LINK_EXECUTABLE}" ${OP_BITCODES} ${TEMPLATE_BITCODES}
+        -o "${family_bitcode}"
+      DEPENDS ${OP_BITCODES} ${TEMPLATE_BITCODES}
+      COMMENT "llvm-link -> ${family_bitcode}"
+      VERBATIM)
+    list(APPEND ASCEND_CUSTOM_OPS_BITCODES "${family_bitcode}")
+  endforeach()
+
+  add_custom_target(AscendCustomOpsBitcode DEPENDS ${ASCEND_CUSTOM_OPS_BITCODES})
+  add_dependencies(TritonAscend AscendCustomOpsBitcode)
+  message(STATUS
+    "Ascend custom ops: ${ASCEND_CUSTOM_OPS_ARCH_FAMILIES} bitcode will be built from ${ASCEND_CUSTOM_OPS_DIR}")
+else()
+  message(STATUS
+    "Ascend custom ops: ccec/llvm-link or the AscendNPU-IR Template dir is unavailable; "
+    "run python/triton/experimental/tle/language/dsa/ascend/custom_ops/build_custom_ops.sh manually")
+endif()
 
 option(TRITON_ENABLE_COVERAGE_LLVM_COV "Enable code llvm-cov coverage tool for Ascend plugin " OFF)
 if(TRITON_ENABLE_COVERAGE_LLVM_COV)

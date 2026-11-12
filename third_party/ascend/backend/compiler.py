@@ -623,7 +623,13 @@ def bc_to_linalg_by_bishengir_opt(bc_data: bytes, metadata, opt):
         if opt.debug:
             cmd += ["--mlir-print-debuginfo"]
         cmd += ["-o", mlir_path]
-        subprocess.run(cmd, env=env, capture_output=True, check=True, text=True)
+        proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"bishengir-opt failed with exit code {proc.returncode}\n"
+                f"command: {shlex.join(cmd)}\n"
+                f"stdout:\n{proc.stdout}\n"
+                f"stderr:\n{proc.stderr}")
 
         # Read the generated MLIR text
         linalg_text = Path(mlir_path).read_text()
@@ -750,10 +756,39 @@ def _parse_ttir_metadata(ttir: str, metadata: dict):
     return metadata
 
 
+# 3.5 compatibility switches used by the TLE DSA tutorials and custom ops.
+# The NPUOptions field names match the bishengir flag names with underscores.
+_COMPAT_BISHENGIR_OPTIONS = (
+    "disable_auto_cv_work_space_manage",
+    "enable_legacy_insert_load_store_for_mix_cv",
+)
+
+
+def _append_compat_bishengir_options(options, metadata):
+    for option in _COMPAT_BISHENGIR_OPTIONS:
+        value = metadata.get(option)
+        if value is not None:
+            options.append(f"--{option.replace('_', '-')}={value}")
+
+
+def _auto_multi_buffer_limit(metadata):
+    """Return ``--limit-auto-multi-buffer-of-local-buffer`` value, if any.
+
+    The implicit ``no-limit`` default only makes sense while auto multi-buffer
+    is enabled. The 950 default disables it (see ``NPUOptions.multibuffer``) to
+    stay within the 248 KiB UB, and then the limit flag must not be forwarded.
+    """
+    value = metadata["limit_auto_multi_buffer_of_local_buffer"]
+    if value is None and metadata.get("multibuffer", True):
+        value = "no-limit"
+    return value
+
+
 def get_common_bishengir_compile_options(metadata):
     bishengir_target = metadata['target'].arch
-    bishengir_target_opt = f"--target={bishengir_target}"
-    return [bishengir_target_opt]
+    options = [f"--target={bishengir_target}"]
+    _append_compat_bishengir_options(options, metadata)
+    return options
 
 
 @functools.lru_cache()
@@ -948,11 +983,10 @@ def linalg_to_bin_enable_npu_compile_910_95(linalg: str, metadata, opt):
             _compile_option_list += \
                 [f"--set-workspace-multibuffer={set_workspace_multibuffer}"]
 
-        auto_multi_buffer = metadata["limit_auto_multi_buffer_of_local_buffer"]
-        if auto_multi_buffer is None:
-            auto_multi_buffer = "no-limit"
-        _compile_option_list += \
-            [f"--limit-auto-multi-buffer-of-local-buffer={auto_multi_buffer}"]
+        auto_multi_buffer = _auto_multi_buffer_limit(metadata)
+        if auto_multi_buffer is not None:
+            _compile_option_list += \
+                [f"--limit-auto-multi-buffer-of-local-buffer={auto_multi_buffer}"]
         auto_multi_buffer_buffer = metadata["limit_auto_multi_buffer_buffer"]
         if auto_multi_buffer_buffer is not None:
             _compile_option_list += \
@@ -1044,7 +1078,18 @@ def linalg_to_bin_enable_npu_compile_910_95(linalg: str, metadata, opt):
         except subprocess.CalledProcessError as e:
             if opt.debug:
                 _save_npuir_debug_output(e.stdout, e.stderr, tmpdir, metadata["hash"])
-            raise
+            stdout = (e.stdout or b"").decode("utf-8", errors="replace")
+            stderr = (e.stderr or b"").decode("utf-8", errors="replace")
+            failed_dir = os.path.join(tempfile.gettempdir(), f"triton_ascend_failed_{os.getpid()}")
+            os.makedirs(failed_dir, exist_ok=True)
+            failed_mlir = os.path.join(failed_dir, "kernel.mlir")
+            Path(failed_mlir).write_text(Path(ttadapter_path).read_text())
+            raise RuntimeError(
+                f"bishengir-compile failed with exit code {e.returncode}\n"
+                f"command: {shlex.join(cmd_list)}\n"
+                f"failed MLIR: {failed_mlir}\n"
+                f"stdout:\n{stdout}\n"
+                f"stderr:\n{stderr}") from e
 
         if opt.debug:
             _save_npuir_debug_output(ret.stdout, ret.stderr, tmpdir, metadata["hash"])
@@ -1096,6 +1141,7 @@ def linalg_to_bin_enable_npu_compile_A2_A3(linalg: str, metadata, opt):
         _compile_option_list = [
             f"--target={NPUUtils().get_arch()}",
         ]
+        _append_compat_bishengir_options(_compile_option_list, metadata)
 
         multibuffer_mode = metadata.get("multibuffer_mode")
         if multibuffer_mode is not None:
@@ -1255,7 +1301,18 @@ def linalg_to_bin_enable_npu_compile_A2_A3(linalg: str, metadata, opt):
         except subprocess.CalledProcessError as e:
             if opt.debug:
                 _save_npuir_debug_output(e.stdout, e.stderr, tmpdir, metadata["hash"])
-            raise
+            stdout = (e.stdout or b"").decode("utf-8", errors="replace")
+            stderr = (e.stderr or b"").decode("utf-8", errors="replace")
+            failed_dir = os.path.join(tempfile.gettempdir(), f"triton_ascend_failed_{os.getpid()}")
+            os.makedirs(failed_dir, exist_ok=True)
+            failed_mlir = os.path.join(failed_dir, "kernel.mlir")
+            Path(failed_mlir).write_text(Path(ttadapter_path).read_text())
+            raise RuntimeError(
+                f"bishengir-compile failed with exit code {e.returncode}\n"
+                f"command: {shlex.join(cmd_list)}\n"
+                f"failed MLIR: {failed_mlir}\n"
+                f"stdout:\n{stdout}\n"
+                f"stderr:\n{stderr}") from e
 
         if opt.debug:
             _save_npuir_debug_output(ret.stdout, ret.stderr, tmpdir, metadata["hash"])
@@ -1370,7 +1427,9 @@ class NPUOptions:
     # Backend-managed BiSheng arguments. Keep the name discoverable so legacy
     # launch keywords are accepted, but never forward a user-supplied value.
     bisheng_options: str = field(default="-cce-link-aicore-ll-module " + get_libdevice(), init=False)
-    multibuffer: bool = True
+    # 3.5-compatible default: auto multi-buffer is disabled on the 950
+    # generation, where the extra ring buffers can overflow the 248 KiB UB.
+    multibuffer: Optional[bool] = None
     # Public dictionaries are stored as sorted pairs for hashing and JSON caches.
     multibuffer_mode: Optional[Union[Dict[str, int], Tuple[Tuple[str, int], ...]]] = None
     vf_fusion_mode: str = None
@@ -1379,6 +1438,9 @@ class NPUOptions:
     enable_preload: bool = None
     enable_auto_bind_sub_block: bool = None
     disable_tightly_coupled_buffer_reuse: bool = False
+    # 3.5 compatibility switches used by the TLE DSA tutorials and custom ops.
+    disable_auto_cv_work_space_manage: bool = None
+    enable_legacy_insert_load_store_for_mix_cv: bool = None
     enable_hivm_auto_cv_balance: bool = None
     # Temporary 910_95 switch; the NPU compiler plans to make this default in Q4.
     enable_hivm_batch_matmul: bool = False
@@ -1506,6 +1568,8 @@ class NPUOptions:
             "compile_on_910_95",
             isinstance(arch, str) and arch.startswith(("Ascend910_95", "Ascend950")),
         )
+        if self.multibuffer is None:
+            object.__setattr__(self, "multibuffer", not self.compile_on_910_95)
         try:
             normalized_rule_mask = normalize_graph_optimization_rule_mask(rule_mask)
         except ProgramGridContractError as error:
