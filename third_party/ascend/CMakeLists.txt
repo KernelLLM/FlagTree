@@ -256,6 +256,8 @@ if(ASCEND_CCEC_EXECUTABLE AND ASCEND_LLVM_LINK_EXECUTABLE AND EXISTS "${_ASCEND_
 
       set(op_bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${family}/${op_src}.bc")
       set(op_mix_bc "${ASCEND_CUSTOM_OPS_BC_DIR}/${family}/${op_src}.mix.bc")
+      get_filename_component(op_bc_dir "${op_bc}" DIRECTORY)
+      file(MAKE_DIRECTORY "${op_bc_dir}")
       list(APPEND OP_BITCODES "${op_bc}" "${op_mix_bc}")
       add_custom_command(
         OUTPUT "${op_bc}"
