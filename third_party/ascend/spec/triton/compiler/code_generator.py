@@ -27,10 +27,12 @@
 # directory) for Ascend builds. This file therefore shadows the shared
 # ``python/triton/compiler/code_generator.py`` on Ascend only.
 #
-# Keep it in sync with the shared file; the Ascend-only difference is the
+# Keep it in sync with the shared file; the Ascend-only differences are the
 # ``__triton_compile_time_value__`` descriptor handling (assignment, tuple and
-# JIT-call argument paths), which must not be forced on other backends.
-# The same overlay layout is used by triton_v3.5.x.
+# JIT-call argument paths), the ``triton.language.extra.cann.extension.parallel``
+# loop iterator with its ``hivm.parallel_loop`` attribute, and the
+# per-compilation pipe-event allocator reset. They must not be forced on other
+# backends. The same overlay layout is used by triton_v3.5.x.
 
 import ast
 import builtins
