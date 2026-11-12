@@ -5,7 +5,7 @@ Ascend custom op per-op correctness tests
 ===================================================
 
 Minimal standalone correctness checks for every op registered in
-custom_ops.bc, one group per op:
+custom_ops.<arch>.bc, one group per op:
 
   - gather_gm_to_l1      (fp16 / bf16): verified through a following tl.dot
   - gather_gm_to_ub      (fp16 / bf16): verified by storing the result to GM

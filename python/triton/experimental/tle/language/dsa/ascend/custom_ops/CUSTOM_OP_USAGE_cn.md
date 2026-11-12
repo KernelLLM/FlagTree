@@ -46,7 +46,7 @@ custom_ops/
     └── unpack_sort.cpp             # proposal 拆包为 value/index
 ```
 
-`registry.py` 中的所有算子按目标架构引用 `custom_ops.c310.bc`（A5/950）或 `custom_ops.c220.bc`（A2/A3），两者都找不到时回退到旧的单架构 `custom_ops.bc`。每个算子的 `.cpp` 分别用对应 ccec 架构（`dav-c220-cube`/`dav-c220-vec` 或 `dav-c310-cube`/`dav-c310-vec`）编译为自己的 `.bc`，再与 Template bitcode 一起 `llvm-link` 成对应架构的 `custom_ops.<arch>.bc`。bitcode 架构必须与 kernel 编译架构一致，否则会出现 `Cannot select` intrinsic 或 data layout 不匹配错误。
+`registry.py` 中的所有算子按目标架构引用 `custom_ops.c310.bc`（A5/950）或 `custom_ops.c220.bc`（A2/A3）。每个算子的 `.cpp` 分别用对应 ccec 架构（`dav-c220-cube`/`dav-c220-vec` 或 `dav-c310-cube`/`dav-c310-vec`）编译为自己的 `.bc`，再与 Template bitcode 一起 `llvm-link` 成对应架构的 `custom_ops.<arch>.bc`。bitcode 架构必须与 kernel 编译架构一致，否则会出现 `Cannot select` intrinsic 或 data layout 不匹配错误。
 
 ## 调用约定（OP扩展框架）
 

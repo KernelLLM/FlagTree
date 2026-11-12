@@ -109,7 +109,7 @@ def test_validation():
     for n in (32, 64, 128, 256, 512, 1024, 2048, 4096, 8192):
         op = _init(_tensor(tl.uint8, [n]), 0, 2 * n, out=_tensor(tl.float16, [2 * n]))
         assert op.symbol == "custom_cast_int4_to_fp16"
-        assert re.search(r"custom_ops(\.[0-9A-Za-z]+)*\.bc$", op.bitcode)
+        assert re.search(r"custom_ops\.[0-9A-Za-z]+\.bc$", op.bitcode)
     src = _tensor(tl.uint8, [64])
     dst = _tensor(tl.float16, [128])
     invalid = [
