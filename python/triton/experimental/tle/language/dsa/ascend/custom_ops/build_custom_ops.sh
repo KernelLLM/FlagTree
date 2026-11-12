@@ -19,6 +19,9 @@ case "${ARCH_FAMILY}" in
     ;;
 esac
 CUSTOM_OPS_BC="${SCRIPT_DIR}/custom_ops.${ARCH_FAMILY}.bc"
+# Drop artifacts from the old single-architecture build and the removed
+# content-addressed aliases; only custom_ops.<family>.bc is used now.
+rm -f "${SCRIPT_DIR}/custom_ops.bc" "${SCRIPT_DIR}"/custom_ops.*.*.bc
 TEMPLATE_ROOT="${SCRIPT_DIR}/../../../../../../../../third_party/ascend/AscendNPU-IR/bishengir/lib/Template"
 TEMPLATE_INCLUDE="${TEMPLATE_ROOT}/include"
 TEMPLATE_LIB="${TEMPLATE_ROOT}/lib"

@@ -150,6 +150,14 @@ endif()
 # both by default so one install can serve either target; the registry picks
 # the matching artifact at runtime.
 set(ASCEND_CUSTOM_OPS_DIR "${PROJECT_SOURCE_DIR}/python/triton/experimental/tle/language/dsa/ascend/custom_ops")
+# Drop artifacts from the old single-architecture build and the removed
+# content-addressed aliases; only custom_ops.<family>.bc is used now.
+file(GLOB _ASCEND_STALE_CUSTOM_OP_BITCODES
+  "${ASCEND_CUSTOM_OPS_DIR}/custom_ops.bc"
+  "${ASCEND_CUSTOM_OPS_DIR}/custom_ops.*.*.bc")
+if(_ASCEND_STALE_CUSTOM_OP_BITCODES)
+  file(REMOVE ${_ASCEND_STALE_CUSTOM_OP_BITCODES})
+endif()
 set(ASCEND_CUSTOM_OPS_ARCH_FAMILIES "c220;c310" CACHE STRING
   "ccec aicore arch families for TLE custom ops (c220 for A2/A3, c310 for A5)")
 if(DEFINED ASCEND_CUSTOM_OPS_ARCH_FAMILY)

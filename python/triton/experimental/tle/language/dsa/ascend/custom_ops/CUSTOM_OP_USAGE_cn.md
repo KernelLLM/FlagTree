@@ -399,6 +399,8 @@ out[1] = UB int32 dst_index
 ### 默认自动编译
 
 正常构建工程时，CMake 会直接调用 `ccec` / `llvm-link` 生成或更新**所有配置架构**的 `custom_ops.<arch>.bc`（默认 `c220;c310`，即一次构建同时产出 A2/A3 和 A5/950 两套 bitcode）。规则位于 `third_party/ascend/CMakeLists.txt`：架构列表由 `-DASCEND_CUSTOM_OPS_ARCH_FAMILIES=c220;c310` 选择；每个算子的 `.cpp` 按各自 aicore 架构编译为独立 `.bc`（中间产物在构建目录 `ascend_custom_ops/<family>/` 下），对应的 Template 源码编译后一起 `llvm-link` 成 `custom_ops.<family>.bc`。旧的单值 `-DASCEND_CUSTOM_OPS_ARCH_FAMILY` 已废弃并被忽略。
+>
+> 构建（以及 `build_custom_ops.sh`）启动时会清理旧的单架构 `custom_ops.bc` 和已废弃的 `custom_ops.<family>.<hash>.bc` 内容寻址别名。构建完成后目录中只应保留 `custom_ops.c220.bc` 和/或 `custom_ops.c310.bc`。
 
 ```bash
 rm -rf build
