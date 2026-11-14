@@ -2,6 +2,11 @@
 #include "TritonHCUGPUToLLVM/Passes.h"
 #include "TritonHCUGPUToLLVM/TargetUtils.h"
 #include "TritonHCUGPUTransforms/Passes.h"
+#include "TritonHCUGPUTransforms/LayoutTuning.h"
+#include "TritonHCUGPUTransforms/LayoutTuningProjection.h"
+#include "TritonHCUGPUTransforms/LayoutTuningLearned.h"
+#include "TritonHCUGPUTransforms/LayoutTuningUnified.h"
+#include "TritonHCUGPUTransforms/LayoutTuningSSA.h"
 #include "hcu/include/hipblas_instance.h"
 #include "hcu/include/hipblas_types.h"
 #include "lib/TritonHCUGPUToLLVM/TargetInfo.h"
@@ -70,6 +75,26 @@ void init_triton_hcu_passes_ttgpuir(py::module &&m) {
   ADD_PASS_OPTION_WRAPPER_4("add_accelerate_matmul",
                             mlir::createTritonHCUGPUAccelerateMatmul,
                             const std::string, int, int, int);
+  m.def("add_layout_model_tuning", [](mlir::PassManager &pm, unsigned stages,
+        const std::string &arch, int matrixSize, int kPack, int layoutForce, const std::string &executionContext) {
+    mlir::TritonHCUGPULayoutModelTuningOptions options;
+    options.numStages = stages;
+    options.projectionArch = arch;
+    options.executionContext = executionContext;
+    options.projectionMatrixInstructionSize = matrixSize;
+    options.projectionKPack = kPack;
+    options.projectionMmacLayoutForce = layoutForce;
+    pm.addPass(mlir::createTritonHCUGPULayoutModelTuning(options));
+  }, py::arg("pm"), py::arg("stages"), py::arg("arch"),
+     py::arg("matrix_instruction_size") = 0, py::arg("kpack") = 1,
+     py::arg("mmac_layout_force") = -1, py::arg("execution_context") = "");
+  m.def("add_layout_thread_locality_and_tle", [](mlir::PassManager &pm) {
+    layoutdp::addLayoutThreadLocalityAndTLE(pm);
+  });
+  m.def("add_layout_matmul_prefix", [](mlir::PassManager &pm,
+        const std::string &arch, int matrixSize, int kPack, int layoutForce) {
+    layoutdp::addLayoutMatmulPrefix(pm, {arch, matrixSize, kPack, layoutForce, 0});
+  });
   ADD_PASS_WRAPPER_0("add_optimize_epilogue",
                      mlir::createTritonHCUGPUOptimizeEpilogue);
   ADD_PASS_OPTION_WRAPPER_1(
@@ -336,6 +361,46 @@ static std::optional<std::string> lldInvoke(const char *inPath,
 
 void init_triton_hcu(py::module &&m) {
   m.doc() = "Python bindings to the HCU Triton backend";
+
+  m.def("run_layout_model_search", [](mlir::ModuleOp &candidate,
+        const std::string &modelPath, const std::string &modelSHA256,
+        const std::string &executionContext, unsigned stages,
+        const std::string &arch, const std::string &algorithm,
+        unsigned trials, unsigned candidates, unsigned beamWidth,
+        const std::string &candidatePolicy, unsigned candidatePool,
+        int matrixSize, int kPack, int layoutForce,
+        const std::string &dumpPath, const std::string &tracePath,
+        bool mfmaWarpCandidates) {
+    layoutdp::LayoutTuningOptions options;
+    options.scorer = "model";
+    options.mode = "search";
+    options.jointModelPath = modelPath;
+    options.jointModelSHA256 = modelSHA256;
+    options.jointPolicy = "generic-current-layout-v114";
+    options.numStages = stages;
+    options.projection = {arch, matrixSize, kPack, layoutForce, stages, executionContext};
+    options.algorithm = algorithm;
+    options.maxTrials = trials;
+    options.maxCandidates = candidates;
+    options.beamWidth = beamWidth;
+    options.candidatePolicy = candidatePolicy;
+    options.candidatePool = candidatePool;
+    options.dumpPath = dumpPath;
+    options.tracePath = tracePath;
+    options.mfmaWarpCandidates = mfmaWarpCandidates;
+    std::string report;
+    if (mlir::failed(layoutdp::tuneLayouts(candidate, options, &report)))
+      throw py::value_error("layout model search failed; no ProgramCost fallback");
+    return report;
+  }, py::arg("candidate"), py::arg("model_path"), py::arg("model_sha256"),
+     py::arg("execution_context"), py::arg("stages"), py::arg("arch"),
+     py::arg("algorithm") = "beam", py::arg("trials") = 64,
+     py::arg("candidates") = 12, py::arg("beam_width") = 3,
+     py::arg("candidate_policy") = "balanced-coherent", py::arg("candidate_pool") = 128,
+     py::arg("matrix_instruction_size") = 0, py::arg("kpack") = 1,
+     py::arg("mmac_layout_force") = -1, py::arg("dump_path") = "",
+     py::arg("trace_path") = "", py::arg("mfma_warp_candidates") = false,
+     "Run the model-only native layout search and return its absolute score report; explicit inputs, no environment mutation.");
 
   auto passes = m.def_submodule("passes");
   init_triton_hcu_passes_ttgpuir(passes.def_submodule("ttgpuir"));

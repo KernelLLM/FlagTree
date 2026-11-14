@@ -272,6 +272,8 @@ def compile(src, target=None, options=None, _env_vars=None):
     raw_options = dict(options or dict(), **extra_options)
     _flagprism.apply_compile_options(raw_options)
     options = backend.parse_options(raw_options)
+    if ir_source and getattr(options, "layout_execution_context", ""):
+        raise ValueError("layout workload context requires ASTSource argument binding")
     # create cache manager
     env_vars = get_cache_invalidating_env_vars() if _env_vars is None else _env_vars
     key = get_cache_key(src, backend, options, env_vars=env_vars)
@@ -462,6 +464,8 @@ class CompiledKernel:
         KernelMetadata = namedtuple('KernelMetadata', sorted(list(metadata.keys())))
         self.metadata = KernelMetadata(**metadata)
         backend = make_backend(self.metadata.target)
+        if getattr(self.metadata, "layout_execution_context", ""):
+            self._layout_rebind_backend_hash = backend.hash()
         self.packed_metadata = backend.pack_metadata(self.metadata)
         self.src = src
         self.hash = hash
@@ -504,6 +508,9 @@ class CompiledKernel:
         kernel_driver = self._get_kernel_driver()
         # create launcher
         self._run = kernel_driver.launcher_cls(self.src, self.metadata)
+        if getattr(self.metadata, "layout_execution_context", ""):
+            from triton.runtime._layout_model_context import guard_launcher
+            self._run = guard_launcher(self._run, self.src, self.metadata.layout_execution_context)
         max_shared = max_shared_mem(device)
         # not enough shared memory to run the kernel
         if self.metadata.shared > max_shared:
@@ -545,6 +552,11 @@ class CompiledKernel:
         self._init_handles()
 
         def runner(*args, stream=None):
+            if getattr(self.metadata, "layout_execution_context", ""):
+                from triton.runtime._layout_model_context import rebind_compiled_kernel
+                rebound = rebind_compiled_kernel(self, grid, args)
+                if rebound is not None:
+                    return rebound[grid](*args, stream=stream)
             if stream is None:
                 device = driver.active.get_current_device()
                 stream = driver.active.get_current_stream(device)

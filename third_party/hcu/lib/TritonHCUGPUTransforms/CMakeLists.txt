@@ -24,6 +24,19 @@ add_triton_library(TritonHCUGPUTransforms
   MlsGroup.cpp
   MlsEncodingInsertion.cpp
   MlsLowering.cpp
+  LayoutTuningDomain.cpp
+  LayoutTuningFacts.cpp
+  LayoutTuningProjection.cpp
+  LayoutTuningTransport.cpp
+  LayoutTuningCollective.cpp
+  LayoutExecutionContext.cpp
+  LayoutTuningLearned.cpp
+  LayoutTuningUnified.cpp
+  LayoutTuning.cpp
+  LayoutTuningResources.cpp
+  LayoutTuningMemory.cpp
+  LayoutTuningIndex.cpp
+  LayoutTuningPass.cpp
 
   DEPENDS
   TritonHCUGPUIR
@@ -32,6 +45,10 @@ add_triton_library(TritonHCUGPUTransforms
   TritonHCUUtils
   TritonHCUAnalysis
   DistributedIR
+  TritonTLETransformsIncGen
+
+  LINK_LIBS PUBLIC
+  TritonTLETransforms
 )
 
 target_include_directories(TritonHCUGPUTransforms PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../include)

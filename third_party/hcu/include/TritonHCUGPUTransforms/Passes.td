@@ -337,4 +337,38 @@ def TritonHCUGPUMlsLowering: Pass<"tritonhcugpu-mls-lowering", "mlir::ModuleOp">
   let dependentDialects = ["mlir::triton::hcugpu::TritonHCUGPUDialect"];
 }
 
+
+def TritonHCUGPULayoutModelTuning : Pass<"tritonhcugpu-layout-model-tuning", "mlir::ModuleOp"> {
+  let summary = "Learned current-layout scoring only; no ProgramCost fallback";
+  let dependentDialects = ["mlir::triton::gpu::TritonGPUDialect",
+                           "mlir::triton::hcugpu::TritonHCUGPUDialect",
+                           "mlir::arith::ArithDialect", "mlir::scf::SCFDialect"];
+  let options = [
+    Option<"projectionArch", "projection-arch", "std::string", "std::string{}", "Explicit actual backend architecture for candidate projection">,
+    Option<"executionContext", "execution-context", "std::string", "std::string{}", "Generic JIT-bound execution context; never an operator-family adapter">,
+    Option<"projectionMatrixInstructionSize", "projection-matrix-instruction-size", "int", "0", "Actual backend matrix instruction size">,
+    Option<"projectionKPack", "projection-kpack", "int", "1", "Actual backend K packing">,
+    Option<"projectionMmacLayoutForce", "projection-mmac-layout-force", "int", "-1", "Actual backend forced MMAC layout">,
+    Option<"numStages", "num-stages", "unsigned", "0", "Explicit launch pipeline stages for typed scorer">,
+    Option<"mode", "mode", "std::string", "std::string{\"search\"}",
+           "Frozen-model bounded search">,
+    Option<"algorithm", "algorithm", "std::string", "std::string{\"beam\"}",
+           "Frozen-model beam search">,
+    Option<"jointModelPath", "joint-model", "std::string", "std::string{}",
+           "Experimental joint deployment artifact; default disabled">,
+    Option<"jointModelSHA256", "joint-model-sha256", "std::string", "std::string{}",
+           "Required deployment file byte SHA256">,
+    Option<"jointPolicy", "joint-policy", "std::string", "std::string{}",
+           "Explicit cold-support-v2 deployment assumption">,
+    Option<"dumpPath", "dump-json", "std::string", "std::string{}",
+           "Native constraints, plans, costs and rejection report">,
+    Option<"tracePath", "trace-dir", "std::string", "std::string{}",
+           "Optional verified candidate TTGIR snapshots and per-trial details">,
+    Option<"maxTrials", "max-trials", "unsigned", "64", "Proposal budget">,
+    Option<"maxCandidates", "max-candidates", "unsigned", "12", "Candidates per anchor">,
+    Option<"beamWidth", "beam-width", "unsigned", "3", "Search beam width">
+  ];
+}
+
+
 #endif

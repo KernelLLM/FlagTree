@@ -1,0 +1,31 @@
+{
+  "clean_full_build": false,
+  "data_included": false,
+  "default_weights_changed": false,
+  "derived_terms": 0,
+  "historical_experiment": "real-operator-layout-domain-regression; 17 operators / 228 configurations",
+  "historical_native_sha256": "afac86e9b51f7d9da44a3f380555f8261473909a942ba2119470a52984ff4454",
+  "input_contract_sha256": "ef9ea80fdf58cdb994ecf31ac747623c445031e45de1faa7a1f15c0ed43b7561",
+  "mfma_warp_domain": true,
+  "parameter_sets": 1,
+  "raw_features": 183,
+  "schema": "layout-model-runtime-manifest",
+  "search": {
+    "beam": 8,
+    "candidate_policy": "balanced-coherent",
+    "candidates": 32,
+    "pool": 512,
+    "trials": 512
+  },
+  "selected": "linear183-8328",
+  "status": "frozen-8328-upstream-minimal-reproduction-passed",
+  "stored_coefficient_count": 183,
+  "target_commit": "663f84b539d4fbe910fcab8f2f976f306d436595",
+  "training_included": false,
+  "validated_native_sha256": "f39d8b8dbfdc16b36a73943be3404329d924a705cde7f53e868fec71b3b883f9",
+  "validation_report": "../validation/minimal-reproduction.json",
+  "weights_file": "weights.json",
+  "weights_sha256": "8328f1f9a2d6f94ade3b03b8a8f8d67cb5833f48b37906a7b9508e5358a9428e",
+  "build_kind": "incremental-native-overlay-against-frozen-build",
+  "baseline_full_build_native_sha256": "ea00edb367de81a412bd95a8ca2bd5e4c3008b70f6584d3fb565875935acb066"
+}

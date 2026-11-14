@@ -755,6 +755,27 @@ class JITFunction(JITCallable, KernelInterface[T]):
         # the type and the second parameter is the 'specialization' value.
         bound_args, specialization, options = binder(*args, **kwargs)
 
+        model_context = None
+        if getattr(backend, "uses_layout_execution_context", lambda: False)():
+            from ._layout_model_context import bind_context
+            if DistributedRtContext().is_lite_mode:
+                raise ValueError("model execution context does not support distributed lite launches")
+            if callable(grid):
+                grid = grid(bound_args)
+            model_context = bind_context(bound_args, specialization, grid)
+            if options.get("layout_execution_context", model_context) != model_context:
+                raise ValueError("model execution context must come from actual bound arguments and grid")
+            options["layout_execution_context"] = model_context
+            kwargs["layout_execution_context"] = model_context
+
+        # HCU model search may select a different total warp count. Bind its
+        # normalized candidate set before the in-memory JIT key, as well as
+        # before the disk compiler key; environment-only keys are insufficient.
+        layout_warps_hook = getattr(backend, "bind_layout_num_warps", None)
+        if layout_warps_hook is not None:
+            layout_options = layout_warps_hook(options)
+            options.update(layout_options)
+            kwargs.update(layout_options)
         key = compute_cache_key(kernel_key_cache, specialization, options)
         kernel = kernel_cache.get(key, None)
 
@@ -787,6 +808,8 @@ class JITFunction(JITCallable, KernelInterface[T]):
                 kernel = kernel.result()
             validate_node_launch_bindings(kernel, bound_args, specialization)
             # launch kernel
+            if model_context is not None and getattr(kernel.metadata, "layout_execution_context", None) != model_context:
+                raise ValueError("model execution context compiled metadata mismatch")
             launch_metadata = kernel.launch_metadata(grid, stream, *bound_args.values())
             # flagtree tle distributed: Add dist_param to kernel.run
             dist_param = []

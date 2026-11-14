@@ -1,0 +1,336 @@
+{
+  "schema": "upstream-minimal-layout-model-reproduction-v1",
+  "status": "passed",
+  "target_commit": "663f84b539d4fbe910fcab8f2f976f306d436595",
+  "previous_packaging_commit": "9d9c608b1814402b7a65cadb47b5c64d1eecfcf7",
+  "native_sha256": "f39d8b8dbfdc16b36a73943be3404329d924a705cde7f53e868fec71b3b883f9",
+  "backend_sha256": "991cf8b0ea3d49f69237632e2e4c75ea5264afb1536f550e6391a0f5b1059241",
+  "weights_sha256": "8328f1f9a2d6f94ade3b03b8a8f8d67cb5833f48b37906a7b9508e5358a9428e",
+  "build": {
+    "kind": "incremental-native-overlay-against-frozen-build",
+    "base_native_sha256": "ea00edb367de81a412bd95a8ca2bd5e4c3008b70f6584d3fb565875935acb066",
+    "changed_translation_units": 5,
+    "clean_full_build": false
+  },
+  "upstream_source_files_restored": [
+    "third_party/hcu/triton/Dialect/TritonGPU/Transforms/RemoveLayoutConversions.cpp",
+    "third_party/hcu/triton/Conversion/TritonGPUToLLVM/Utility.cpp",
+    "third_party/hcu/lib/TritonHCUGPUToLLVM/LoadStoreOpToLLVM.cpp"
+  ],
+  "mfma_hint_validation_relocated": true,
+  "model_weights_and_search_unchanged": true,
+  "all_16_executable_identities_unchanged": true,
+  "all_model_scores_unchanged": true,
+  "protocol": {
+    "fresh_target_compilation": true,
+    "physical_gpu": 0,
+    "processes_per_configuration": 1,
+    "warmups": 5,
+    "samples_per_method": 10,
+    "target_compilation_during_timing": false,
+    "direct_output_comparison": true,
+    "numerical_tolerances": {
+      "float16": {
+        "rtol": 0.01,
+        "atol": 0.001
+      },
+      "bfloat16": {
+        "rtol": 0.02,
+        "atol": 0.01
+      }
+    },
+    "timing_limit": "single-process quick comparison; short-kernel controls can vary; no stable speedup claim",
+    "coverage": "four configurations; no general atomic or full-suite coverage claim"
+  },
+  "cases": [
+    {
+      "configuration": {
+        "tag": "add_rms_norm-9",
+        "operator": "add_rms_norm",
+        "shape": "4096\u00d7256",
+        "dtype": "float16"
+      },
+      "methods": [
+        {
+          "mode": "compiler",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            4
+          ],
+          "model_score_unchanged": true,
+          "median_us": 19.039999693632126
+        },
+        {
+          "mode": "beam",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            1
+          ],
+          "model_score_unchanged": true,
+          "median_us": 18.48000008612871
+        },
+        {
+          "mode": "repo-s4",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            1
+          ],
+          "model_score_unchanged": true,
+          "median_us": 18.559999763965607
+        },
+        {
+          "mode": "repo-s8",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            1
+          ],
+          "model_score_unchanged": true,
+          "median_us": 18.719999119639397
+        }
+      ],
+      "model_output_comparisons": [
+        {
+          "reference": "compiler",
+          "passed": true,
+          "bitwise_equal": false,
+          "maximum_absolute_error": 0.00048828125
+        },
+        {
+          "reference": "repo-s4",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        },
+        {
+          "reference": "repo-s8",
+          "passed": true,
+          "bitwise_equal": false,
+          "maximum_absolute_error": 0.000244140625
+        }
+      ],
+      "compiler_control_ratio": 0.9958158677880465,
+      "compiler_control_within_3pct": true
+    },
+    {
+      "configuration": {
+        "tag": "dequantize_and_gather_k_cache-0",
+        "operator": "dequantize_and_gather_k_cache",
+        "shape": "1/6/3\uff1b4\uff1b64/16\uff1b0",
+        "dtype": "bfloat16"
+      },
+      "methods": [
+        {
+          "mode": "compiler",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            4
+          ],
+          "model_score_unchanged": true,
+          "median_us": 10.879999957978725
+        },
+        {
+          "mode": "beam",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            1
+          ],
+          "model_score_unchanged": true,
+          "median_us": 10.720000136643648
+        },
+        {
+          "mode": "repo-base",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            4
+          ],
+          "model_score_unchanged": true,
+          "median_us": 8.480000076815486
+        },
+        {
+          "mode": "repo-opt",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            1
+          ],
+          "model_score_unchanged": true,
+          "median_us": 9.039999917149544
+        }
+      ],
+      "model_output_comparisons": [
+        {
+          "reference": "compiler",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        },
+        {
+          "reference": "repo-base",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        },
+        {
+          "reference": "repo-opt",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        }
+      ],
+      "compiler_control_ratio": 1.1826087247009884,
+      "compiler_control_within_3pct": false
+    },
+    {
+      "configuration": {
+        "tag": "mhc_post-0",
+        "operator": "mhc_post",
+        "shape": "4096\u00d71280\u00d72",
+        "dtype": "bfloat16"
+      },
+      "methods": [
+        {
+          "mode": "compiler",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            4
+          ],
+          "model_score_unchanged": true,
+          "median_us": 83.90622213482857
+        },
+        {
+          "mode": "beam",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            1
+          ],
+          "model_score_unchanged": true,
+          "median_us": 84.13747325539589
+        },
+        {
+          "mode": "repo-base",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            4
+          ],
+          "model_score_unchanged": true,
+          "median_us": 83.94934609532356
+        },
+        {
+          "mode": "repo-opt",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            8
+          ],
+          "model_score_unchanged": true,
+          "median_us": 69.15247812867165
+        }
+      ],
+      "model_output_comparisons": [
+        {
+          "reference": "compiler",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        },
+        {
+          "reference": "repo-base",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        },
+        {
+          "reference": "repo-opt",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        }
+      ],
+      "compiler_control_ratio": 0.9999031323800796,
+      "compiler_control_within_3pct": true
+    },
+    {
+      "configuration": {
+        "tag": "router_gemm-0",
+        "operator": "router_gemm",
+        "shape": "1\u00d7256\u00d77168",
+        "dtype": "bfloat16"
+      },
+      "methods": [
+        {
+          "mode": "compiler",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            2
+          ],
+          "model_score_unchanged": true,
+          "median_us": 72.1256174147129
+        },
+        {
+          "mode": "beam",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            4
+          ],
+          "model_score_unchanged": true,
+          "median_us": 62.49874085187912
+        },
+        {
+          "mode": "repo-base",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            2
+          ],
+          "model_score_unchanged": true,
+          "median_us": 130.5331140756607
+        },
+        {
+          "mode": "repo-opt",
+          "numerical_passed": true,
+          "execution_identical_to_previous": true,
+          "num_warps": [
+            2
+          ],
+          "model_score_unchanged": true,
+          "median_us": 90.59061482548714
+        }
+      ],
+      "model_output_comparisons": [
+        {
+          "reference": "compiler",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        },
+        {
+          "reference": "repo-base",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        },
+        {
+          "reference": "repo-opt",
+          "passed": true,
+          "bitwise_equal": true,
+          "maximum_absolute_error": 0.0
+        }
+      ],
+      "compiler_control_ratio": 1.0003553234657745,
+      "compiler_control_within_3pct": true
+    }
+  ],
+  "raw_evidence_archive_sha256": "a28a956470e2cfd78b43aae43ae42aeb45bb34709d2fba5270753e1230cb6115"
+}
