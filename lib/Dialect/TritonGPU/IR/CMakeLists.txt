@@ -10,6 +10,11 @@ add_triton_library(TritonGPUIR
   TritonGPUAttrDefsIncGen
   TritonGPUTypeInterfacesIncGen
   TritonGPUOpInterfacesIncGen
+  # TritonGPU headers include the Nvidia GPU dialect, so make sure its
+  # generated headers exist before this library is compiled (parallel builds).
+  TritonNvidiaGPUTableGen
+  TritonNvidiaGPUAttrDefsIncGen
+  TritonNvidiaGPUOpInterfacesIncGen
 
   LINK_LIBS PUBLIC
   MLIRGPUDialect

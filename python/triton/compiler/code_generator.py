@@ -371,7 +371,15 @@ class CodeGenerator(ast.NodeVisitor):
             self.semantic = GluonSemantic(self.builder)
         else:
             from triton.language.semantic import TritonSemantic
-            self.builder = ir.builder(context)
+            # Triton-distributed adds its ops to a TritonOpBuilder subclass.
+            try:
+                from .._C.libtriton import distributed
+            except ImportError:
+                distributed = None
+            if distributed is not None:
+                self.builder = distributed.ir.DistributedOpBuilder(context)
+            else:
+                self.builder = ir.builder(context)
             # flagtree tle: Track logical tensor descriptors with TLE frontend semantics.
             if hasattr(self.builder, "mark_logical_tensor_descriptor"):
                 from triton.experimental.tle.language.gpu.semantic import TLEFrontendSemantic
