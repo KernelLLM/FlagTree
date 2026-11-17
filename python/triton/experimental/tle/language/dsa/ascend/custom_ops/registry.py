@@ -29,9 +29,13 @@ def custom_ops_arch_family() -> str:
     return "c220"
 
 
+al.set_custom_op_arch_resolver(custom_ops_arch_family)
+
+
 def custom_ops_bitcode() -> str:
     """Resolve the custom-op bitcode for the active arch family."""
     return str((_CUSTOM_OPS_DIR / f"custom_ops.{custom_ops_arch_family()}.bc").resolve())
+
 
 _GATHER_SUFFIX_BY_DTYPE = {tl.float16: "half", tl.bfloat16: "bf16"}
 
@@ -75,6 +79,7 @@ class duplicate_bitwise_mask:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, scalar_value, mask, repeat_times, dst_block_stride, dst_repeat_stride, out=None):
         assert out
@@ -90,7 +95,7 @@ class duplicate_bitwise_mask:
         else:
             assert False, (f"duplicate_bitwise_mask does not support dtype {_element_dtype(out)} yet")
         self.bitcode = custom_ops_bitcode()
-        self.extra_buffers = [(tl.float16, 0)]
+        self.extra_buffers = [(tl.float16, 1)]
 
 
 @al.register_custom_op
@@ -124,6 +129,11 @@ class gather_gm_to_l1:
     core = al.CORE.CUBE
     pipe = al.PIPE.PIPE_MTE2
     mode = al.MODE.SIMD
+    supported_arches = ("c220", )
+    unsupported_arch_reasons = {
+        "c310": "custom-op-written L1 tiles are not marked tightly coupled, so "
+                "the AIC/AIV split leaves tl.dot reading uninitialized L1",
+    }
 
     def __init__(self, src, index, tile_size, D, out=None):
         assert out is not None, "out buffer is required"
@@ -168,6 +178,7 @@ class gather_gm_to_ub:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_MTE2
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src, index, tile_size, D, out=None):
         assert out is not None, "out buffer is required"
@@ -207,6 +218,7 @@ class gather_mask_builtin_pattern:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src0, src1_pattern, reduce_mode, mask, src0_block_stride, repeat_times, src0_repeat_stride,
                  src1_repeat_stride, out=None):
@@ -234,7 +246,7 @@ class gather_mask_builtin_pattern:
         else:
             assert False, (f"gather_mask_builtin_pattern src0 does not support dtype {_element_dtype(src0)}")
         self.bitcode = custom_ops_bitcode()
-        self.extra_buffers = [(tl.float16, 0)]
+        self.extra_buffers = [(tl.float16, 1)]
 
 
 @al.register_custom_op
@@ -264,6 +276,7 @@ class gather_mask_custom_pattern:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src0, src1_pattern, reduce_mode, mask, src0_block_stride, repeat_times, src0_repeat_stride,
                  src1_repeat_stride, out=None):
@@ -299,7 +312,7 @@ class gather_mask_custom_pattern:
             assert False, (
                 f"gather_mask_custom_pattern src1_pattern does not support dtype {_element_dtype(src1_pattern)}")
         self.bitcode = custom_ops_bitcode()
-        self.extra_buffers = [(tl.float16, 0)]
+        self.extra_buffers = [(tl.float16, 1)]
 
 
 @al.register_custom_op
@@ -325,6 +338,7 @@ class pair_reduce_sum_continuous_mask:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src, repeat_times, mask, dst_rep_stride, src_blk_stride, src_rep_stride, out=None):
         assert out
@@ -338,7 +352,7 @@ class pair_reduce_sum_continuous_mask:
         else:
             assert False, (f"pair_reduce_sum_continuous_mask does not support dtype {_element_dtype(src)} yet")
         self.bitcode = custom_ops_bitcode()
-        self.extra_buffers = [(tl.float16, 0)]
+        self.extra_buffers = [(tl.float16, 1)]
 
 
 @al.register_custom_op
@@ -361,6 +375,7 @@ class sort32:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src0, src1, repeat_times, out=None):
         assert _element_dtype(src0) == tl.float32, (f"sort32 only supports fp32 value, got {_element_dtype(src0)}")
@@ -369,7 +384,7 @@ class sort32:
         assert _element_dtype(out) == tl.float32, (f"sort32 only supports fp32 out, got {_element_dtype(out)}")
         self.symbol = "custom_sort32"
         self.bitcode = custom_ops_bitcode()
-        self.extra_buffers = [(tl.float16, 0)]
+        self.extra_buffers = [(tl.float16, 1)]
 
 
 @al.register_custom_op
@@ -402,6 +417,7 @@ class sort_1d_pack:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src, tmp_buf, descending, TOPK, index_offset, sort_impl, out=None):
         assert out
@@ -411,7 +427,7 @@ class sort_1d_pack:
         assert _element_dtype(out) == tl.float32, (f"sort_1d_pack only supports fp32 out, got {_element_dtype(out)}")
         self.symbol = "custom_sort_1d_pack_float"
         self.bitcode = custom_ops_bitcode()
-        self.extra_buffers = [(tl.float16, 0)]
+        self.extra_buffers = [(tl.float16, 1)]
 
 
 @al.register_custom_op
@@ -452,6 +468,7 @@ class merge_exhaust_sort4:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src_proposals, ways, off0, off1, off2, off3, len0, len1, len2, len3, out=None):
         assert out
@@ -465,7 +482,7 @@ class merge_exhaust_sort4:
                                                     f"got {_element_dtype(out[1])}")
         self.symbol = "custom_merge_exhaust_sort4_float"
         self.bitcode = custom_ops_bitcode()
-        self.extra_buffers = [(tl.float16, 0)]
+        self.extra_buffers = [(tl.float16, 1)]
 
 
 @al.register_custom_op
@@ -494,6 +511,7 @@ class mrgsort:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src_proposals, off0, off1, off2, off3, len0, len1, len2, len3, if_exhausted_suspension,
                  valid_bit, repeat_times, out=None):
@@ -503,7 +521,7 @@ class mrgsort:
         assert _element_dtype(out) == tl.float32, (f"mrgsort only supports fp32 out, got {_element_dtype(out)}")
         self.symbol = "custom_mrgsort"
         self.bitcode = custom_ops_bitcode()
-        self.extra_buffers = [(tl.float16, 0)]
+        self.extra_buffers = [(tl.float16, 1)]
 
 
 @al.register_custom_op
@@ -535,6 +553,7 @@ class unpack_sort:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src_proposals, topk, out=None):
         assert out
@@ -547,7 +566,7 @@ class unpack_sort:
                                                     f"got {_element_dtype(out[1])}")
         self.symbol = "custom_unpack_sort_float"
         self.bitcode = custom_ops_bitcode()
-        self.extra_buffers = [(tl.float16, 0)]
+        self.extra_buffers = [(tl.float16, 1)]
 
 
 # Mask buffers occupy at least one 32-byte UB block.
@@ -589,6 +608,7 @@ class compare_scalar:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src, scalar, cmpMode, count, out=None):
         assert out is not None, "compare_scalar requires an output bitmask"
@@ -632,6 +652,7 @@ class cast_int4_to_fp16:
     core = al.CORE.VECTOR
     pipe = al.PIPE.PIPE_V
     mode = al.MODE.SIMD
+    supported_arches = ("c220", "c310")
 
     def __init__(self, src, roundMode, count, out=None):
         assert out is not None, "cast_int4_to_fp16 requires an output buffer"
