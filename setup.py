@@ -782,25 +782,16 @@ def get_packages():
     if check_env_flag("TRITON_BUILD_TD", "OFF"):
         # triton_dist contains several directories without __init__.py, so
         # enumerate them explicitly instead of relying on find_packages().
+        # Only the Ascend backend and the shared dispatch/tools are shipped.
         yield from [
             "triton_dist",
-            "triton_dist.benchmark",
             "triton_dist.kernels",
             "triton_dist.kernels.ascend",
-            "triton_dist.kernels.nvidia",
-            "triton_dist.kernels.amd",
             "triton_dist.language",
             "triton_dist.language.extra",
             "triton_dist.language.extra.ascend",
             "triton_dist.language.extra.cuda",
             "triton_dist.language.extra.hip",
-            "triton_dist.mega_triton_kernel",
-            "triton_dist.function",
-            "triton_dist.function.nvidia",
-            "triton_dist.layers",
-            "triton_dist.layers.nvidia",
-            "triton_dist.layers.amd",
-            "triton_dist.models",
             "triton_dist.test",
             "triton_dist.tools",
             "triton_dist.tools.compile",

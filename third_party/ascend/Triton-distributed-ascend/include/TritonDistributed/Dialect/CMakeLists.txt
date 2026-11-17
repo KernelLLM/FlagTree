@@ -1,4 +1,2 @@
+# The SIMT dialect is not built for the Ascend backend and was dropped.
 add_subdirectory(Distributed)
-if (NOT TRITON_USE_ASCEND)
-    add_subdirectory(SIMT)
-endif()
