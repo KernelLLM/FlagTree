@@ -1,5 +1,5 @@
 // RUN: triton-opt --triton-control-flow-opt %s -verify-each | FileCheck %s --check-prefix=CFO
-// RUN: triton-opt --triton-control-flow-opt --triton-to-unstructure --triton-to-linalg %s -verify-each | FileCheck %s --check-prefix=E2E --implicit-check-not='!tt.ptr' --implicit-check-not=unrealized_conversion_cast --implicit-check-not=PointerDescriptorBoundary --implicit-check-not=PointerDescriptorRebuild --implicit-check-not=PointerDescriptorOffsetForm --implicit-check-not=PointerDescriptorStructuredAxes
+// RUN: triton-opt --triton-control-flow-opt --triton-to-unstructure --triton-to-linalg-incubated %s -verify-each | FileCheck %s --check-prefix=E2E --implicit-check-not='!tt.ptr' --implicit-check-not=unrealized_conversion_cast --implicit-check-not=PointerDescriptorBoundary --implicit-check-not=PointerDescriptorRebuild --implicit-check-not=PointerDescriptorOffsetForm --implicit-check-not=PointerDescriptorStructuredAxes
 
 module attributes {hacc.target = #hacc.target<"Ascend910B2">} {
   // A rank-1 affine range plus a uniform scalar offset remains one

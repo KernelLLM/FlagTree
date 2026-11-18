@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg --split-input-file %s -verify-each 2>&1 | FileCheck %s --check-prefix=NOERR
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s -verify-each 2>&1 | FileCheck %s --check-prefix=NOERR
 // NOERR-NOT:   parseSelect currently supports all-ones shape unless cond=i1 with dense constants
 // CHECK-LABEL: func.func public @triton_for_if_load
 

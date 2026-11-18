@@ -1,4 +1,4 @@
-// RUN: triton-opt "--triton-to-linalg=global-kernel=false" --split-input-file %s | FileCheck %s
+// RUN: triton-opt "--triton-to-linalg-incubated=global-kernel=false" --split-input-file %s | FileCheck %s
 
 // Full rows recover a static copy; the tail keeps the exact original extent.
 // The condition and allocation must stay outside both row loops.

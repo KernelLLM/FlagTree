@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-unstructure --triton-to-linalg="named-ops=True" --split-input-file %s  | FileCheck %s
+// RUN: triton-opt --triton-to-unstructure --triton-to-linalg-incubated="named-ops=True" --split-input-file %s  | FileCheck %s
 // CHECK-LABEL: func.func @parse_custom
 // CHECK: %4 = hivm.hir.custom
 // CHECK: %reinterpret_cast = memref.reinterpret_cast %4 to offset: [0], sizes: [32], strides: [1] : memref<?xf16> to memref<32xf16, strided<[1]>>

@@ -1,5 +1,5 @@
 // RUN: triton-opt --discrete-mask-access-conversion --split-input-file --verify-each %s | FileCheck %s --check-prefix=PREFIX
-// RUN: triton-opt --triton-control-flow-opt --discrete-mask-access-conversion --triton-to-unstructure --triton-to-linalg --split-input-file --verify-each %s | FileCheck %s --check-prefix=LINALG --implicit-check-not=unrealized_conversion_cast --implicit-check-not=indirect_load
+// RUN: triton-opt --triton-control-flow-opt --discrete-mask-access-conversion --triton-to-unstructure --triton-to-linalg-incubated --split-input-file --verify-each %s | FileCheck %s --check-prefix=LINALG --implicit-check-not=unrealized_conversion_cast --implicit-check-not=indirect_load
 
 // Growing limits must not reopen lanes closed by a preceding iteration.
 // PREFIX-LABEL: tt.func public @prefix_history

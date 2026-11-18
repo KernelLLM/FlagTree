@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg="named-ops=True" --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated="named-ops=True" --split-input-file %s | FileCheck %s
 
 module {
   func.func @fold_one_hot_gather_after_max_with_index(%logits: tensor<2x4xf32>, %indices: tensor<2x4xi32>, %mask: tensor<2x4xi1>) -> tensor<2x1xf32> {

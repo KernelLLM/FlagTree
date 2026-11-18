@@ -1,5 +1,5 @@
 // RUN: triton-opt '--discrete-mask-access-conversion=compile-on-910-95=true compile-mode=simd_simt_template' --split-input-file --verify-each %s | FileCheck %s --check-prefix=MASK
-// RUN: triton-opt '--discrete-mask-access-conversion=compile-on-910-95=true compile-mode=simd_simt_template' '--triton-to-unstructure=compile-on-910-95=true compile-mode=simd_simt_template' '--triton-to-linalg=compile-on-910-95=true compile-mode=simd_simt_template' --split-input-file --verify-each %s | FileCheck %s --check-prefix=LOWER --implicit-check-not=unrealized_conversion_cast --implicit-check-not=RuntimeLoopMask
+// RUN: triton-opt '--discrete-mask-access-conversion=compile-on-910-95=true compile-mode=simd_simt_template' '--triton-to-unstructure=compile-on-910-95=true compile-mode=simd_simt_template' '--triton-to-linalg-incubated=compile-on-910-95=true compile-mode=simd_simt_template' --split-input-file --verify-each %s | FileCheck %s --check-prefix=LOWER --implicit-check-not=unrealized_conversion_cast --implicit-check-not=RuntimeLoopMask
 
 // A suffix is outside the prefix rewrite, but is still an analyzable range.
 // Replacing the iter_arg by its init would incorrectly forget earlier bounds.

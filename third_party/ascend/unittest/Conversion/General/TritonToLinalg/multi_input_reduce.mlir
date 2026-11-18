@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated %s | FileCheck %s
 
 // CHECK-LABEL: func.func @three_input_reduce
 // CHECK-NOT: linalg.reduce

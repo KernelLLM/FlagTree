@@ -1,5 +1,5 @@
-// RUN: triton-opt --triton-to-linalg --split-input-file %s | FileCheck %s
-// RUN: triton-opt --triton-to-linalg --split-input-file %s 2>&1 | FileCheck %s --check-prefix=WARN
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s 2>&1 | FileCheck %s --check-prefix=WARN
 
 // Unit tests for ConverterUtils::getBoundarySizes() (PR #1838,
 // "[TritonToLinalg](fix) boundary size Error for make_block_ptr").
