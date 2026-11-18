@@ -20,7 +20,7 @@
 #include "ascend/include/TritonToHFusion/Passes.h"
 #include "ascend/include/TritonToHIVM/Passes.h"
 #include "ascend/include/TritonToLLVM/Passes.h"
-#include "ascend/include/TritonToLinalg/Passes.h"
+#include "incubated/Conversion/TritonToLinalgIncubated/TritonToLinalgIncubatedPass.h"
 #include "ascend/include/TritonToStructured/Passes.h"
 #include "ascend/include/TritonToUnstructure/Passes.h"
 
@@ -104,7 +104,7 @@ void init_triton_ascend_passes_ttir(py::module &&m) {
         [](mlir::PassManager &pm, bool globalKernel, bool namedOps,
            bool enableNd2nzOnVector, bool enableSelectAnalysis,
            bool compileOn91095, const std::string &compileMode) {
-          pm.addPass(mlir::triton::createTritonToLinalgPass(
+          pm.addPass(mlir::triton::Incubated::createTritonToLinalgIncubatedPass(
               globalKernel, namedOps, enableNd2nzOnVector, enableSelectAnalysis,
               compileOn91095, compileMode));
         });

@@ -4,7 +4,6 @@ add_subdirectory(TritonMemoryAccess)
 add_subdirectory(Utils)
 add_subdirectory(TritonToStructured)
 add_subdirectory(TritonToGraph)
-add_subdirectory(TritonToLinalg)
 add_subdirectory(TritonToAnnotation)
 add_subdirectory(TritonToHFusion)
 add_subdirectory(TritonToHIVM)
@@ -22,7 +21,6 @@ if(TRITON_ENABLE_COVERAGE_HITEST)
       TritonToAnnotation
       TritonToHFusion
       TritonToHIVM
-      TritonToLinalg
       TritonControlFlowOpt
       TritonToLLVM
       TritonToStructured

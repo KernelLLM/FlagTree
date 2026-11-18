@@ -21,9 +21,38 @@ set(TRITON_DISTRIBUTED_ASCEND_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/Triton-dis
 include_directories(${ASCENDNPU_IR_SRC_DIR}/bishengir/include)
 include_directories(${ASCENDNPU_IR_BINARY_DIR}/bishengir/include) # Tablegen'd files
 
+# Ascend's TritonToLinalg lowering lives in FLIR. Create the target before the
+# Ascend libraries so DiscreteMaskAccessConversion can link it; its Phase-A
+# Ascend dependencies are attached after add_subdirectory(lib) below.
+if(FLAGTREE_BACKEND STREQUAL "ascend")
+  add_subdirectory(
+    ${PROJECT_SOURCE_DIR}/third_party/flir/include/incubated/Conversion/TritonToLinalgIncubated
+    ${PROJECT_BINARY_DIR}/third_party/flir/include/incubated/Conversion/TritonToLinalgIncubated)
+  add_subdirectory(
+    ${PROJECT_SOURCE_DIR}/third_party/flir/lib/Conversion/TritonToLinalgIncubated
+    ${PROJECT_BINARY_DIR}/third_party/flir/lib/Conversion/TritonToLinalgIncubated)
+endif()
+
 add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(bin)
+
+if(FLAGTREE_BACKEND STREQUAL "ascend")
+  target_link_libraries(TritonToLinalgIncubated PUBLIC
+    BiShengIRHIVMDialect
+    BiShengIRHFusionDialect
+    BiShengIRAnnotationDialect
+    BiShengIRScopeDialect
+    TritonAscendIR
+    TritonStructuredIR
+    TritonMemoryAccessAnalysis
+    TritonToStructured
+    TritonToUnstructure
+    TritonToGraph
+    TritonControlFlowOpt
+    MLIRTritonNPUUtils
+  )
+endif()
 
 if(TRITON_BUILD_TD)
   if(NOT EXISTS "${TRITON_DISTRIBUTED_ASCEND_SRC_DIR}/CMakeLists.txt")
@@ -123,7 +152,7 @@ add_triton_plugin(TritonAscend
   LINK_LIBS
   CommonIRIR
   TritonToGraph
-  TritonToLinalg
+  TritonToLinalgIncubated
   BiShengIRScopeDialect
   BiShengIRHIVMDialect
   MLIRMemRefDialect
@@ -134,6 +163,7 @@ add_triton_plugin(TritonAscend
 
 target_compile_definitions(TritonAscend PRIVATE __TLE_DSA__)
 target_link_libraries(TritonAscend PRIVATE CommonIRToHIVM CommonIRTransforms)
+add_dependencies(TritonAscend TritonToLinalgIncubatedConversionPassIncGen)
 if(TARGET CommonIRIR)
   add_dependencies(TritonAscend CommonIRIR)
 endif()

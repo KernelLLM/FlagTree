@@ -24,8 +24,8 @@
 #include "ascend/include/DiscreteMaskAccessConversion/Passes.h"
 
 #include "TritonControlFlowOpt/ControlFlowRewrite.h"
-#include "ascend/include/TritonToLinalg/LoadStoreConverter.h"
-#include "ascend/include/TritonToLinalg/MaskAnalysis.h"
+#include "incubated/Conversion/TritonToLinalgIncubated/LoadStoreConverter.h"
+#include "incubated/Conversion/TritonToLinalgIncubated/MaskAnalysis.h"
 #include "ascend/include/TritonToStructured/MemOpConverter.h"
 #include "ascend/include/TritonToUnstructure/OffsetAnalysis.h"
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
