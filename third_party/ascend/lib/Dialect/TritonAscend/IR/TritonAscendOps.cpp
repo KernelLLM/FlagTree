@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ascend/include/Dialect/TritonAscend/IR/TritonAscendDialect.h"
-#include "ascend/include/Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 #include "mlir/Dialect/SPIRV/IR/TargetAndABI.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "triton/Tools/Sys/GetEnv.hpp"

@@ -23,7 +23,7 @@
 #include "TritonControlFlowOpt/TensorPtrDecompose.h"
 
 #include "TritonControlFlowOpt/ControlFlowRewrite.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"

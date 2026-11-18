@@ -24,7 +24,7 @@
 #include "incubated/TritonMemoryAccess/LoadStoreMaskAnalysis.h"
 #include "TritonToStructured/CannonicalizerConverter.h"
 #include "TritonToUnstructure/IndirectAtomicUtils.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 
 #include "bishengir/Dialect/Annotation/IR/Annotation.h"

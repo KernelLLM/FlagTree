@@ -20,7 +20,7 @@
  * THE SOFTWARE.
  */
 
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 #include "ascend/include/DiscreteMaskAccessConversion/Passes.h"
 
 #include "TritonControlFlowOpt/ControlFlowRewrite.h"

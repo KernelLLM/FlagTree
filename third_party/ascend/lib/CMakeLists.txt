@@ -1,6 +1,8 @@
+add_subdirectory(
+  ${PROJECT_SOURCE_DIR}/third_party/flir/lib/TritonNPUUtils
+  ${PROJECT_BINARY_DIR}/third_party/flir/lib/TritonNPUUtils)
 add_subdirectory(AutoBlockify)
 add_subdirectory(Dialect)
-add_subdirectory(Utils)
 add_subdirectory(TritonToStructured)
 add_subdirectory(
   ${PROJECT_SOURCE_DIR}/third_party/flir/lib/TritonToGraph

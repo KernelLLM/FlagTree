@@ -24,7 +24,7 @@
 #include "incubated/TritonMemoryAccess/LoadStoreMaskAnalysis.h"
 #include "incubated/TritonMemoryAccess/MemoryAccessTags.h"
 #include "TritonToStructured/PtrAnalysis.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #include "Dialect/TritonAscend/IR/TritonAscendDialect.h"
 #include "incubated/TritonToGraph/GraphOptimization.h"

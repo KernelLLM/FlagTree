@@ -60,7 +60,7 @@
 #include "triton/Dialect/Triton/IR/Types.h"
 
 #include "TritonToStructured/PtrAnalysis.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #define DEBUG_TYPE "triton-to-structured-mask-analysis"
 
