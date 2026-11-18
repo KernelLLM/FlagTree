@@ -13,5 +13,5 @@ add_triton_library(DiscreteMaskAccessConversion
   MLIRSupport
   TritonIR
   TritonToLinalgIncubated
-  TritonMemoryAccessAnalysis
+  FlirTritonMemoryAccessAnalysis
 )

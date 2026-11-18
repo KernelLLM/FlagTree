@@ -26,6 +26,9 @@ include_directories(${ASCENDNPU_IR_BINARY_DIR}/bishengir/include) # Tablegen'd f
 # Ascend dependencies are attached after add_subdirectory(lib) below.
 if(FLAGTREE_BACKEND STREQUAL "ascend")
   add_subdirectory(
+    ${PROJECT_SOURCE_DIR}/third_party/flir/lib/TritonMemoryAccess
+    ${PROJECT_BINARY_DIR}/third_party/flir/lib/TritonMemoryAccess)
+  add_subdirectory(
     ${PROJECT_SOURCE_DIR}/third_party/flir/include/incubated/Conversion/TritonToLinalgIncubated
     ${PROJECT_BINARY_DIR}/third_party/flir/include/incubated/Conversion/TritonToLinalgIncubated)
   add_subdirectory(
@@ -45,7 +48,6 @@ if(FLAGTREE_BACKEND STREQUAL "ascend")
     BiShengIRScopeDialect
     TritonAscendIR
     TritonStructuredIR
-    TritonMemoryAccessAnalysis
     TritonToStructured
     TritonToUnstructure
     TritonToGraph

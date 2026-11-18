@@ -1,6 +1,5 @@
 add_subdirectory(AutoBlockify)
 add_subdirectory(Dialect)
-add_subdirectory(TritonMemoryAccess)
 add_subdirectory(Utils)
 add_subdirectory(TritonToStructured)
 add_subdirectory(TritonToGraph)
@@ -26,8 +25,8 @@ if(TRITON_ENABLE_COVERAGE_HITEST)
       TritonToStructured
       TritonToUnstructure
       MLIRTritonNPUUtils           # from Utils
-      TritonMemoryAccessCore
-      TritonMemoryAccessAnalysis
+      FlirTritonMemoryAccessCore
+      FlirTritonMemoryAccessAnalysis
       TritonAscendIR               # from Dialect/TritonAscend/IR
       TritonStructuredIR           # from Dialect/TritonStructured/IR
       AutoBlockify

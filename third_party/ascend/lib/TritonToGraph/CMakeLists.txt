@@ -59,7 +59,7 @@ add_triton_library(TritonToGraph
   MLIRTritonNPUUtils
   TritonAscendIR
   TritonIR
-  TritonMemoryAccessAnalysis
+  FlirTritonMemoryAccessAnalysis
   TritonToStructured
   TritonTransforms
 )

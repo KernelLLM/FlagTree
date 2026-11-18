@@ -21,7 +21,7 @@
  */
 
 #include "TritonToUnstructure/UnstructureConversionPass.h"
-#include "TritonMemoryAccess/LoadStoreMaskAnalysis.h"
+#include "incubated/TritonMemoryAccess/LoadStoreMaskAnalysis.h"
 #include "TritonToStructured/CannonicalizerConverter.h"
 #include "TritonToUnstructure/IndirectAtomicUtils.h"
 #include "Utils/Utils.h"

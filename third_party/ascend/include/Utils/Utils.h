@@ -23,7 +23,7 @@
 #ifndef TRITONNPU_UTILS_UTILS_H
 #define TRITONNPU_UTILS_UTILS_H
 
-#include "TritonMemoryAccess/OpFoldResultUtils.h"
+#include "incubated/TritonMemoryAccess/OpFoldResultUtils.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
