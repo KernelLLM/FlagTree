@@ -790,12 +790,9 @@ def get_packages():
             "triton_dist.language",
             "triton_dist.language.extra",
             "triton_dist.language.extra.ascend",
-            "triton_dist.language.extra.cuda",
-            "triton_dist.language.extra.hip",
             "triton_dist.test",
             "triton_dist.tools",
             "triton_dist.tools.compile",
-            "triton_dist.tools.profiler",
             "triton_dist.tools.runtime",
             "triton_dist.tools.tune",
         ]

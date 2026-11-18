@@ -14,6 +14,17 @@ import torch.multiprocessing as mp
 # resolves for the api tests. Spawned workers inherit sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[5] / "tutorials" / "ascend"))
 
+# Running the tests from the source tree makes pytest's prepend import mode add
+# the repo's python/ directory to sys.path (it is the root of the triton_dist
+# package). Workers spawned by run_dist_test() inherit sys.path and would then
+# import the unbuilt source triton instead of the installed wheel; hide the
+# directory while spawning. When the tests are run from an installed package
+# the parent is not called "python", so nothing is hidden.
+_SRC_PYTHON_DIR = Path(__file__).resolve().parents[4]
+if _SRC_PYTHON_DIR.name != "python" or not (_SRC_PYTHON_DIR / "triton" / "__init__.py").exists():
+    _SRC_PYTHON_DIR = None
+
+
 def pytest_configure(config):
     config.addinivalue_line("markers", "dist: mark distributed Ascend tests")
     config.addinivalue_line("markers", "ci: mark tests suitable for CI")
@@ -58,12 +69,22 @@ def run_dist_test(fn, world_size=2, backend="hccl", args=()):
     ctx = mp.get_context("spawn")
     error_queue = ctx.Queue()
 
-    mp.spawn(
-        _worker_wrapper,
-        args=(world_size, backend, fn, args, error_queue),
-        nprocs=world_size,
-        join=True,
-    )
+    # Spawned workers inherit sys.path, so drop the source-tree python/ dir that
+    # pytest added; otherwise they import the unbuilt source triton and die with
+    # "cannot import name 'getenv' from triton._C.libtriton". This process
+    # already imported triton before pytest touched sys.path.
+    saved_path = sys.path[:]
+    if _SRC_PYTHON_DIR is not None:
+        sys.path[:] = [p for p in sys.path if Path(p).resolve() != _SRC_PYTHON_DIR]
+    try:
+        mp.spawn(
+            _worker_wrapper,
+            args=(world_size, backend, fn, args, error_queue),
+            nprocs=world_size,
+            join=True,
+        )
+    finally:
+        sys.path[:] = saved_path
 
     # Collect errors from all ranks
     errors = []
