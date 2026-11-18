@@ -50,7 +50,7 @@ if(FLAGTREE_BACKEND STREQUAL "ascend")
     TritonStructuredIR
     TritonToStructured
     TritonToUnstructure
-    TritonToGraph
+    FlirTritonToGraphLegacy
     TritonControlFlowOpt
     MLIRTritonNPUUtils
   )

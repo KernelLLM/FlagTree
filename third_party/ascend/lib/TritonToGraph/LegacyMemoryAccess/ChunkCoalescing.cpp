@@ -20,9 +20,9 @@
  * THE SOFTWARE.
  */
 
-#include "TritonToGraph/LegacyMemoryAccess/ChunkCoalescing.h"
+#include "incubated/TritonToGraph/LegacyMemoryAccess/ChunkCoalescing.h"
 
-#include "TritonToGraph/GraphOptimization.h"
+#include "incubated/TritonToGraph/GraphOptimization.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/IR/BuiltinAttributes.h"

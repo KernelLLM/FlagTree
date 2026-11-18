@@ -23,7 +23,7 @@
 #ifndef TRITON_TO_CFG_PASSES_H
 #define TRITON_TO_CFG_PASSES_H
 
-#include "GraphOptimization.h"
+#include "incubated/TritonToGraph/GraphOptimization.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 

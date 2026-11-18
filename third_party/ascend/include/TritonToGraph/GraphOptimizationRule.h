@@ -23,7 +23,7 @@
 #ifndef TRITON_TO_GRAPH_GRAPH_OPTIMIZATION_RULE_H
 #define TRITON_TO_GRAPH_GRAPH_OPTIMIZATION_RULE_H
 
-#include "TritonToGraph/GraphOptimization.h"
+#include "incubated/TritonToGraph/GraphOptimization.h"
 #include "TritonToGraph/GraphOptimizationContext.h"
 
 #include "mlir/IR/PatternMatch.h"
