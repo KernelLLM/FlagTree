@@ -96,9 +96,17 @@ def _build_bishengir():
     for name in ("CC", "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS"):
         env.pop(name, None)
     subprocess.check_call(["git", "submodule", "update", "--init", "--recursive"], cwd=source, env=env)
-    build_root = source / "build"
-    _remove_generated_directory(build_root)
-    build_root.mkdir()
+    # Allow the (large) BiShengIR build tree to live outside the source tree,
+    # e.g. on a roomier filesystem.
+    build_root = Path(os.environ.get("ASCENDNPUIR_BUILD_ROOT", source / "build")).resolve()
+    # Reuse an existing tree for iterative local builds; the default keeps the
+    # canonical from-scratch behaviour.
+    reuse = os.environ.get("ASCENDNPUIR_REUSE_BUILD", "").strip().upper() in {"1", "ON", "YES", "TRUE"}
+    if reuse and build_root.is_dir():
+        print(f"[ascend] Reusing BiShengIR build tree at {build_root}", flush=True)
+    else:
+        _remove_generated_directory(build_root)
+        build_root.mkdir()
     payload = build_root / "bishengir-output"
     cmake_options = ["-DLLVM_ENABLE_LLD=" + ("ON" if shutil.which("ld.lld") else "OFF")]
     if shutil.which("ccache"):

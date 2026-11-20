@@ -614,6 +614,7 @@ class CMakeBuild(build_ext):
             "TRITON_BUILD_PROTON",
             "TRITON_BUILD_WITH_CCACHE",
             "TRITON_PARALLEL_LINK_JOBS",
+            "TRITON_BUILD_TD",
         ]
         cmake_args += [f"-D{option}={os.getenv(option)}" for option in passthrough_args if option in os.environ]
 
@@ -778,6 +779,23 @@ def get_packages():
     yield from find_packages(where="python", include=["flagtree", "flagtree.*"])
     yield from FLAGPRISM_SETUP.packages()  # FlagPrism
     yield from helper.get_spec_packages()
+    if check_env_flag("TRITON_BUILD_TD", "OFF"):
+        # triton_dist contains several directories without __init__.py, so
+        # enumerate them explicitly instead of relying on find_packages().
+        # Only the Ascend backend and the shared dispatch/tools are shipped.
+        yield from [
+            "triton_dist",
+            "triton_dist.kernels",
+            "triton_dist.kernels.ascend",
+            "triton_dist.language",
+            "triton_dist.language.extra",
+            "triton_dist.language.extra.ascend",
+            "triton_dist.test",
+            "triton_dist.tools",
+            "triton_dist.tools.compile",
+            "triton_dist.tools.runtime",
+            "triton_dist.tools.tune",
+        ]
 
     for backend in backends:
         # yield f"triton.backends.{backend.name}"

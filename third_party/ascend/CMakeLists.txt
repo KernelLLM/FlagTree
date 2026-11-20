@@ -60,7 +60,49 @@ if(TRITON_BUILD_TD)
       ${PYTHON_DIST_SRC_PATH}/triton_distributed.cc
       ${PYTHON_DIST_SRC_PATH}/ascend_passes.cc
       ${PYTHON_DIST_SRC_PATH}/ir.cc)
-    target_link_libraries(TritonDistributed PRIVATE DistributedIR Python3::Module pybind11::headers)
+    target_link_libraries(TritonDistributed PRIVATE
+      DistributedIR
+      Python3::Module
+      pybind11::headers)
+    # ascend_passes.cc pulls in HIVM.h, which needs BiShengIR's generated
+    # enums, attributes and interfaces. AscendNPU-IR is configured before this
+    # directory, but these are tablegen-only targets and are not transitive
+    # through BiShengIRHIVMDialect.
+    set(_td_bishengir_deps
+      DistributedTableGen
+      DistributedAttrDefsIncGen
+      TritonDistributedToHIVMConversionPassIncGen
+      MLIRBiShengIREnumsIncGen
+      MLIRBiShengIRAttributesIncGen
+      MLIRBiShengIRTypesIncGen
+      MLIRAggregatedOpInterfaceIncGen
+      MLIRCopyOpInterfaceIncGen
+      MLIRExtraBufferOpInterfaceIncGen
+      MLIRFlattenInterfaceIncGen
+      MLIRLocalMatmulLikeOpInterfaceIncGen
+      MLIRImplByScalarOpInterfaceIncGen
+      MLIRLibraryFunctionOpInterfaceIncGen
+      MLIROpLayoutInterfaceIncGen
+      MLIROpPipeInterfaceIncGen
+      MLIRVectorizableOpInterfaceIncGen
+      BiShengIRHIVMIncGen
+      BiShengIRHIVMInterfacesIncGen
+      BiShengIRHIVMDMAOpsIncGen
+      BiShengIRHIVMIntrinOpsIncGen
+      BiShengIRHIVMMacroOpsIncGen
+      BiShengIRHIVMVectorOpsIncGen
+      BiShengIRHIVMSynchronizationOpsIncGen
+      BiShengIRHIVMEnumsIncGen
+      BiShengIRHIVMAttributesIncGen
+      BiShengIRHIVMConversionsIncGen)
+    foreach(_td_dep IN LISTS _td_bishengir_deps)
+      if(TARGET ${_td_dep})
+        add_dependencies(TritonDistributed ${_td_dep})
+        if(TARGET TritonDistributedToHIVM)
+          add_dependencies(TritonDistributedToHIVM ${_td_dep})
+        endif()
+      endif()
+    endforeach()
   endif()
 endif()
 
@@ -389,8 +431,9 @@ if(TRITON_BUILD_UT)
   add_subdirectory(unittest)
 endif()
 
-if(TRITON_BUILD_TD)
-  add_subdirectory(Triton-distributed-ascend/csrc)
+if(TRITON_BUILD_TD AND USE_TRITON_DISTRIBUTED_AOT)
+  add_subdirectory(${TRITON_DISTRIBUTED_ASCEND_SRC_DIR}/csrc
+                   ${TRITON_DISTRIBUTED_ASCEND_BINARY_DIR}/csrc)
 endif()
 
 if(TRITON_ASCEND_HAS_INPROC_COSTMODEL)

@@ -507,6 +507,23 @@ macro(flagtree_configure_backend_libraries)
   elseif(FLAGTREE_BACKEND STREQUAL "hcu")
     list(APPEND TRITON_PLUGIN_NAMES "distributed")
     add_subdirectory(test)
+  elseif(FLAGTREE_BACKEND STREQUAL "ascend")
+    if(TRITON_BUILD_TD)
+      list(APPEND TRITON_PLUGIN_NAMES "distributed")
+      if(TARGET TritonDistributed)
+        # triton_dist's ir.cc registers the Proton dialect. Make sure the
+        # Proton TableGen headers are generated first, and point the target
+        # at FlagPrism's vendored copy when FlagPrism is enabled.
+        if(TARGET ProtonTableGen)
+          add_dependencies(TritonDistributed ProtonTableGen ProtonAttrDefsIncGen)
+        endif()
+        if(TRITON_BUILD_FLAGPRISM)
+          target_include_directories(TritonDistributed PRIVATE
+            ${PROJECT_SOURCE_DIR}/third_party/FlagPrism
+            ${PROJECT_BINARY_DIR}/third_party/FlagPrism)
+        endif()
+      endif()
+    endif()
   elseif(FLAGTREE_BACKEND STREQUAL "sunrise")
     set(TRITON_LIBRARIES
       ${triton_libs}
