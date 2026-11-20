@@ -72,6 +72,8 @@ from triton.tools.get_ascend_devices import is_compile_on_910_95
 # that disable most automatic optimizations (useful for debugging/validation).
 _USE_CUSTOM_COMPILE_OPT = os.environ.get("USE_CUSTOM_COMPILE_OPT", None) or os.environ.get(
     "_USE_CUSTOM_COMPILE_OPT", None)
+_ENABLE_O0_PIPELINE = os.environ.get("ENABLE_O0_PIPELINE", None) or os.environ.get(
+    "_ENABLE_O0_PIPELINE", None)
 
 
 # TODO: materialize the concrete min shape
@@ -392,6 +394,21 @@ def _append_custom_pipeline_option(compile_options, metadata):
         compile_options.append(f"--custom-compilation-pipeline={custom_pipeline}")
 
 
+def _apply_o0_pipeline_options(metadata):
+    # O0 pipeline: disable the optimization pipeline passes, following the
+    # `USE_CUSTOM_COMPILE_OPT` approach of setting individual metadata keys.
+    #
+    # `disable_multi_buffer` covers  `hivm-mark-multi-buffer` and
+    # `hivm-enable-multi-buffer` pair: disabling only the latter leaves
+    # unrealized multi-buffer marks behind and may produce wrong results.
+    metadata["disable_cv_pipelining"] = True
+    metadata["disable_reduce_rank_subview"] = True
+    metadata["disable_inline_load_copy"] = True
+    metadata["disable_multi_buffer"] = True
+    metadata["enable_preload"] = False
+    metadata["enable_ubuf_saving"] = False
+
+
 def get_auto_bind_sub_block_option(metadata):
     # auto_tile_and_bind_subblock is read from the module.
     # enable_auto_bind_sub_block is set by the user and has a higher priority.
@@ -660,6 +677,12 @@ def _compile_linalg_to_npu_bin(linalg: str, metadata, opt):
         metadata["disable_auto_inject_block_sync"] = True
         metadata["disable_auto_cv_work_space_manage"] = True
 
+    if opt.enable_o0_pipeline and opt.compile_on_910_95:
+        raise ValueError("O0 pipeline is not supported on the 910_95 compiler path: "
+                         "the RegBase pipeline has a different pass set")
+    if opt.enable_o0_pipeline:
+        _apply_o0_pipeline_options(metadata)
+
     if opt.compile_on_910_95:
         return linalg_to_bin_enable_npu_compile_910_95(linalg, metadata, opt)
     else:
@@ -832,6 +855,25 @@ def linalg_to_bin_enable_npu_compile_A2_A3(linalg: str, metadata, opt):
                 bishengir_hivm_opt,
                 "--enable-triton-kernel-compile=true",
             ]
+        disable_cv_pipelining = metadata.get("disable_cv_pipelining")
+        if disable_cv_pipelining is not None:
+            _compile_option_list += \
+                [f"--disable-cv-pipelining={disable_cv_pipelining}"]
+
+        disable_reduce_rank_subview = metadata.get("disable_reduce_rank_subview")
+        if disable_reduce_rank_subview is not None:
+            _compile_option_list += \
+                [f"--disable-reduce-rank-subview={disable_reduce_rank_subview}"]
+
+        disable_inline_load_copy = metadata.get("disable_inline_load_copy")
+        if disable_inline_load_copy is not None:
+            _compile_option_list += \
+                [f"--disable-inline-load-copy={disable_inline_load_copy}"]
+
+        disable_multi_buffer = metadata.get("disable_multi_buffer")
+        if disable_multi_buffer is not None:
+            _compile_option_list += \
+                [f"--disable-multi-buffer={disable_multi_buffer}"]
 
         if opt.debug:
             _compile_option_list += ["--mlir-print-ir-after-failure"]
@@ -889,6 +931,14 @@ def get_libdevice():
 @dataclass(frozen=True)
 class NPUOptions:
     debug: bool = False
+    # O0 master switch, set via the `enable_o0_pipeline` launch arg or env var.
+    enable_o0_pipeline: bool = False
+    # O0 per-pass switches; None means "do not pass the flag" so that
+    # BishengIR keeps its own default.
+    disable_cv_pipelining: bool = None
+    disable_reduce_rank_subview: bool = None
+    disable_inline_load_copy: bool = None
+    disable_multi_buffer: bool = None
     # FlagPrism: instrumentation mode participates in the option hash.
     instrumentation_mode: str = ""
     sanitize_overflow: bool = True
@@ -1091,6 +1141,8 @@ class AscendBackend(BaseBackend):
         # TODO: get available targets when building options?
         if self.target.backend == "npu":
             args = {k: opts[k] for k in NPUOptions.__dataclass_fields__.keys() if k in opts}
+            if _ENABLE_O0_PIPELINE is not None:
+                args["enable_o0_pipeline"] = True
             args.setdefault("arch", self.target.arch)
             options = NPUOptions(**args)
         else:
