@@ -23,7 +23,7 @@
 #ifndef TRITON_TO_GRAPH_LEGACY_MEMORY_ACCESS_STRIDED_LOAD_STORE_REWRITE_H
 #define TRITON_TO_GRAPH_LEGACY_MEMORY_ACCESS_STRIDED_LOAD_STORE_REWRITE_H
 
-#include "TritonMemoryAccess/MemoryAccessTags.h"
+#include "incubated/TritonMemoryAccess/MemoryAccessTags.h"
 #include "mlir/IR/PatternMatch.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 

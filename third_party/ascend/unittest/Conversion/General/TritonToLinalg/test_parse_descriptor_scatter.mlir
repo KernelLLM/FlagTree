@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: func.func @tensor_descriptor_scatter_rows_kernel
 // CHECK-NOT: tt.descriptor_scatter

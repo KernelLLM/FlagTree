@@ -1,4 +1,4 @@
-// RUN: triton-opt '--triton-to-structured=enable-mask-fallback-conversion=false optimize-dynamic-offset=true' --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt '--triton-to-structured=enable-mask-fallback-conversion=false optimize-dynamic-offset=true' --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // Tests for LoadBroadcastConverter:
 //   Case 1: ptr broadcast src shape matches mask broadcast src shape →
@@ -140,5 +140,5 @@ module {
 }
 
 // CHECK-LABEL: func.func @kernel_load_same_axis_broadcast
-// CHECK:      bufferization.to_tensor %{{.*}} restrict writable : memref<1x64xf32> to tensor<1x64xf32>
+// CHECK:      bufferization.to_tensor %{{.*}} restrict writable : memref<1x64xf32>
 // CHECK:      linalg.broadcast ins(%{{.*}} : tensor<64xf32>) outs(%{{.*}} : tensor<256x64xf32>) dimensions = [0]

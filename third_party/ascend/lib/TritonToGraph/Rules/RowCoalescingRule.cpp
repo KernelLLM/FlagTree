@@ -22,7 +22,7 @@
 
 #include "TritonToGraph/DotRowCoalescing.h"
 #include "TritonToGraph/GraphOptimizationRule.h"
-#include "TritonToGraph/LegacyMemoryAccess/RowCoalescing.h"
+#include "incubated/TritonToGraph/LegacyMemoryAccess/RowCoalescing.h"
 #include "TritonToGraph/ProgramAxisDependenceAnalysis.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"

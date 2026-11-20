@@ -1,5 +1,5 @@
 // RUN: triton-opt --triton-rewrite-tensor-descriptor-to-pointer --split-input-file %s | FileCheck %s --check-prefix=CHECK
-// RUN: triton-opt --triton-rewrite-tensor-descriptor-to-pointer --canonicalize "--triton-to-linalg=global-kernel=false named-ops=True" --split-input-file %s | FileCheck %s --check-prefix=CHECK-LINALG
+// RUN: triton-opt --triton-rewrite-tensor-descriptor-to-pointer --canonicalize "--triton-to-linalg-incubated=global-kernel=false named-ops=True" --split-input-file %s | FileCheck %s --check-prefix=CHECK-LINALG
 
 // -----
 

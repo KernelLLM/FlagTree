@@ -1,10 +1,13 @@
+add_subdirectory(
+  ${PROJECT_SOURCE_DIR}/third_party/flir/lib/TritonNPUUtils
+  ${PROJECT_BINARY_DIR}/third_party/flir/lib/TritonNPUUtils)
 add_subdirectory(AutoBlockify)
 add_subdirectory(Dialect)
-add_subdirectory(TritonMemoryAccess)
-add_subdirectory(Utils)
 add_subdirectory(TritonToStructured)
+add_subdirectory(
+  ${PROJECT_SOURCE_DIR}/third_party/flir/lib/TritonToGraph
+  ${PROJECT_BINARY_DIR}/third_party/flir/lib/TritonToGraph)
 add_subdirectory(TritonToGraph)
-add_subdirectory(TritonToLinalg)
 add_subdirectory(TritonToAnnotation)
 add_subdirectory(TritonToHFusion)
 add_subdirectory(TritonToHIVM)
@@ -22,14 +25,13 @@ if(TRITON_ENABLE_COVERAGE_HITEST)
       TritonToAnnotation
       TritonToHFusion
       TritonToHIVM
-      TritonToLinalg
       TritonControlFlowOpt
       TritonToLLVM
       TritonToStructured
       TritonToUnstructure
       MLIRTritonNPUUtils           # from Utils
-      TritonMemoryAccessCore
-      TritonMemoryAccessAnalysis
+      FlirTritonMemoryAccessCore
+      FlirTritonMemoryAccessAnalysis
       TritonAscendIR               # from Dialect/TritonAscend/IR
       TritonStructuredIR           # from Dialect/TritonStructured/IR
       AutoBlockify

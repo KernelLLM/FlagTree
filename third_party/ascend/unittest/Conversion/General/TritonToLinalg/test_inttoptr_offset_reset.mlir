@@ -1,4 +1,4 @@
-// RUN: triton-opt "--triton-to-linalg=global-kernel=false named-ops=True" --split-input-file %s | FileCheck %s
+// RUN: triton-opt "--triton-to-linalg-incubated=global-kernel=false named-ops=True" --split-input-file %s | FileCheck %s
 
 // Test the positive static offset representation selected when a scalar
 // pointer reaches the layout-sensitive memref.copy boundary.

@@ -24,6 +24,7 @@
 #define TRITON_ASCEND_TRITON_CONTROL_FLOW_OPT_CONTROL_FLOW_REWRITE_H
 
 #include "TritonControlFlowOpt/ControlFlowAnalysis.h"
+#include "incubated/TritonControlFlowOpt/ControlFlowAttrs.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -35,33 +36,6 @@
 #include "llvm/ADT/StringRef.h"
 
 namespace mlir::triton::controlflow {
-
-/// Handoff marker for SCF loops whose pointer slots have already been expanded
-/// into policy-owned descriptor components. TritonToLinalg consumes and
-/// removes it instead of applying its legacy pointer-loop decomposition a
-/// second time.
-inline constexpr llvm::StringLiteral kPointerDescriptorBoundaryAttr =
-    "PointerDescriptorBoundary";
-
-/// Handoff marker for a pointer rebuilt at a CFO control-flow boundary. The
-/// defining operation's operands are the complete descriptor roots, including
-/// invariant components omitted from the replacement SCF signature.
-inline constexpr llvm::StringLiteral kPointerDescriptorRebuildAttr =
-    "PointerDescriptorRebuild";
-
-/// Optional companion on a PointerDescriptorRebuild root. The `strided_1d`
-/// form means the tensor-pointer offset operand is a proven rank-1 affine
-/// expression rather than an opaque complete-offset carrier.
-inline constexpr llvm::StringLiteral kPointerDescriptorOffsetFormAttr =
-    "PointerDescriptorOffsetForm";
-inline constexpr llvm::StringLiteral kStrided1DOffsetForm = "strided_1d";
-
-/// Dense per-axis classification attached to a descriptor rebuild. A value
-/// of one means the complete contribution of that logical axis is represented
-/// by its scalar stride; zero means the axis is carried by the opaque complete
-/// contribution tensor.
-inline constexpr llvm::StringLiteral kPointerDescriptorStructuredAxesAttr =
-    "PointerDescriptorStructuredAxes";
 
 /// Policy-owned description of one value crossing a control-flow boundary.
 ///

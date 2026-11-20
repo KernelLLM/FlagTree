@@ -1,4 +1,4 @@
-// RUN: triton-opt '--triton-to-structured=enable-mask-fallback-conversion=false optimize-dynamic-offset=true' --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt '--triton-to-structured=enable-mask-fallback-conversion=false optimize-dynamic-offset=true' --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // Tests for StoreBroadcastConverter: when store.ptr is defined by a
 // tt.broadcast, every pointer along the broadcast axis points to the same

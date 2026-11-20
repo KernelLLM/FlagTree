@@ -22,7 +22,7 @@
 
 #include "TritonControlFlowOpt/ControlFlowRewrite.h"
 #include "TritonToUnstructure/UnstructureConversionPass.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #include "mlir/IR/Block.h"
 

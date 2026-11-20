@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: func.func @test_parse_select_dense_const
 // CHECK: %[[C32_I32:.*]] = arith.constant 32 : i32

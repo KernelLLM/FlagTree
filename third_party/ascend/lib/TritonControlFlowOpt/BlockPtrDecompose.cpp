@@ -23,7 +23,7 @@
 #include "TritonControlFlowOpt/BlockPtrDecompose.h"
 
 #include "TritonControlFlowOpt/ControlFlowRewrite.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #include "triton/Dialect/Triton/IR/Dialect.h"
 

@@ -1,9 +1,9 @@
 // RUN: triton-opt %s --triton-to-unstructure='compile-on-910-95=true compile-mode=simd_simt_template' \
-// RUN:                --triton-to-linalg='compile-on-910-95=true compile-mode=simd_simt_template' --split-input-file \
+// RUN:                --triton-to-linalg-incubated='compile-on-910-95=true compile-mode=simd_simt_template' --split-input-file \
 // RUN: | FileCheck %s
 // RUN: triton-opt %s --mlir-print-ir-after-all \
 // RUN:                --triton-to-unstructure='compile-on-910-95=true compile-mode=simd_simt_template' \
-// RUN:                --triton-to-linalg='compile-on-910-95=true compile-mode=simd_simt_template' --split-input-file 2>&1 \
+// RUN:                --triton-to-linalg-incubated='compile-on-910-95=true compile-mode=simd_simt_template' --split-input-file 2>&1 \
 // RUN: | FileCheck %s --check-prefix=SLS-INSPECT
 
 // The static stride-4 AddPtr below is deliberately inspected but cannot be
@@ -19,7 +19,7 @@
 // SLS-INSPECT: IR Dump After Canonicalizer
 // SLS-INSPECT: tt.func public @addptr_stride4_1d
 // SLS-INSPECT: tt.load {{.*}} {InspectedByStridedLoadStoreRewrite}
-// SLS-INSPECT: IR Dump After TritonToLinalg
+// SLS-INSPECT: IR Dump After TritonToLinalgIncubated
 // SLS-INSPECT: func.func @addptr_stride4_1d
 // SLS-INSPECT-NOT: call @triton_indirect_load
 // SLS-INSPECT: memref.copy
@@ -30,7 +30,7 @@
 // SLS-INSPECT: IR Dump After {{.*}}LayoutMemoryCompatibilityPass{{.*}}
 // SLS-INSPECT: tt.func public @addptr_stride4_masked_single_tile
 // SLS-INSPECT: ascend.indirect_load {{.*}} {RewrittenByStridedLoadStoreRewrite, isVolatile = false}
-// SLS-INSPECT: IR Dump After TritonToLinalg
+// SLS-INSPECT: IR Dump After TritonToLinalgIncubated
 // SLS-INSPECT: func.func @addptr_stride4_masked_single_tile
 // SLS-INSPECT: call @triton_indirect_load
 

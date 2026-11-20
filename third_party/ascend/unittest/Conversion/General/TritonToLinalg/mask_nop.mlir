@@ -1,6 +1,6 @@
-// RUN: triton-opt --triton-to-linalg --mlir-print-debuginfo --split-input-file %s \
+// RUN: triton-opt --triton-to-linalg-incubated --mlir-print-debuginfo --split-input-file %s \
 // RUN:   | FileCheck %s --check-prefix=NODEBUG
-// RUN: env LLVM_EXTRACT_DI_LOCAL_VARIABLES=1 triton-opt --triton-to-linalg \
+// RUN: env LLVM_EXTRACT_DI_LOCAL_VARIABLES=1 triton-opt --triton-to-linalg-incubated \
 // RUN:   --mlir-print-debuginfo --split-input-file %s | FileCheck %s --check-prefix=DEBUG
 
 #loc     = loc("mask.py":1:0)

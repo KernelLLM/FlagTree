@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated %s | FileCheck %s
 
 // CHECK-LABEL: func.func @test_while_loop_index_tensor
 // CHECK: %[[C8:.*]] = arith.constant 8 : index

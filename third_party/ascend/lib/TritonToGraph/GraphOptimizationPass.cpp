@@ -25,7 +25,7 @@
 #include "TritonToGraph/Passes.h"
 #include "TritonToGraph/ProgramGridTransform.h"
 #include "TritonToGraph/ResourceCostModel.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"

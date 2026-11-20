@@ -14,13 +14,13 @@
 #include "ascend/include/DiscreteMaskAccessConversion/Passes.h"
 #include "ascend/include/TritonControlFlowOpt/Passes.h"
 #include "ascend/include/TritonToAnnotation/Passes.h"
-#include "ascend/include/TritonToGraph/GraphOptimization.h"
-#include "ascend/include/TritonToGraph/LayoutMemoryOptimization.h"
+#include "incubated/TritonToGraph/GraphOptimization.h"
+#include "incubated/TritonToGraph/LayoutMemoryOptimization.h"
 #include "ascend/include/TritonToGraph/Passes.h"
 #include "ascend/include/TritonToHFusion/Passes.h"
 #include "ascend/include/TritonToHIVM/Passes.h"
 #include "ascend/include/TritonToLLVM/Passes.h"
-#include "ascend/include/TritonToLinalg/Passes.h"
+#include "incubated/Conversion/TritonToLinalgIncubated/TritonToLinalgIncubatedPass.h"
 #include "ascend/include/TritonToStructured/Passes.h"
 #include "ascend/include/TritonToUnstructure/Passes.h"
 
@@ -104,7 +104,7 @@ void init_triton_ascend_passes_ttir(py::module &&m) {
         [](mlir::PassManager &pm, bool globalKernel, bool namedOps,
            bool enableNd2nzOnVector, bool enableSelectAnalysis,
            bool compileOn91095, const std::string &compileMode) {
-          pm.addPass(mlir::triton::createTritonToLinalgPass(
+          pm.addPass(mlir::triton::Incubated::createTritonToLinalgIncubatedPass(
               globalKernel, namedOps, enableNd2nzOnVector, enableSelectAnalysis,
               compileOn91095, compileMode));
         });

@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg %s -verify-each | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated %s -verify-each | FileCheck %s
 
 module attributes {hacc.target = #hacc.target<"Ascend910B2">} {
   tt.func public @scalar_pointer_select(%lhs: !tt.ptr<f32>, %rhs: !tt.ptr<f32>, %condition: i1) -> i64 {

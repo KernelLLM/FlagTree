@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg="named-ops=True" --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated="named-ops=True" --split-input-file %s | FileCheck %s
 
 module {
 tt.func public @copy_all_layer_kv_cache2(%arg0: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %arg3: !tt.ptr<i32> {tt.divisibility = 16 : i32}) attributes {noinline = false} {

@@ -60,7 +60,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/LogicalResult.h"
 
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #define DEBUG_TYPE "triton-to-structured-ptr-analysis"
 

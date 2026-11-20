@@ -2,8 +2,8 @@
 // TRITON_DEBUG=1 and LLVM_EXTRACT_DI_LOCAL_VARIABLES=1 is set, with the original source location preserved
 // on each NOP. Without TRITON_DEBUG and LLVM_EXTRACT_DI_LOCAL_VARIABLES, no inline asm is emitted.
 //
-// RUN: triton-opt --triton-to-linalg --mlir-print-debuginfo --split-input-file %s | FileCheck %s --check-prefix=NODEBUG
-// RUN: env TRITON_DEBUG=1 LLVM_EXTRACT_DI_LOCAL_VARIABLES=1 triton-opt --triton-to-linalg --mlir-print-debuginfo --split-input-file %s | FileCheck %s --check-prefix=DEBUG
+// RUN: triton-opt --triton-to-linalg-incubated --mlir-print-debuginfo --split-input-file %s | FileCheck %s --check-prefix=NODEBUG
+// RUN: env TRITON_DEBUG=1 LLVM_EXTRACT_DI_LOCAL_VARIABLES=1 triton-opt --triton-to-linalg-incubated --mlir-print-debuginfo --split-input-file %s | FileCheck %s --check-prefix=DEBUG
 
 #loc = loc("test.py":6:0)
 #loc1 = loc("test.py":11:24)

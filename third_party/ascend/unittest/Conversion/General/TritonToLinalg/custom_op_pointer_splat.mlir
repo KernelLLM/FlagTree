@@ -1,5 +1,5 @@
-// RUN: triton-opt --triton-to-linalg --split-input-file %s | FileCheck %s
-// RUN: triton-opt --canonicalize --triton-reorder-broadcast --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
+// RUN: triton-opt --canonicalize --triton-reorder-broadcast --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // Start at the TD -> HIVM boundary: no distributed dialect is needed in TA.
 // A custom result used only by a load must not make its pointer input a

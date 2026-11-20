@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-hfusion --triton-to-linalg %s | FileCheck %s
+// RUN: triton-opt --triton-to-hfusion --triton-to-linalg-incubated %s | FileCheck %s
 
 // CHECK-LABEL: func.func @scalar_fp32_to_fp8_rtne
 // CHECK-NOT: tt.fp_to_fp

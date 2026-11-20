@@ -7,7 +7,6 @@ add_triton_library(TritonToGraph
   GraphOptimizationContext.cpp
   ResourceCostModel.cpp
   GraphOptimizationPass.cpp
-  LayoutMemoryCompatibilityPass.cpp
   MemorySsaBuilder.cpp
   MergeConcatLoadBuffer.cpp
   PermutationAnalysis.cpp
@@ -16,10 +15,6 @@ add_triton_library(TritonToGraph
   ProgramGridTransform.cpp
   MergeConcatLoadBuffer.cpp
   Passes.cpp
-  LegacyMemoryAccess/ChunkCoalescing.cpp
-  LegacyMemoryAccess/RowCoalescing.cpp
-  LegacyMemoryAccess/StridedAxisCoalescing.cpp
-  LegacyMemoryAccess/StridedLoadStoreRewrite.cpp
   Rules/ConvertModuloToMaskRule.cpp
   Rules/ReservedGraphOptimizationRule.cpp
   Rules/DiagonalMaskRemovalRule.cpp
@@ -59,7 +54,8 @@ add_triton_library(TritonToGraph
   MLIRTritonNPUUtils
   TritonAscendIR
   TritonIR
-  TritonMemoryAccessAnalysis
+  FlirTritonMemoryAccessAnalysis
+  FlirTritonToGraphLegacy
   TritonToStructured
   TritonTransforms
 )

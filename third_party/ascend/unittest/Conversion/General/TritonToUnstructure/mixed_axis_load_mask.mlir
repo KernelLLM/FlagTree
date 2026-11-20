@@ -1,7 +1,7 @@
 // RUN: triton-opt %s --triton-to-unstructure --verify-each | FileCheck %s --check-prefix=T2U
-// RUN: triton-opt %s --triton-to-unstructure --bubble-up-operation --triton-to-linalg --verify-each | FileCheck %s --check-prefix=LOWER
-// RUN: triton-opt %s --triton-to-unstructure='compile-on-910-95=true compile-mode=simd_simt_template' --bubble-up-operation --triton-to-linalg='compile-on-910-95=true compile-mode=simd_simt_template' --verify-each | FileCheck %s --check-prefix=LOWER
-// RUN: sed 's/%mask, %other/%mask/' %s | triton-opt --triton-to-unstructure --bubble-up-operation --triton-to-linalg --verify-each | FileCheck %s --check-prefix=LOWER
+// RUN: triton-opt %s --triton-to-unstructure --bubble-up-operation --triton-to-linalg-incubated --verify-each | FileCheck %s --check-prefix=LOWER
+// RUN: triton-opt %s --triton-to-unstructure='compile-on-910-95=true compile-mode=simd_simt_template' --bubble-up-operation --triton-to-linalg-incubated='compile-on-910-95=true compile-mode=simd_simt_template' --verify-each | FileCheck %s --check-prefix=LOWER
+// RUN: sed 's/%mask, %other/%mask/' %s | triton-opt --triton-to-unstructure --bubble-up-operation --triton-to-linalg-incubated --verify-each | FileCheck %s --check-prefix=LOWER
 // RUN: sed 's/cmpi slt, %x/cmpi eq, %x/' %s | triton-opt --triton-to-unstructure --verify-each | FileCheck %s --check-prefix=KEEP
 // RUN: sed 's/cmpi slt, %x/cmpi sge, %x/' %s | triton-opt --triton-to-unstructure --verify-each | FileCheck %s --check-prefix=KEEP
 

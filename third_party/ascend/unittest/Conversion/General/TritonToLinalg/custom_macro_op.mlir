@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // Test hivm.hir.custom_macro survives triton-to-linalg with sync attrs preserved.
 // CHECK-LABEL: func.func @test_custom_macro_op

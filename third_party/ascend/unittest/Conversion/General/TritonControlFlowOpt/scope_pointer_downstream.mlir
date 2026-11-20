@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-control-flow-opt --triton-to-unstructure --triton-to-linalg --split-input-file %s -verify-each | FileCheck %s --check-prefix=E2E --implicit-check-not='!tt.ptr' --implicit-check-not=unrealized_conversion_cast --implicit-check-not=PointerDescriptorBoundary --implicit-check-not=PointerDescriptorRebuild --implicit-check-not=PointerDescriptorOffsetForm --implicit-check-not=PointerDescriptorStructuredAxes
+// RUN: triton-opt --triton-control-flow-opt --triton-to-unstructure --triton-to-linalg-incubated --split-input-file %s -verify-each | FileCheck %s --check-prefix=E2E --implicit-check-not='!tt.ptr' --implicit-check-not=unrealized_conversion_cast --implicit-check-not=PointerDescriptorBoundary --implicit-check-not=PointerDescriptorRebuild --implicit-check-not=PointerDescriptorOffsetForm --implicit-check-not=PointerDescriptorStructuredAxes
 
 module attributes {hacc.target = #hacc.target<"Ascend910B2">} {
   tt.func public @scope_block_ptr_load_store(%base: !tt.ptr<f32>, %output: !tt.ptr<f32>) {

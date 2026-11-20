@@ -1,4 +1,4 @@
-// RUN: triton-opt --discrete-mask-access-conversion "--triton-to-linalg=global-kernel=false named-ops=True" --split-input-file %s | FileCheck %s
+// RUN: triton-opt --discrete-mask-access-conversion "--triton-to-linalg-incubated=global-kernel=false named-ops=True" --split-input-file %s | FileCheck %s
 
 // Case 1: other = uitofp(mask) -> select(mask, loaded, zeros)
 // CHECK-LABEL: func.func @load_other_mask

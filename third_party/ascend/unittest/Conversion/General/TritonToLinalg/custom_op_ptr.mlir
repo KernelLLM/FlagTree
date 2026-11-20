@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // Test hivm.hir.custom with distributed type producing tensor<tt.ptr> results
 // The custom op result type is converted to memref, and load uses the remapped result

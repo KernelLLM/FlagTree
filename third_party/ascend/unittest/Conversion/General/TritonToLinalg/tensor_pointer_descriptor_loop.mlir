@@ -1,6 +1,6 @@
 // RUN: triton-opt --triton-control-flow-opt %s -verify-each | FileCheck %s --check-prefix=CFO
 // RUN: triton-opt --triton-control-flow-opt --triton-to-unstructure %s -verify-each | FileCheck %s --check-prefix=T2U
-// RUN: triton-opt --triton-control-flow-opt --triton-to-unstructure --bubble-up-operation --triton-to-linalg %s -verify-each | FileCheck %s --check-prefix=LINALG
+// RUN: triton-opt --triton-control-flow-opt --triton-to-unstructure --bubble-up-operation --triton-to-linalg-incubated %s -verify-each | FileCheck %s --check-prefix=LINALG
 
 module attributes {hacc.target = #hacc.target<"Ascend910B2">} {
   tt.func public @tensor_pointer_descriptor_loop(

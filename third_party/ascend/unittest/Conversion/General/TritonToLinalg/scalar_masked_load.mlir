@@ -1,6 +1,6 @@
-// RUN: triton-opt %s --triton-to-linalg -verify-each | FileCheck %s --implicit-check-not='tensor<' --implicit-check-not='arith.select'
-// RUN: triton-opt %s --triton-to-linalg='named-ops=true' -verify-each | FileCheck %s --implicit-check-not='tensor<' --implicit-check-not='arith.select'
-// RUN: sed 's/Ascend910B2/Ascend950DT_9582/' %s | triton-opt --triton-to-linalg='compile-on-910-95=true' -verify-each | FileCheck %s --implicit-check-not='tensor<' --implicit-check-not='arith.select'
+// RUN: triton-opt %s --triton-to-linalg-incubated -verify-each | FileCheck %s --implicit-check-not='tensor<' --implicit-check-not='arith.select'
+// RUN: triton-opt %s --triton-to-linalg-incubated='named-ops=true' -verify-each | FileCheck %s --implicit-check-not='tensor<' --implicit-check-not='arith.select'
+// RUN: sed 's/Ascend910B2/Ascend950DT_9582/' %s | triton-opt --triton-to-linalg-incubated='compile-on-910-95=true' -verify-each | FileCheck %s --implicit-check-not='tensor<' --implicit-check-not='arith.select'
 
 // Scalar masked loads must keep their result scalar and only read memory in
 // the active branch. In particular, selecting the result of an unconditional

@@ -21,7 +21,7 @@
  */
 
 #include "TritonControlFlowOpt/ControlFlowRewrite.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #include "bishengir/Dialect/Scope/IR/Scope.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"

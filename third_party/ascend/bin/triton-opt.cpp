@@ -40,6 +40,7 @@
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
 #include "triton/Dialect/Triton/IR/Dialect.h"
+#include "triton/Dialect/Triton/Transforms/Passes.h"
 
 #include "ascend/include/Dialect/TritonAscend/IR/TritonAscendDialect.h"
 #include "ascend/include/Dialect/TritonStructured/IR/TritonStructuredDialect.h"
@@ -54,7 +55,7 @@
 #include "ascend/include/TritonToHFusion/Passes.h"
 #include "ascend/include/TritonToHIVM/Passes.h"
 #include "ascend/include/TritonToLLVM/Passes.h"
-#include "ascend/include/TritonToLinalg/Passes.h"
+#include "incubated/Conversion/TritonToLinalgIncubated/Passes.h"
 #include "ascend/include/TritonToStructured/Passes.h"
 #include "ascend/include/TritonToUnstructure/Passes.h"
 
@@ -74,8 +75,9 @@ static void registerAscendPasses() {
   // triton-to-structured, discrete-mask-access-conversion,
   // triton-to-annotation, triton-to-unstructure (+ bubble-up-operation),
   // triton-to-hivm, triton-to-hfusion, triton-to-llvm, commonir-to-hivm
-  // (+ reduce-sum-strength), triton-to-linalg, merge-concat-load-buffer
-  // (via TritonToGraph) and add_dynamic_cv_pipeline.
+  // (+ reduce-sum-strength), triton-to-linalg-incubated,
+  // merge-concat-load-buffer (via TritonToGraph) and add_dynamic_cv_pipeline.
+  mlir::triton::registerTritonPasses();
   mlir::triton::registerTritonControlFlowOptPasses();
   mlir::triton::registerTritonToStructuredPasses();
   mlir::triton::registerDiscreteMaskAccessConversionPasses();
@@ -85,7 +87,7 @@ static void registerAscendPasses() {
   mlir::triton::registerTritonToHFusionPasses();
   mlir::triton::registerTritonToLLVMPasses();
   mlir::triton::registerCommonIRToHIVMPasses();
-  mlir::triton::registerTritonToLinalgPasses();
+  mlir::triton::Incubated::registerTritonToLinalgIncubatedPasses();
   mlir::triton::registerAutoBlockifyPasses();
   mlir::triton::cfg::registerTritonToGraphPasses();
   mlir::triton::registerAddDynamicCVPipelinePasses();

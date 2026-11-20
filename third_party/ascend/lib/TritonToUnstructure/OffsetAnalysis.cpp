@@ -22,7 +22,7 @@
 
 #include "TritonToUnstructure/OffsetAnalysis.h"
 #include "TritonControlFlowOpt/ControlFlowRewrite.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #include "bishengir/Dialect/Annotation/IR/Annotation.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"

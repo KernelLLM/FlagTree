@@ -20,14 +20,14 @@
  * THE SOFTWARE.
  */
 
-#include "TritonToGraph/LegacyMemoryAccess/StridedLoadStoreRewrite.h"
-#include "TritonMemoryAccess/LoadStoreMaskAnalysis.h"
-#include "TritonMemoryAccess/MemoryAccessTags.h"
+#include "incubated/TritonToGraph/LegacyMemoryAccess/StridedLoadStoreRewrite.h"
+#include "incubated/TritonMemoryAccess/LoadStoreMaskAnalysis.h"
+#include "incubated/TritonMemoryAccess/MemoryAccessTags.h"
 #include "TritonToStructured/PtrAnalysis.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #include "Dialect/TritonAscend/IR/TritonAscendDialect.h"
-#include "TritonToGraph/GraphOptimization.h"
+#include "incubated/TritonToGraph/GraphOptimization.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"

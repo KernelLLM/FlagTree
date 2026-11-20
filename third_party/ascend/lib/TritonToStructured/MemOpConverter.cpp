@@ -64,8 +64,8 @@
 #include "TritonToStructured/MaskAnalysis.h"
 #include "TritonToStructured/PtrAnalysis.h"
 #include "TritonToStructured/TritonToStructuredPass.h"
-#include "Utils/InterleaveOptimization.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/InterleaveOptimization.h"
+#include "incubated/Utils/Utils.h"
 #include "bishengir/Dialect/Annotation/IR/Annotation.h"
 #include "bishengir/Dialect/HIVM/Utils/Utils.h"
 

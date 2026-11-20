@@ -1,5 +1,5 @@
-// RUN: triton-opt %s --triton-to-linalg='compile-on-910-95=true' --split-input-file | FileCheck %s --check-prefixes=ON-CHECK-LABEL,ON-CHECK-SAME
-// RUN: triton-opt %s --triton-to-linalg='compile-on-910-95=false' --split-input-file | FileCheck %s --check-prefixes=OFF-CHECK-LABEL,OFF-CHECK-SAME
+// RUN: triton-opt %s --triton-to-linalg-incubated='compile-on-910-95=true' --split-input-file | FileCheck %s --check-prefixes=ON-CHECK-LABEL,ON-CHECK-SAME
+// RUN: triton-opt %s --triton-to-linalg-incubated='compile-on-910-95=false' --split-input-file | FileCheck %s --check-prefixes=OFF-CHECK-LABEL,OFF-CHECK-SAME
 
 // isSIMTOp() routes math.sin / math.cos on f16/f32 tensor inputs to the SIMT
 // template.  Downstream justification (Ascend 950 RegBase normalize, enable-high-

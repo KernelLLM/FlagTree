@@ -1,4 +1,4 @@
-// RUN: triton-opt --discrete-mask-access-conversion --triton-to-unstructure --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt --discrete-mask-access-conversion --triton-to-unstructure --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: func.func @isin_by_search_kernel
 // The one-element loop mask controls the load itself, including in SIMD mode.

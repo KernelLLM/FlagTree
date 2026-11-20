@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg="named-ops=True" --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated="named-ops=True" --split-input-file %s | FileCheck %s
 // CHECK-LABEL: func.func @matmul_atomic_add
 // CHECK-NOT: GenericAtomicRMW
 // CHECK: tensor.extract_slice

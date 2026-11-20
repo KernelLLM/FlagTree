@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: func.func @test_parse_atomic_rmw
 // CHECK: %[[C8_I32:.*]] = arith.constant 8 : i32

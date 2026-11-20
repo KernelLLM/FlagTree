@@ -1,6 +1,6 @@
 // RUN: triton-opt %s --verify-each '-graph-optimize=rule-mask=1' -o - | FileCheck %s --check-prefix=GRAPH
-// RUN: triton-opt %s --verify-each '-graph-optimize=rule-mask=1' -triton-to-linalg -o /dev/null
-// RUN: triton-opt %s --verify-each '-graph-optimize=rule-mask=1' -triton-to-linalg -o - | FileCheck %s --check-prefix=LOWER
+// RUN: triton-opt %s --verify-each '-graph-optimize=rule-mask=1' -triton-to-linalg-incubated -o /dev/null
+// RUN: triton-opt %s --verify-each '-graph-optimize=rule-mask=1' -triton-to-linalg-incubated -o - | FileCheck %s --check-prefix=LOWER
 
 // Keep a lowering regression on the unified, type-changing layout rewrite.
 // The original access is tensor<2x3>; the graph pass must emit the equivalent

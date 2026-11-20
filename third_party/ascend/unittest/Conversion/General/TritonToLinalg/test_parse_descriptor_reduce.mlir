@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg --split-input-file %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: func.func @kernel
 // CHECK: %[[SUBVIEW:.*]] = memref.subview %[[RC:.*]][%[[VAL_36:.*]], %[[VAL_39:.*]]] [%[[VAL_38:.*]], %[[VAL_41:.*]]] [1, 1] : memref<2x16xi32, strided<[?, 1], offset: ?>> to memref<?x?xi32, strided<[?, 1], offset: ?>>

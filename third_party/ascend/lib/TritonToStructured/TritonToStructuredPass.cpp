@@ -26,8 +26,8 @@
 #include <cstdint>
 #include <optional>
 
-#include "Utils/InterleaveOptimization.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/InterleaveOptimization.h"
+#include "incubated/Utils/Utils.h"
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"

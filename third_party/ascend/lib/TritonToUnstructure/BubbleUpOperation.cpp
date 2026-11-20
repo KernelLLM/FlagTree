@@ -21,7 +21,7 @@
  */
 
 #include "TritonToUnstructure/BubbleUpOperation.h"
-#include "Utils/Utils.h"
+#include "incubated/Utils/Utils.h"
 
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"

@@ -1,4 +1,4 @@
-// RUN: triton-opt --triton-to-linalg=enable-nd2nz-on-vector=true %s | FileCheck %s
+// RUN: triton-opt --triton-to-linalg-incubated=enable-nd2nz-on-vector=true %s | FileCheck %s
 
 // CHECK-LABEL: func.func @test_nd2nz_block_ptr
 

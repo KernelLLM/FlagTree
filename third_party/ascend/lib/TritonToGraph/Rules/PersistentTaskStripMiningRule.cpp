@@ -20,7 +20,7 @@
  * THE SOFTWARE.
  */
 
-#include "TritonMemoryAccess/MemoryAccessTags.h"
+#include "incubated/TritonMemoryAccess/MemoryAccessTags.h"
 #include "TritonToGraph/EntryArgPointerAliasAnalysis.h"
 #include "TritonToGraph/GraphOptimizationRule.h"
 #include "TritonToGraph/IndependentRowReductionAnalysis.h"

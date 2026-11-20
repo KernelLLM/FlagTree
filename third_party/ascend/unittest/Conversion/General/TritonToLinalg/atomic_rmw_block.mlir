@@ -1,4 +1,4 @@
-// RUN: triton-opt -allow-unregistered-dialect --triton-to-linalg="named-ops=True" --split-input-file %s | FileCheck %s
+// RUN: triton-opt -allow-unregistered-dialect --triton-to-linalg-incubated="named-ops=True" --split-input-file %s | FileCheck %s
 
 module attributes {hacc.target = #hacc.target<"Ascend910B2">} {
   tt.func public @moe_align_block_size_stage4(%arg0: !tt.ptr<i32> {tt.divisibility = 16 : i32} , %arg1: !tt.ptr<i32> {tt.divisibility = 16 : i32} , %arg2: !tt.ptr<i32> {tt.divisibility = 16 : i32} , %arg3: !tt.ptr<i32> {tt.divisibility = 16 : i32} , %arg4: !tt.ptr<i32> {tt.divisibility = 16 : i32} , %arg5: i32) attributes {noinline = false} {
