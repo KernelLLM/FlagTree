@@ -885,7 +885,12 @@ def triton_dist_key():
     # backend
     libtriton_hash = hashlib.sha256()
     ext = sysconfig.get_config_var("EXT_SUFFIX").split(".")[-1]
-    libs = ["libtriton", "libtriton_distributed"]
+    libs = ["libtriton"]
+    # The Ascend build links the distributed pybind module into libtriton.so and
+    # does not ship a separate libtriton_distributed.so; hash it only when the
+    # standalone library is present.
+    if os.path.exists(os.path.join(triton.__path__[0], "_C", f"libtriton_distributed.{ext}")):
+        libs.append("libtriton_distributed")
     for lib in libs:
         with open(os.path.join(triton.__path__[0], "_C", f"{lib}.{ext}"), "rb") as f:
             while True:
