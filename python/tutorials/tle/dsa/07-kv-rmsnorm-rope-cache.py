@@ -8,7 +8,11 @@ import triton
 import triton.language as tl
 import triton.experimental.tle as tle
 
-from triton.backends.ascend.testing import do_bench_npu
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../test/CommonIR/Ascend/performance_case"))
+from testing import do_bench_npu
 
 logger = logging.getLogger(__name__)
 
