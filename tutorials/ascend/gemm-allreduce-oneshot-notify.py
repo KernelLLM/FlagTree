@@ -1,0 +1,423 @@
+# Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+
+import os
+import torch
+import torch_npu
+import shmem as ash
+import torch.distributed as dist
+import triton
+import triton.language as tl
+import triton_dist.language as dl
+from triton_dist.language.extra import libshmem_device
+from triton_dist.language.extra.ascend.algorithm import (
+    dist_swizzle2d_Nz,
+    gemm_swizzle2d_Nz,
+)
+from triton.language.extra.cann.extension import sub_vec_id
+from triton.runtime import driver
+import math
+from utils import ACLSHMEM_MAX_LOCAL_SIZE, SHMEM_PAGE_SIZE, init_aclshmem
+
+
+def _ash_pool_bytes(required: int) -> int:
+    """Symmetric heap: GEMM_ALLREDUCE_ASH_SIZE_GB override, else the requirement, page-aligned."""
+    override = os.environ.get("GEMM_ALLREDUCE_ASH_SIZE_GB")
+    pool_bytes = (
+        int(override) * 1024 * 1024 * 1024
+        if override is not None
+        else -(-required // SHMEM_PAGE_SIZE) * SHMEM_PAGE_SIZE
+    )
+    if pool_bytes > ACLSHMEM_MAX_LOCAL_SIZE:
+        raise ValueError(
+            f"symmetric heap of {pool_bytes / 2**30:.2f} GB exceeds the "
+            "40 GB ACLSHMEM_MAX_LOCAL_SIZE cap; shrink the sweep or lower "
+            "the GEMM_ALLREDUCE_ASH_SIZE_GB override"
+        )
+    return pool_bytes
+
+
+# ANSI color codes
+GREEN = "\033[92m"
+RED = "\033[91m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+
+
+@triton.jit
+def kernel_gemm_allreduce_notify_wait_pull(
+    # Pointers to matrices
+    a_ptr,
+    b_ptr,
+    c_ptr,
+    peer_mem_ptr,
+    signal_mem_ptr,
+    # Distributed parameters
+    rank,
+    rank_size,
+    buffer_num,
+    # Matrix dimensions
+    M,
+    N,
+    K,
+    # The stride variables represent how much to increase the ptr by when moving by 1
+    # element in a particular dimension. E.g. `stride_am` is how much to increase `a_ptr`
+    # by to get the element one row down (A has M rows).
+    stride_am,
+    stride_ak,  #
+    stride_bk,
+    stride_bn,  #
+    stride_cm,
+    stride_cn,
+    # Meta-parameters
+    pvalue: tl.constexpr,
+    BLOCK_SIZE_M: tl.constexpr,
+    BLOCK_SIZE_N: tl.constexpr,
+    BLOCK_SIZE_K: tl.constexpr,
+    COMM_BLOCK_SIZE_M: tl.constexpr,
+    COMM_BLOCK_SIZE_N: tl.constexpr,
+    SIGNAL_STRIDE: tl.constexpr,
+):
+    """Kernel for computing the matmul C = A x B.
+    A has shape (M, K), B has shape (K, N) and C has shape (M, N)
+    """
+    subblock_idx = sub_vec_id()
+    ncore = tl.num_programs(axis=0)
+    pid = tl.program_id(axis=0)
+    loop_num_per_comm = ncore * pvalue
+    num_loops_m = tl.cdiv(M, BLOCK_SIZE_M)
+    num_loops_n = tl.cdiv(N, BLOCK_SIZE_N)
+    total_loops = num_loops_m * num_loops_n
+    num_loops_comm = tl.cdiv(total_loops, loop_num_per_comm)
+    buffer_row_size = BLOCK_SIZE_M * loop_num_per_comm
+    for global_id in range(0, num_loops_comm):
+        buffer_id = global_id % buffer_num
+        actual_loop_num_per_comm = loop_num_per_comm
+        output_block_id_offset = global_id * loop_num_per_comm
+        # process tail block
+        if global_id == num_loops_comm - 1:
+            actual_loop_num_per_comm = total_loops - global_id * loop_num_per_comm
+        num_k_blocks = tl.cdiv(K, BLOCK_SIZE_K)
+        for block_id in range(pid, actual_loop_num_per_comm, ncore):
+            block_id_m, block_id_n = gemm_swizzle2d_Nz(
+                output_block_id_offset + block_id,
+                M,
+                N,
+                BLOCK_SIZE_M,
+                BLOCK_SIZE_N,
+            )
+            accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+            matmul_offs_am = block_id_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+            matmul_msk_am = matmul_offs_am[:, None] < M
+            offs_bn = block_id_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+            msk_n = offs_bn[None, :] < N
+            for block_id_k in range(0, num_k_blocks):
+                offs_k = tl.arange(0, BLOCK_SIZE_K) + block_id_k * BLOCK_SIZE_K
+                a_ptrs = a_ptr + (
+                    matmul_offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak
+                )
+                b_ptrs = b_ptr + (
+                    offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn
+                )
+                a = tl.load(
+                    a_ptrs, mask=(offs_k[None, :] < K) & matmul_msk_am, other=0.0
+                )
+                b = tl.load(b_ptrs, mask=(offs_k[:, None] < K) & msk_n, other=0.0)
+                # We accumulate along the K dimension.
+                accumulator += tl.dot(a, b)
+            c = accumulator
+            # -----------------------------------------------------------
+            # Write the block of the output matrix C with masks.
+            global_signal_id = output_block_id_offset + block_id
+            peer_mem_ptrs = (
+                peer_mem_ptr
+                + stride_cm * matmul_offs_am[:, None]
+                + stride_cn * offs_bn[None, :]
+            )
+            c_mask = (matmul_offs_am[:, None] < M) & (offs_bn[None, :] < N)
+            tl.store(peer_mem_ptrs, c, mask=c_mask)
+
+            libshmem_device.fence()
+            for consumer in range(rank_size):
+                dl.notify(
+                    signal_mem_ptr
+                    + global_signal_id * rank_size * SIGNAL_STRIDE
+                    + rank * SIGNAL_STRIDE,
+                    consumer,
+                )
+
+        comm_problem_size_m = actual_loop_num_per_comm * BLOCK_SIZE_M
+        comm_block_num = tl.cdiv(comm_problem_size_m, COMM_BLOCK_SIZE_M) * tl.cdiv(
+            BLOCK_SIZE_N, COMM_BLOCK_SIZE_N
+        )
+        if subblock_idx == 0:
+            for idx in range(pid, comm_block_num * rank_size, ncore):
+                block_id_m, block_id_n, target_rank, comm_row_shape, comm_col_shape = (
+                    dist_swizzle2d_Nz(
+                        idx,
+                        rank_size,
+                        comm_problem_size_m,
+                        BLOCK_SIZE_N,
+                        COMM_BLOCK_SIZE_M,
+                        COMM_BLOCK_SIZE_N,
+                    )
+                )
+                block_id = block_id_m * COMM_BLOCK_SIZE_M // BLOCK_SIZE_M
+                block_id_gemm_m, block_id_gemm_n = gemm_swizzle2d_Nz(
+                    output_block_id_offset + block_id, M, N, BLOCK_SIZE_M, BLOCK_SIZE_N
+                )
+                m_offset_in_block = (block_id_m * COMM_BLOCK_SIZE_M) % BLOCK_SIZE_M
+                n_offset_in_block = (block_id_n * COMM_BLOCK_SIZE_N) % BLOCK_SIZE_N
+                offs_cm = (
+                    block_id_gemm_m * BLOCK_SIZE_M
+                    + m_offset_in_block
+                    + tl.arange(0, COMM_BLOCK_SIZE_M)
+                )
+                offs_cn = (
+                    block_id_gemm_n * BLOCK_SIZE_N
+                    + n_offset_in_block
+                    + tl.arange(0, COMM_BLOCK_SIZE_N)
+                )
+                global_signal_id = output_block_id_offset + block_id
+                remote_signal_ptr = dl.symm_at(signal_mem_ptr, target_rank)
+                token = dl.wait(
+                    remote_signal_ptr
+                    + global_signal_id * rank_size * SIGNAL_STRIDE
+                    + target_rank * SIGNAL_STRIDE,
+                    1,
+                    "sys",
+                    "acquire",
+                    waitValue=1,
+                )
+                peer_data_ptr = dl.symm_at(peer_mem_ptr, target_rank)
+                remote_mem_ptr = dl.consume_token(peer_data_ptr, token)
+                c_offs = stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
+                remote_ptrs = remote_mem_ptr + c_offs
+                c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
+                c_temp = tl.load(remote_ptrs)
+                tl.atomic_add(c_ptr + c_offs, c_temp, mask=c_mask)
+
+
+def gemm_allreduce(
+    A,
+    B,
+    C,
+    peer_mem,
+    signal_mem,
+    rank,
+    rank_size,
+    buffer_num,
+    pvalue,
+    ncore,
+    BLOCK_SIZE_M,
+    BLOCK_SIZE_N,
+    BLOCK_SIZE_K,
+    COMM_BLOCK_SIZE_M,
+    COMM_BLOCK_SIZE_N,
+    SIGNAL_STRIDE,
+):
+    """consume gemm"""
+    M, K = A.shape
+    _, N = B.shape
+    assert (
+        ncore <= driver.active.utils.get_aicore_num()
+    ), "block num should less than or equal physical aicore num"
+    kernel_gemm_allreduce_notify_wait_pull[ncore, 1, 1](
+        A,
+        B,
+        C,
+        peer_mem,
+        signal_mem,
+        rank,
+        rank_size,
+        buffer_num,
+        M,
+        N,
+        K,
+        A.stride(0),
+        A.stride(1),
+        B.stride(0),
+        B.stride(1),
+        C.stride(0),
+        C.stride(1),
+        pvalue,
+        BLOCK_SIZE_M,
+        BLOCK_SIZE_N,
+        BLOCK_SIZE_K,
+        COMM_BLOCK_SIZE_M,
+        COMM_BLOCK_SIZE_N,
+        SIGNAL_STRIDE,
+    )
+
+
+def torch_gemm_allreduce(A_rank, B_rank):
+    """
+    Compute golden reference using PyTorch's matmul and all_reduce.
+
+    Args:
+        A_rank: Local A matrix on this rank.
+        B_rank: Local B matrix on this rank.
+
+    Returns:
+        C_golden: The all-reduced result (C = sum(A_i @ B_i) for all ranks i)
+    """
+
+    # Compute local C = A @ B
+    C_golden = torch.matmul(A_rank.to(torch.float32), B_rank.to(torch.float32))
+
+    # Use torch.distributed.all_reduce to get the golden reference
+    dist.all_reduce(C_golden, op=dist.ReduceOp.SUM)
+
+    return C_golden.to(torch.float16)
+
+
+def generate_matrices_for_rank(rank, M, N, K, dtype, seed_base=42):
+    """
+    Generate consistent A and B matrices for a given rank using a seed.
+
+    Args:
+        rank: Rank ID
+        M, N, K: Matrix dimensions
+        dtype: Data type
+        seed_base: Base seed for reproducibility
+
+    Returns:
+        A: Matrix of shape (M, K)
+        B: Matrix of shape (K, N)
+    """
+    # Use rank-specific seed for reproducibility
+    torch.manual_seed(seed_base + rank)
+    A = torch.randn([M, K], dtype=dtype)
+    B = torch.randn([K, N], dtype=dtype)
+    return A, B
+
+
+def run_test_distributed():
+    BLOCK_SIZE_M = 128
+    BLOCK_SIZE_N = 256
+    BLOCK_SIZE_K = 256
+    COMM_BLOCK_SIZE_M = 8
+    COMM_BLOCK_SIZE_N = 256
+    signal_dtype = torch.int32
+    ## 64 byte alignment on aclshemem wait
+    SIGNAL_STRIDE = 64 // (torch.iinfo(signal_dtype).bits // 8)
+    buffer_num = 2
+    pvalue = 4
+    ncore = driver.active.utils.get_aicore_num()
+    pe = dist.get_rank()
+    local_pe = int(os.environ["LOCAL_RANK"])
+    world_size = dist.get_world_size()
+    # The peer arena holds every rank's full M x N fp32 result and the signal
+    # arena one int32 slot-stride row per (rank, tile loop); size the heap
+    # from both, page-aligned.
+    total_loops = math.ceil(M / BLOCK_SIZE_M) * math.ceil(N / BLOCK_SIZE_N)
+    peer_elements = world_size * M * N
+    signal_elements = world_size * total_loops * SIGNAL_STRIDE
+    pool_bytes = _ash_pool_bytes(peer_elements * 4 + signal_elements * 4)
+
+    init_aclshmem(pe, world_size, pool_bytes, ash.OpEngineType.MTE)
+
+    # Calculate peer_mem size based on world_size (supports any number of ranks)
+    peer_mem_size = (
+        BLOCK_SIZE_M * pvalue * ncore * buffer_num * BLOCK_SIZE_N * world_size
+    )
+    ## allocate full result x rank on global shared memory to reduce sync points (producer doesnt have to wait)
+    peer_mem = ash.aclshmem_create_tensor(
+        [world_size * M * N],
+        dtype=torch.float32,
+        device_id=local_pe,
+    )
+    num_loops_m = math.ceil(M / BLOCK_SIZE_M)
+    num_loops_n = math.ceil(N / BLOCK_SIZE_N)
+    total_loops = num_loops_m * num_loops_n
+    signal_mem = ash.aclshmem_create_tensor(
+        [world_size * total_loops * SIGNAL_STRIDE],
+        dtype=signal_dtype,
+        device_id=local_pe,
+    )
+
+    # Extract local matrices
+    A_r, B_r = generate_matrices_for_rank(pe, M, N, K, dtype)
+    A_rank = A_r.npu()
+    B_rank = B_r.npu()
+
+    C = torch.zeros([M, N], dtype=torch.float32).npu()
+
+    def reset_kernel_state():
+        C.zero_()
+        signal_mem.fill_(0)
+
+    C_golden = torch_gemm_allreduce(A_rank, B_rank)
+    reset_kernel_state()
+    gemm_allreduce(
+        A_rank,
+        B_rank,
+        C,
+        peer_mem,
+        signal_mem,
+        pe,
+        world_size,
+        buffer_num,
+        pvalue,
+        ncore,
+        BLOCK_SIZE_M,
+        BLOCK_SIZE_N,
+        BLOCK_SIZE_K,
+        COMM_BLOCK_SIZE_M,
+        COMM_BLOCK_SIZE_N,
+        SIGNAL_STRIDE,
+    )
+    torch.npu.synchronize()
+
+    passed = torch.tensor([1], dtype=torch.int32).npu()
+    error_msg = ""
+    try:
+        torch.testing.assert_close(C_golden, C.to(torch.float16), rtol=1e-3, atol=1e-3)
+    except AssertionError as e:
+        passed[0] = 0
+        error_msg = str(e)
+
+    # Gather all ranks' pass/fail status
+    all_passed = [torch.zeros(1, dtype=torch.int32).npu() for _ in range(world_size)]
+    dist.all_gather(all_passed, passed)
+
+    # Print sequentially, one rank at a time
+    dist.barrier()
+    for rank_id in range(world_size):
+        if pe == rank_id:
+            if all_passed[rank_id].item() == 1:
+                print(
+                    f"{GREEN}[PASS]{RESET} Rank {pe}: C_golden and C match within tolerances (rtol=1e-3, atol=1e-3).",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"{RED}[FAIL]{RESET} Rank {pe}: C_golden and C do NOT match. Details:\n{error_msg}",
+                    flush=True,
+                )
+        dist.barrier()
+    # Raise if any rank failed
+    if any(r.item() == 0 for r in all_passed):
+        raise AssertionError(
+            error_msg or "gemm_allreduce_oneshot_notify correctness check failed"
+        )
+
+    ash.aclshmem_free_tensor(peer_mem)
+    ash.aclshmem_free_tensor(signal_mem)
+    _ = ash.aclshmem_finalize()
+
+
+## as of 2026-07-24, performance of notify-wait approach is 10x faster than the barrier approach on A3 with CANN 9.0 on 4 NPUs
+## dtype, M, N, K = [torch.float16, 128, 8192, 512] takes about 55us, barrier approach produced a huge runtime variation of[400us, 3ms]
+if __name__ == "__main__":
+    local_pe = int(os.environ["LOCAL_RANK"])
+    pe = int(os.environ["RANK"])
+    torch.npu.set_device(local_pe)
+    dist.init_process_group(backend="hccl", rank=pe)
+    dtype, M, N, K = [torch.float16, 4096, 4096, 4096]
+    world_size = dist.get_world_size()
+
+    print(f"[INFO] Rank {local_pe} of {world_size} initialized")
+    dist.barrier()
+    run_test_distributed()
+    if local_pe == 0:
+        print(f"[INFO] Test passed successfully for {world_size} ranks!")

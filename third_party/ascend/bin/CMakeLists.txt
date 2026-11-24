@@ -30,6 +30,8 @@ target_link_libraries(triton-opt PRIVATE
   BiShengIRScopeDialect
   BiShengIRSymbolDialect
   BiShengIRTensorDialect
+  BiShengIRTensorViewDialect
+  MLIRAVEDialect
 )
 
 mlir_check_all_link_libraries(triton-opt)
@@ -56,6 +58,8 @@ target_link_libraries(triton-mlir-opt PRIVATE
   BiShengIRScopeDialect
   BiShengIRSymbolDialect
   BiShengIRTensorDialect
+  BiShengIRTensorViewDialect
+  MLIRAVEDialect
 )
 
 mlir_check_all_link_libraries(triton-mlir-opt)

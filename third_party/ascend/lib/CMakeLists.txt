@@ -16,6 +16,10 @@ add_subdirectory(DynamicCVPipeline)
 add_subdirectory(LibEntry)
 add_subdirectory(CommonIRToHIVM)
 
+if(TRITON_BUILD_TD)
+  add_subdirectory(TritonDistributedToHIVM)
+endif()
+
 if(TRITON_ENABLE_COVERAGE_HITEST)
   set(_instrument_targets
       DiscreteMaskAccessConversion

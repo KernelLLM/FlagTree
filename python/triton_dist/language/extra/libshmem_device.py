@@ -1,0 +1,662 @@
+################################################################################
+#
+# Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files
+# (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge,
+# publish, distribute, sublicense, and/or sell copies of the Software,
+# and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+################################################################################
+import sys
+from importlib import import_module
+
+from .utils import ModuleProxy
+from triton_dist.utils import is_ascend, is_cuda, is_rocshmem, is_mori_shmem, is_maca
+from triton_dist.language.extra.ascend.aclshmem_constants import (
+    ACLSHMEMAtomicOp,
+    ACLSHMEMCmpOp,
+    ACLSHMEMSignalOp,
+    ACLSHMEMTeam,
+    ACLSHMEMTransport,
+)
+
+_BACKENDS = (
+    (is_cuda, "triton_dist.language.extra.cuda.libnvshmem_device"),
+    (is_rocshmem, "triton_dist.language.extra.hip.librocshmem_device"),
+    (is_mori_shmem, "triton_dist.language.extra.hip.libmori_shmem_device"),
+    (is_maca, "triton_dist.language.extra.maca.libmxshmem_device"),
+    (is_ascend, "triton_dist.language.extra.ascend.libaclshmem_device"),
+)
+
+proxy_list = [
+    (predicate, import_module(module_name))
+    for predicate, module_name in _BACKENDS
+    if predicate()
+]
+
+_shmem_module = ModuleProxy(proxy_list)
+
+
+@_shmem_module.dispatch
+def set_rocshmem_ctx(ctx):
+    """ROCSHMEM only"""
+    ...
+
+
+@_shmem_module.dispatch
+def my_pe():
+    """Both NVSHMEM and ROCSHMEM"""
+    ...
+
+
+@_shmem_module.dispatch
+def n_pes():
+    """Both NVSHMEM and ROCSHMEM"""
+    ...
+
+
+@_shmem_module.dispatch
+def team_my_pe(team): ...
+
+
+@_shmem_module.dispatch
+def team_n_pes(team): ...
+
+
+@_shmem_module.dispatch
+def team_pe_mapping(team, pe): ...
+
+
+@_shmem_module.dispatch
+def int_p(dest, value, pe, qp_id=0):
+    """Both NVSHMEM and ROCSHMEM"""
+    ...
+
+
+@_shmem_module.dispatch
+def g(source, pe):
+    """ACLSHMEM only: read a scalar from symmetric memory on a remote PE."""
+    ...
+
+
+@_shmem_module.dispatch
+def atomic_op(dest, value, pe, op):
+    """ACLSHMEM scalar update: add/and/or/xor/inc/set/swap.
+
+    op is a compile-time ACLSHMEMAtomicOp (ACLSHMEM_AMO_*). Pass None as value for inc.
+    Only swap returns the old value; other operations return void.
+    """
+    ...
+
+
+@_shmem_module.dispatch
+def atomic_fetch_op(dest, value, pe, op):
+    """ACLSHMEM scalar fetch-and-update: add/and/or/xor/inc/none.
+
+    op is a compile-time ACLSHMEMAtomicOp (ACLSHMEM_AMO_*). Pass None as value for inc or none.
+    All selections return the old value; none performs an atomic read.
+    """
+    ...
+
+
+@_shmem_module.dispatch
+def atomic_compare_swap(dest, cond, value, pe):
+    """ACLSHMEM only: scalar atomic compare swap on a remote PE."""
+    ...
+
+
+@_shmem_module.dispatch
+def remote_ptr(local_ptr, pe):
+    """Both NVSHMEM and ROCSHMEM"""
+    ...
+
+
+@_shmem_module.dispatch
+def remote_mc_ptr(team, ptr): ...
+
+
+@_shmem_module.dispatch
+def barrier_all(): ...
+
+
+@_shmem_module.dispatch
+def barrier_all_roce():
+    """ACLSHMEM only: vector-core barrier using RoCE transport."""
+    ...
+
+
+@_shmem_module.dispatch
+def barrier_all_vec():
+    """ACLSHMEM only"""
+    ...
+
+
+@_shmem_module.dispatch
+def barrier_all_vec_roce():
+    """ACLSHMEM only: vector-core barrier using RoCE transport."""
+    ...
+
+
+@_shmem_module.dispatch
+def barrier_all_block(): ...
+
+
+@_shmem_module.dispatch
+def barrier_all_warp(): ...
+
+
+@_shmem_module.dispatch
+def barrier_all_wave(): ...
+
+
+@_shmem_module.dispatch
+def barrier_all_wg(): ...
+
+
+@_shmem_module.dispatch
+def barrier(team): ...
+
+
+@_shmem_module.dispatch
+def barrier_roce(team):
+    """ACLSHMEM only: vector-core barrier using RoCE transport."""
+    ...
+
+
+@_shmem_module.dispatch
+def barrier_vec(team):
+    """ACLSHMEM Only"""
+    ...
+
+
+@_shmem_module.dispatch
+def barrier_vec_roce(team):
+    """ACLSHMEM only: vector-core barrier using RoCE transport."""
+    ...
+
+
+@_shmem_module.dispatch
+def barrier_block(team): ...
+
+
+@_shmem_module.dispatch
+def barrier_warp(team): ...
+
+
+@_shmem_module.dispatch
+def sync_all(): ...
+
+
+@_shmem_module.dispatch
+def sync(team):
+    """ACLSHMEM only: synchronize the PEs in a team."""
+    ...
+
+
+@_shmem_module.dispatch
+def sync_vec(team):
+    """ACLSHMEM only: synchronize the vector cores in a team."""
+    ...
+
+
+@_shmem_module.dispatch
+def sync_vec_all():
+    """ACLSHMEM only: synchronize the vector cores of all PEs."""
+    ...
+
+
+@_shmem_module.dispatch
+def sync_all_block(): ...
+
+
+@_shmem_module.dispatch
+def sync_all_warp(): ...
+
+
+@_shmem_module.dispatch
+def team_sync_block(team): ...
+
+
+@_shmem_module.dispatch
+def team_sync_warp(team): ...
+
+
+@_shmem_module.dispatch
+def quiet(): ...
+
+
+@_shmem_module.dispatch
+def quiet_lowlevel(pe=None, *, transport, qp_id=None):
+    """ACLSHMEM only: explicit MTE/UDMA/RoCE transport; QPs require UDMA/RoCE."""
+    ...
+
+
+@_shmem_module.dispatch
+def quiet_pe(): ...
+
+
+@_shmem_module.dispatch
+def fence(): ...
+
+
+@_shmem_module.dispatch
+def getmem_nbi_block(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def getmem_block(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def getmem_nbi_warp(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def getmem_warp(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def getmem_nbi(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def getmem_nbi_lowlevel(dest, source, bytes, pe, qp_id=None, *, transport):
+    """ACLSHMEM only: explicit MTE/UDMA/RoCE transport; QPs require UDMA/RoCE."""
+    ...
+
+
+@_shmem_module.dispatch
+def getmem_nbi_wave(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def getmem_nbi_wg(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def getmem(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def getmem_wave(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def getmem_wg(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_block(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_nbi_block(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_warp(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_nbi_warp(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_wave(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_wg(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_nbi(dest, source, bytes, pe, qp_id=0): ...
+
+
+@_shmem_module.dispatch
+def putmem_nbi_lowlevel(dest, source, bytes, pe, qp_id=None, *, transport):
+    """ACLSHMEM only: explicit MTE/UDMA/RoCE transport; QPs require UDMA/RoCE."""
+    ...
+
+
+@_shmem_module.dispatch
+def getmem_nbi_relay(dest, source, bytes, pe, relay_pe):
+    """Ascend only: byte-counted UDMA relay get; requires a relay-enabled build."""
+    ...
+
+
+@_shmem_module.dispatch
+def putmem_nbi_relay(dest, source, bytes, pe, relay_pe):
+    """Ascend only: byte-counted UDMA relay put; requires a relay-enabled build."""
+    ...
+
+
+@_shmem_module.dispatch
+def putmem_nbi_wave(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_nbi_wg(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_nbi(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_nbi_lowlevel(
+    dest,
+    source,
+    bytes,
+    sig_addr,
+    signal,
+    sig_op,
+    pe,
+    qp_id=None,
+    *,
+    transport=ACLSHMEMTransport.UDMA,
+):
+    """ACLSHMEM only: low-level signaling; only the default UDMA transport is supported."""
+    ...
+
+
+@_shmem_module.dispatch
+def putmem_signal(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_nbi_block(
+    dest, source, bytes, sig_addr, signal, sig_op, pe, qp_id=0
+): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_block(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_nbi_warp(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_warp(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_wave(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_wg(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_nbi_wave(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_nbi_wg(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def signal_op(sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def signal_wait_until(sig_addr, cmp_, cmp_val): ...
+
+
+@_shmem_module.dispatch
+def ulong_put_signal(dest, source, nelems, sig_addr, signal, sig_op, pe): ...
+
+
+# DON'T USE THIS. NVSHMEM 3.2.5 does not implement this
+@_shmem_module.dispatch
+def broadcastmem(team, dest, source, nelems, pe_root): ...
+
+
+@_shmem_module.dispatch
+def broadcastmem_warp(team, dest, source, nelems, pe_root): ...
+
+
+@_shmem_module.dispatch
+def broadcastmem_block(team, dest, source, nelems, pe_root): ...
+
+
+@_shmem_module.dispatch
+def broadcast(team, dest, source, nelems, pe_root): ...
+
+
+@_shmem_module.dispatch
+def broadcast_warp(team, dest, source, nelems, pe_root): ...
+
+
+@_shmem_module.dispatch
+def broadcast_block(team, dest, source, nelems, pe_root): ...
+
+
+# DON'T USE THIS. NVSHMEM 3.2.5 does not implement this
+@_shmem_module.dispatch
+def fcollectmem(team, dest, source, nelems): ...
+
+
+@_shmem_module.dispatch
+def fcollectmem_warp(team, dest, source, nelems): ...
+
+
+@_shmem_module.dispatch
+def fcollectmem_block(team, dest, source, nelems): ...
+
+
+@_shmem_module.dispatch
+def fcollect(team, dest, source, nelems): ...
+
+
+@_shmem_module.dispatch
+def fcollect_warp(team, dest, source, nelems): ...
+
+
+@_shmem_module.dispatch
+def fcollect_block(team, dest, source, nelems): ...
+
+
+### putmem_rma_* and putmem_signal_rma_* requires nvshmemi_* APIs. and you have to compile the .bc file yourself with shmem/nvshmem_bind/nvshmemi/build_nvshmemi_bc.sh
+@_shmem_module.dispatch
+def putmem_rma(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_rma_block(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_rma_warp(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_rma_nbi(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_rma_nbi_block(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_rma_nbi_warp(dest, source, bytes, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_rma(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_rma_nbi(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_rma_warp(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_rma_nbi_warp(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_rma_block(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+@_shmem_module.dispatch
+def putmem_signal_rma_nbi_block(dest, source, bytes, sig_addr, signal, sig_op, pe): ...
+
+
+# TEAM translate
+@_shmem_module.dispatch
+def team_translate_pe(src_team, pe_in_src_team, dest_team): ...
+
+
+# class nvshmemi_cmp_type(Enum):
+NVSHMEM_CMP_EQ = 0
+NVSHMEM_CMP_NE = 1
+NVSHMEM_CMP_GT = 2
+NVSHMEM_CMP_LE = 3
+NVSHMEM_CMP_LT = 4
+NVSHMEM_CMP_GE = 5
+NVSHMEM_CMP_SENTINEL = sys.maxsize
+
+# class nvshmemi_amo_t(Enum):
+NVSHMEMI_AMO_ACK = 1
+NVSHMEMI_AMO_INC = 2
+NVSHMEMI_AMO_SET = 3
+NVSHMEMI_AMO_ADD = 4
+NVSHMEMI_AMO_AND = 5
+NVSHMEMI_AMO_OR = 6
+NVSHMEMI_AMO_XOR = 7
+NVSHMEMI_AMO_SIGNAL = 8
+NVSHMEM_SIGNAL_SET = 9
+NVSHMEM_SIGNAL_ADD = 10
+NVSHMEMI_AMO_SIGNAL_SET = NVSHMEM_SIGNAL_SET  # Note - NVSHMEM_SIGNAL_SET == 9
+NVSHMEMI_AMO_SIGNAL_ADD = NVSHMEM_SIGNAL_ADD  # Note - NVSHMEM_SIGNAL_ADD == 10
+NVSHMEMI_AMO_END_OF_NONFETCH = 11  # end of nonfetch atomics
+NVSHMEMI_AMO_FETCH = 12
+NVSHMEMI_AMO_FETCH_INC = 13
+NVSHMEMI_AMO_FETCH_ADD = 14
+NVSHMEMI_AMO_FETCH_AND = 15
+NVSHMEMI_AMO_FETCH_OR = 16
+NVSHMEMI_AMO_FETCH_XOR = 17
+NVSHMEMI_AMO_SWAP = 18
+NVSHMEMI_AMO_COMPARE_SWAP = 19
+NVSHMEMI_AMO_OP_SENTINEL = sys.maxsize
+
+# team node
+NVSHMEM_TEAM_INVALID = -1
+NVSHMEM_TEAM_WORLD = 0
+NVSHMEM_TEAM_WORLD_INDEX = 0
+NVSHMEM_TEAM_SHARED = 1
+NVSHMEM_TEAM_SHARED_INDEX = 1
+NVSHMEMX_TEAM_NODE = 2
+NVSHMEM_TEAM_NODE_INDEX = 2
+NVSHMEMX_TEAM_SAME_MYPE_NODE = 3
+NVSHMEM_TEAM_SAME_MYPE_NODE_INDEX = 3
+NVSHMEMI_TEAM_SAME_GPU = 4
+NVSHMEM_TEAM_SAME_GPU_INDEX = 4
+NVSHMEMI_TEAM_GPU_LEADERS = 5
+NVSHMEM_TEAM_GPU_LEADERS_INDEX = 5
+NVSHMEM_TEAMS_MIN = 6
+NVSHMEM_TEAM_INDEX_MAX = sys.maxsize
+
+# ROCSHMEM_CMPS (enum)
+ROCSHMEM_CMP_EQ = 0
+ROCSHMEM_CMP_NE = 1
+ROCSHMEM_CMP_GT = 2
+ROCSHMEM_CMP_GE = 3
+ROCSHMEM_CMP_LT = 4
+ROCSHMEM_CMP_LE = 5
+
+# class mori_shmemi_cmp_type(Enum):
+MORI_CMP_EQ = 0
+MORI_CMP_NE = 1
+MORI_CMP_GT = 2
+MORI_CMP_LE = 3
+MORI_CMP_LT = 4
+MORI_CMP_GE = 5
+MORI_CMP_SENTINEL = sys.maxsize
+
+# ROCSHMEM_SIGNAL_OPS (enum)
+ROCSHMEM_SIGNAL_SET = 0
+ROCSHMEM_SIGNAL_ADD = 1
+
+# MoRI SHMEM atomicType (enum) - Not all types are currently supported.
+MORI_AMO_ACK = 1
+MORI_AMO_INC = 2
+MORI_AMO_SET = 3
+MORI_AMO_ADD = 4
+MORI_AMO_AND = 5
+MORI_AMO_OR = 6
+MORI_AMO_XOR = 7
+MORI_AMO_SIGNAL = 8
+MORI_SIGNAL_SET = 9
+MORI_SIGNAL_ADD = 10
+MORI_AMO_SIGNAL_SET = MORI_SIGNAL_SET
+MORI_AMO_SIGNAL_ADD = MORI_SIGNAL_ADD
+MORI_AMO_END_OF_NONFETCH = 13
+MORI_AMO_FETCH = 14
+MORI_AMO_FETCH_INC = 15
+MORI_AMO_FETCH_ADD = 16
+MORI_AMO_FETCH_AND = 17
+MORI_AMO_FETCH_OR = 18
+MORI_AMO_FETCH_XOR = 19
+MORI_AMO_SWAP = 20
+MORI_AMO_COMPARE_SWAP = 21
+MORI_AMO_OP_SENTINEL = sys.maxsize
+
+# aclshmem_team_t
+ACLSHMEM_TEAM_INVALID = ACLSHMEMTeam.INVALID
+ACLSHMEM_TEAM_WORLD = ACLSHMEMTeam.WORLD
+
+# aclshmem_cmp_op_type_t
+ACLSHMEM_CMP_EQ = ACLSHMEMCmpOp.EQ
+ACLSHMEM_CMP_NE = ACLSHMEMCmpOp.NE
+ACLSHMEM_CMP_GT = ACLSHMEMCmpOp.GT
+ACLSHMEM_CMP_GE = ACLSHMEMCmpOp.GE
+ACLSHMEM_CMP_LT = ACLSHMEMCmpOp.LT
+ACLSHMEM_CMP_LE = ACLSHMEMCmpOp.LE
+
+# aclshmem_signal_op_type_t
+ACLSHMEM_SIGNAL_SET = ACLSHMEMSignalOp.SET
+ACLSHMEM_SIGNAL_ADD = ACLSHMEMSignalOp.ADD
+
+
+# Compile-time scalar atomic operation selectors.
+ACLSHMEM_AMO_NONE = ACLSHMEMAtomicOp.NONE
+ACLSHMEM_AMO_INC = ACLSHMEMAtomicOp.INC
+ACLSHMEM_AMO_ADD = ACLSHMEMAtomicOp.ADD
+ACLSHMEM_AMO_AND = ACLSHMEMAtomicOp.AND
+ACLSHMEM_AMO_OR = ACLSHMEMAtomicOp.OR
+ACLSHMEM_AMO_XOR = ACLSHMEMAtomicOp.XOR
+ACLSHMEM_AMO_SET = ACLSHMEMAtomicOp.SET
+ACLSHMEM_AMO_SWAP = ACLSHMEMAtomicOp.SWAP
+
+# Compile-time ACLSHMEMTransport API selectors
+ACLSHMEM_TRANSPORT_AUTO = ACLSHMEMTransport.AUTO
+ACLSHMEM_TRANSPORT_UDMA = ACLSHMEMTransport.UDMA
+ACLSHMEM_TRANSPORT_ROCE = ACLSHMEMTransport.ROCE
+ACLSHMEM_TRANSPORT_MTE = ACLSHMEMTransport.MTE

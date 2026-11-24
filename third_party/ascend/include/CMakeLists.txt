@@ -13,3 +13,7 @@ add_subdirectory(TritonToStructured)
 add_subdirectory(AutoBlockify)
 add_subdirectory(DynamicCVPipeline)
 add_subdirectory(CommonIRToHIVM)
+
+if(TRITON_BUILD_TD)
+  add_subdirectory(TritonDistributedToHIVM)
+endif()

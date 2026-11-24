@@ -14,10 +14,6 @@ if(NOT ASCENDNPU_IR_SRC_DIR)
     "CMakeLists to have configured AscendNPU-IR already.")
 endif()
 
-set(TRITON_DISTRIBUTED_ASCEND_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Triton-distributed-ascend" CACHE PATH
-    "Path to Triton-distributed-ascend source root")
-set(TRITON_DISTRIBUTED_ASCEND_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/Triton-distributed-ascend")
-
 include_directories(${ASCENDNPU_IR_SRC_DIR}/bishengir/include)
 include_directories(${ASCENDNPU_IR_BINARY_DIR}/bishengir/include) # Tablegen'd files
 
@@ -26,10 +22,6 @@ add_subdirectory(lib)
 add_subdirectory(bin)
 
 if(TRITON_BUILD_TD)
-  if(NOT EXISTS "${TRITON_DISTRIBUTED_ASCEND_SRC_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR "Triton-Distributed submodule is not initialized: ${TRITON_DISTRIBUTED_ASCEND_SRC_DIR}")
-  endif()
-
   set(TRITON_USE_ASCEND ON)
   add_compile_definitions(TRITON_USE_ASCEND=1)
 
@@ -45,22 +37,27 @@ if(TRITON_BUILD_TD)
     endif()
     include_directories(${Python3_INCLUDE_DIRS})
     include_directories(${pybind11_INCLUDE_DIR})
-  endif()
 
-  include_directories(${TRITON_DISTRIBUTED_ASCEND_SRC_DIR}/include)
-  include_directories(${TRITON_DISTRIBUTED_ASCEND_BINARY_DIR}/include)
-  add_subdirectory(${TRITON_DISTRIBUTED_ASCEND_SRC_DIR}/include/TritonDistributed
-                   ${TRITON_DISTRIBUTED_ASCEND_BINARY_DIR}/include/TritonDistributed)
-  add_subdirectory(${TRITON_DISTRIBUTED_ASCEND_SRC_DIR}/lib
-                   ${TRITON_DISTRIBUTED_ASCEND_BINARY_DIR}/lib)
-
-  if(TRITON_BUILD_PYTHON_MODULE)
-    set(PYTHON_DIST_SRC_PATH ${TRITON_DISTRIBUTED_ASCEND_SRC_DIR}/python/src)
+    # The Distributed dialect, the distributed->HIVM conversion and their
+    # TableGen targets live in this backend's include/ and lib/ trees (see
+    # include/Dialect/Distributed and lib/TritonDistributedToHIVM). This plugin
+    # only carries the Python bindings; the distributed pass wrapper is
+    # registered from triton_ascend.cc, which already links BiShengIR's HIVM
+    # dialect, so no extra tablegen dependencies are needed here.
+    set(PYTHON_DIST_SRC_PATH ${CMAKE_CURRENT_SOURCE_DIR}/python/src/dist)
     add_triton_plugin(TritonDistributed
       ${PYTHON_DIST_SRC_PATH}/triton_distributed.cc
-      ${PYTHON_DIST_SRC_PATH}/ascend_passes.cc
       ${PYTHON_DIST_SRC_PATH}/ir.cc)
-    target_link_libraries(TritonDistributed PRIVATE DistributedIR Python3::Module pybind11::headers)
+    target_link_libraries(TritonDistributed PRIVATE
+      DistributedIR
+      Python3::Module
+      pybind11::headers)
+    # ir.cc includes the Distributed dialect header, which pulls in the
+    # TableGen'd .inc files. Object-library link ordering alone does not order
+    # their compilation against the TableGen runs, so declare it explicitly.
+    add_dependencies(TritonDistributed
+      DistributedTableGen
+      DistributedAttrDefsIncGen)
   endif()
 endif()
 
@@ -136,6 +133,12 @@ target_compile_definitions(TritonAscend PRIVATE __TLE_DSA__)
 target_link_libraries(TritonAscend PRIVATE CommonIRToHIVM CommonIRTransforms)
 if(TARGET CommonIRIR)
   add_dependencies(TritonAscend CommonIRIR)
+endif()
+# triton_ascend.cc registers the distributed->HIVM pass wrapper, so the
+# conversion library is only linked when the distributed extension is enabled.
+if(TARGET TritonDistributedToHIVM)
+  target_link_libraries(TritonAscend PRIVATE TritonDistributedToHIVM)
+  add_dependencies(TritonAscend TritonDistributedToHIVMConversionPassIncGen)
 endif()
 
 # TLE DSA custom ops (``tle.dsa.ascend.raw`` / ``custom_ops.<arch>.bc``)
@@ -387,10 +390,6 @@ endif()
 
 if(TRITON_BUILD_UT)
   add_subdirectory(unittest)
-endif()
-
-if(TRITON_BUILD_TD)
-  add_subdirectory(Triton-distributed-ascend/csrc)
 endif()
 
 if(TRITON_ASCEND_HAS_INPROC_COSTMODEL)
