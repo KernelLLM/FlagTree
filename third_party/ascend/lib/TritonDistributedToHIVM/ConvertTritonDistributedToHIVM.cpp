@@ -19,8 +19,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#include "TritonDistributed/Conversion/TritonDistributedToHIVM/Passes.h"
-#include "TritonDistributed/Dialect/Distributed/IR/Dialect.h"
+#include "ascend/include/TritonDistributedToHIVM/Passes.h"
+#include "ascend/include/Dialect/Distributed/IR/Dialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -30,7 +30,7 @@
 namespace mlir {
 namespace triton {
 #define GEN_PASS_DEF_CONVERTTRITONDISTRIBUTEDTOHIVM
-#include "TritonDistributed/Conversion/TritonDistributedToHIVM/Passes.h.inc"
+#include "ascend/include/TritonDistributedToHIVM/Passes.h.inc"
 } // namespace triton
 } // namespace mlir
 

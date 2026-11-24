@@ -38,6 +38,11 @@
 #include "ir.h" // TritonOpBuilder
 #include "triton/Dialect/Triton/IR/Dialect.h"
 
+#ifdef TRITON_USE_ASCEND
+#include "ascend/include/TritonDistributedToHIVM/Passes.h"
+#include "python/src/passes.h"
+#endif
+
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -64,6 +69,23 @@
 
 namespace py = pybind11;
 using namespace mlir;
+
+#ifdef TRITON_USE_ASCEND
+// Distributed (Triton-distributed) pass bindings. These live in the TritonAscend
+// plugin rather than the TritonDistributed plugin because the conversion pass
+// pulls in BiShengIR's HIVM dialect, which TritonAscend already links. The
+// TritonDistributed plugin only owns the Python IR bindings and calls
+// init_triton_distributed_ascend_passes from triton_distributed.cc.
+void init_triton_distributed_passes_ttgpuir_for_ascend(py::module &&m) {
+  using namespace mlir::triton;
+  ADD_PASS_WRAPPER_0("add_convert_triton_distributed_to_hivm",
+                     createConvertTritonDistributedToHIVM);
+}
+
+void init_triton_distributed_ascend_passes(py::module &&m) {
+  init_triton_distributed_passes_ttgpuir_for_ascend(m.def_submodule("ttgpuir"));
+}
+#endif
 
 void init_triton_ascend_passes_ttir(py::module &&m) {
   m.def("add_lane_vectorize", [](mlir::PassManager &pm) {

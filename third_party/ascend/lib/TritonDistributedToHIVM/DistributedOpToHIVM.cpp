@@ -19,8 +19,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#include "TritonDistributed/Conversion/TritonDistributedToHIVM/TritonDistributedToHIVMPass.h"
-#include "TritonDistributed/Dialect/Distributed/IR/Dialect.h"
+#include "ascend/include/TritonDistributedToHIVM/TritonDistributedToHIVMPass.h"
+#include "ascend/include/Dialect/Distributed/IR/Dialect.h"
 #include "ascend/include/Utils/Utils.h"
 #include "bishengir/Dialect/Annotation/IR/Annotation.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"

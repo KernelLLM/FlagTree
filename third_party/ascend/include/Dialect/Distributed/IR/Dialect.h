@@ -20,29 +20,31 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+#ifndef TRITON_DIALECT_DISTRIBUTED_IR_DIALECT_H_
+#define TRITON_DIALECT_DISTRIBUTED_IR_DIALECT_H_
 
-#include "TritonDistributed/Dialect/Distributed/IR/Dialect.h"
-#include "mlir/Pass/PassManager.h"
-#include "passes.h"
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-#include <pybind11/stl_bind.h>
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Dialect.h"
+#include "mlir/IR/PatternMatch.h"
+#include "triton/Dialect/Triton/IR/Dialect.h"
+#include "triton/Dialect/Triton/IR/Traits.h"
 
-namespace py = pybind11;
+// clang-format off
+#include "ascend/include/Dialect/Distributed/IR/Dialect.h.inc"
+#include "ascend/include/Dialect/Distributed/IR/DistributedEnums.h.inc"
+// clang-format on
 
-#ifdef TRITON_USE_ASCEND
-void init_triton_distributed_ascend_passes(pybind11::module &&m);
-#else
-void init_triton_distributed_passes(pybind11::module &&m);
-#endif
+#define GET_ATTRDEF_CLASSES
+#include "ascend/include/Dialect/Distributed/IR/DistributedAttrDefs.h.inc"
 
-void init_triton_distributed_ir(py::module &&m);
+#define GET_OP_CLASSES
+#include "ascend/include/Dialect/Distributed/IR/Ops.h.inc"
 
-void init_triton_distributed(py::module &&m) {
-#ifndef TRITON_USE_ASCEND
-  init_triton_distributed_passes(m.def_submodule("passes"));
-#else
-  init_triton_distributed_ascend_passes(m.def_submodule("ascend_passes"));
-#endif
-  init_triton_distributed_ir(m.def_submodule("ir"));
-}
+namespace mlir {
+namespace triton {
+namespace distributed {} // namespace distributed
+} // namespace triton
+} // namespace mlir
+
+#endif // TRITON_DIALECT_DISTRIBUTED_IR_DIALECT_H_

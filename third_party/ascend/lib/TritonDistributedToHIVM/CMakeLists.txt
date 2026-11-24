@@ -1,7 +1,7 @@
 
 add_triton_library(TritonDistributedToHIVM
-    ASCEND/DistributedOpToHIVM.cpp
-    ASCEND/ConvertTritonDistributedToHIVM.cpp
+    DistributedOpToHIVM.cpp
+    ConvertTritonDistributedToHIVM.cpp
 
     DEPENDS
     TritonDistributedToHIVMConversionPassIncGen

@@ -36,7 +36,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/SourceMgr.h"
 
-#include "TritonDistributed/Dialect/Distributed/IR/Dialect.h"
+#include "ascend/include/Dialect/Distributed/IR/Dialect.h"
 #ifndef TRITON_USE_ASCEND
 #include "TritonDistributed/Dialect/SIMT/IR/Dialect.h"
 #endif

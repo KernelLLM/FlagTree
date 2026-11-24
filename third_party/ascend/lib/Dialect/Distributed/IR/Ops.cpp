@@ -21,7 +21,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "TritonDistributed/Dialect/Distributed/IR/Dialect.h"
+#include "ascend/include/Dialect/Distributed/IR/Dialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -34,7 +34,7 @@
 #include "triton/Dialect/Triton/IR/Utility.h"
 
 #define GET_OP_CLASSES
-#include "TritonDistributed/Dialect/Distributed/IR/Ops.cpp.inc"
+#include "ascend/include/Dialect/Distributed/IR/Ops.cpp.inc"
 
 namespace mlir {
 namespace triton {

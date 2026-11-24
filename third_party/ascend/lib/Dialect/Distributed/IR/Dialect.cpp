@@ -28,8 +28,8 @@
 #include "triton/Dialect/Triton/IR/Interfaces.h"
 
 // clang-format off
-#include "TritonDistributed/Dialect/Distributed/IR/Dialect.h"
-#include "TritonDistributed/Dialect/Distributed/IR/Dialect.cpp.inc"
+#include "ascend/include/Dialect/Distributed/IR/Dialect.h"
+#include "ascend/include/Dialect/Distributed/IR/Dialect.cpp.inc"
 // clang-format on
 
 using namespace mlir;
@@ -94,17 +94,17 @@ struct TritonInlinerInterface : public DialectInlinerInterface {
 void mlir::triton::distributed::DistributedDialect::initialize() {
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "TritonDistributed/Dialect/Distributed/IR/DistributedAttrDefs.cpp.inc"
+#include "ascend/include/Dialect/Distributed/IR/DistributedAttrDefs.cpp.inc"
       >();
 
   addOperations<
 #define GET_OP_LIST
-#include "TritonDistributed/Dialect/Distributed/IR/Ops.cpp.inc"
+#include "ascend/include/Dialect/Distributed/IR/Ops.cpp.inc"
       >();
   addInterfaces<TritonInlinerInterface>();
 }
 
-#include "TritonDistributed/Dialect/Distributed/IR/DistributedEnums.cpp.inc"
+#include "ascend/include/Dialect/Distributed/IR/DistributedEnums.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "TritonDistributed/Dialect/Distributed/IR/DistributedAttrDefs.cpp.inc"
+#include "ascend/include/Dialect/Distributed/IR/DistributedAttrDefs.cpp.inc"

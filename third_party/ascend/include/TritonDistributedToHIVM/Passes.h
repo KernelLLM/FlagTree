@@ -24,16 +24,16 @@
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
 #include "mlir/Pass/Pass.h"
 
-#include "TritonDistributed/Conversion/TritonDistributedToHIVM/TritonDistributedToHIVMPass.h"
+#include "ascend/include/TritonDistributedToHIVM/TritonDistributedToHIVMPass.h"
 
 namespace mlir {
 namespace triton {
 
 #define GEN_PASS_DECL
-#include "TritonDistributed/Conversion/TritonDistributedToHIVM/Passes.h.inc"
+#include "ascend/include/TritonDistributedToHIVM/Passes.h.inc"
 
 #define GEN_PASS_REGISTRATION
-#include "TritonDistributed/Conversion/TritonDistributedToHIVM/Passes.h.inc"
+#include "ascend/include/TritonDistributedToHIVM/Passes.h.inc"
 
 } // namespace triton
 } // namespace mlir
