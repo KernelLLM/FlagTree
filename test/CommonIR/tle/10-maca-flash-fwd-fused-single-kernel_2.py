@@ -522,26 +522,12 @@ def launch_flash_fwd(q, k, v, out=None, lse=None, scale=None, causal=False, bloc
     if scale is None:
         scale = 1.0 / math.sqrt(head_dim)
 
-    # M128 is the C kernel's tile and it wins once the tile work dominates: at
-    # S=4096 D128 it beats M64 in both modes (non-causal 1.975 vs 2.651 ms,
-    # causal 1.464 vs 1.620 ms).  Below the crossover the launch cannot fill
-    # 104 SMs, so the M64 tile wins by doubling the query grid even though each
-    # CTA does half the work.  The crossover moves with head dim because a D64
-    # tile is half the registers, so it stays CTA-count-bound longer:
-    #   non-causal  M64/M128: d64 S=1024 0.1079/0.1182,
-    #                          d128 S=512 0.0676/0.0706
-    #
-    # The causal crossover was re-measured in round 13, after round 12 changed
-    # the launch order: under the balanced order M128 now wins almost
-    # everywhere, because the heavy diagonal CTA is started first and the M64
-    # grid only adds waves of light CTAs for it to queue behind.
-    #   causal M64/M128 (ratio to flash_attn):
-    #     d128 S=1024 0.1161/0.1128 (0.729/0.738)   S=2048 0.3824/0.3237 (0.662/0.783)
-    #     d64  S=1024 0.0667/0.0676 (0.859/0.850)   S=2048 0.2129/0.2020 (0.745/0.796)
-    #                                              S=4096 0.7712/0.6999 (0.707/0.779)
-    # The two modes now agree on the same thresholds, so one rule serves both.
     if block_m is None:
-        block_m = BM64 if seqlen_q <= (1024 if head_dim == 64 else 512) else BM128
+        short_limit = 1024 if head_dim == 64 else 512
+        # At the crossover, non-causal self-attention benefits from M128
+        # when enough independent heads keep the C550 busy.
+        use_m128_at_limit = not causal and seqlen_q == seqlen_k == short_limit and batch * heads >= 32
+        block_m = BM128 if seqlen_q > short_limit or use_m128_at_limit else BM64
     if block_m not in (BM64, BM128):
         raise ValueError("block_m must be 64 or 128")
     grid = (triton.cdiv(seqlen_q, block_m), batch * heads)
