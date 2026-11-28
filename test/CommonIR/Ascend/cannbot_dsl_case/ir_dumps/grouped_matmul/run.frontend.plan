@@ -1,0 +1,6 @@
+function GmmKernel.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/test/grouped_matmul/../../samples/grouped_matmul/group_matmul.py
+digest deea96a5a9c71148e1fba0e34700775e9c8df41eb07bcd8405f3956874ada3f5
+reserved_names ['a_list', 'b_list', 'c_list', 'gmm_kernel', 'group_list_gm', 'group_num', 'run', 'self', 't', 'used_core_num']
+decorator host
+expression 0 subscript 1040:4-1040:41

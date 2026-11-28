@@ -1,0 +1,6 @@
+function CommitRecurrentKDAReplaySSMKernel.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/commit_recurrent_kda_replayssm/commit_recurrent_kda_replayssm.py
+digest c0a51fc6c67c884226cdf89dfad62fabee8ce5f024037e91e41cc79c501b2115
+reserved_names ['accepted_gm', 'kernel', 'launch_blocks', 'replay_decay_gm', 'replay_k_gm', 'replay_u_gm', 'run', 'self', 'state_gm']
+decorator host
+expression 0 subscript 710:4-710:30

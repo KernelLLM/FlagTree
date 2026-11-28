@@ -1,0 +1,6 @@
+function _launch_scatter
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/scatter_elements/scatter_elements.py
+digest 16ed3fe389a1ca69e18af8877cac4edbbae1f527d1c140ced8c0574d1024dd06
+reserved_names ['THREAD_COUNT', '_launch_scatter', '_scatter_simt', 'cb', 'core_num', 'data', 'dim3', 'indices', 'output', 'params', 'updates']
+decorator host
+expression 0 subscript 838:4-838:59

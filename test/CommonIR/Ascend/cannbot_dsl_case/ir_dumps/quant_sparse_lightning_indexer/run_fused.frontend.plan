@@ -1,0 +1,6 @@
+function _build_tnd_compiled_fused_runner.<locals>.run_fused
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/quant_sparse_lightning_indexer/quant_sparse_lightning_indexer.py
+digest d07d87469fee942a9f29955377fa21d67ada631eefa05c2798c4f050cd7c5dd0
+reserved_names ['QuantSparseLightningIndexer', 'batch_count', 'candidate_block_indices', 'candidate_block_length', 'cmp_residual_k', 'cu_seqlens_k', 'cu_seqlens_q', 'final_sparse_bits_address', 'final_sparse_indices_address', 'key', 'key_address', 'key_scale', 'key_scale_address', 'key_workspace', 'key_workspace_address', 'logical_k_capacity', 'merge_workers', 'metadata', 'output_idx_offset', 'output_offset_address', 'query_address', 'query_rows', 'query_scale', 'return_values', 'run_fused', 'selected_position_workspace', 'seqused_k', 'seqused_q', 'sparse_indices_address', 'sparse_value_address', 'staging_key', 'staging_key_fp4', 'staging_scale', 'staging_scale_e8m0', 'weights', 'worker_count']
+decorator host
+expression 0 subscript 4011:4-4011:45

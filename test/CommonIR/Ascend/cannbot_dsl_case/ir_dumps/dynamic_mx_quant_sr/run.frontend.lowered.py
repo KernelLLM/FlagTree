@@ -1,0 +1,3 @@
+def run(self, x, y, scales, quant_length: int, blocks: int, rng_state):
+    op = __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.call_target(7234, 9, __cannbotdsl_runtime.read_integer(_new_kernel))(__cannbotdsl_runtime.read_integer(self), tail_axis=True))
+    __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.call_target(7235, 4, __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.dynamic_getitem(__cannbotdsl_runtime.read_integer(op), __cannbotdsl_runtime.read_integer(blocks))))(__cannbotdsl_runtime.read_integer(x), __cannbotdsl_runtime.read_integer(y), __cannbotdsl_runtime.read_integer(scales), __cannbotdsl_runtime.read_integer(quant_length), __cannbotdsl_runtime.read_integer(rng_state)))

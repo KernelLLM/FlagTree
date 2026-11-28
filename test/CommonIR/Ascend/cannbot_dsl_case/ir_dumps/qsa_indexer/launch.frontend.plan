@@ -1,0 +1,6 @@
+function QSAIndexerLauncher.launch
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/qsa_indexer/qsa_indexer.py
+digest 363441b06f30c2f1e42e74d93b17a94bbb8ff9d53fb4d6a875ec11074999f3f3
+reserved_names ['QSAIndexerKernel', 'actual_seq', 'block_dim', 'gm_out', 'gm_score_workspace', 'k', 'launch', 'metadata', 'page_table', 'q', 'query_positions', 'self', 'spec']
+decorator host
+expression 0 subscript 1838:4-1838:47

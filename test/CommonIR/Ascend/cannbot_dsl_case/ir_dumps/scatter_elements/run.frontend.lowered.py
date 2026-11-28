@@ -1,0 +1,3 @@
+def run(self, copy_data: Tensor, copy_output: Tensor, indices: Tensor, updates: Tensor, output: Tensor) -> None:
+    """Launch the selected device implementation with its compile-time geometry."""
+    __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.call_target(1560, 4, __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.dynamic_getitem(__cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.read_integer(self).operator), __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.read_integer(self).core_num))))(__cannbotdsl_runtime.read_integer(copy_data), __cannbotdsl_runtime.read_integer(copy_output), __cannbotdsl_runtime.read_integer(indices), __cannbotdsl_runtime.read_integer(updates), __cannbotdsl_runtime.read_integer(output)))

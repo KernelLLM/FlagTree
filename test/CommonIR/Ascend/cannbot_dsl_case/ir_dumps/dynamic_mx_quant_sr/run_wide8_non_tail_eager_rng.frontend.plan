@@ -1,0 +1,6 @@
+function _Launch.run_wide8_non_tail_eager_rng
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/dynamic_mx_quant_sr/dynamic_mx_quant_sr.py
+digest b9a662ec4d8242870c1aa402dc0bde9095bc0ae120e749624bd21e6787289eaf
+reserved_names ['_new_kernel', 'blocks', 'offset_bits', 'op', 'quant_length', 'run_wide8_non_tail', 'run_wide8_non_tail_eager_rng', 'scales', 'seed_bits', 'self', 'width', 'x', 'y']
+decorator host
+expression 0 subscript 7433:4-7433:14

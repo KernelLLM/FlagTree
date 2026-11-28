@@ -1,0 +1,6 @@
+function _Launch.run_wide_non_tail_graph_rng
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/dynamic_mx_quant_sr/dynamic_mx_quant_sr.py
+digest 0b834a0dc02c66373f50f61d84eb62048a0d7f7eeccae39c86c146499f424a35
+reserved_names ['_new_kernel', 'blocks', 'intragraph', 'offset_tensor', 'op', 'quant_length', 'run_wide_non_tail', 'run_wide_non_tail_graph_rng', 'scales', 'seed_tensor', 'self', 'width', 'x', 'y']
+decorator host
+expression 0 subscript 7381:4-7381:14

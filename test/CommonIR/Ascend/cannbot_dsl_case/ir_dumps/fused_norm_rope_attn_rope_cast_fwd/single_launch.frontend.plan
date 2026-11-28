@@ -1,0 +1,6 @@
+function single_launch
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/fused_norm_rope_attn_rope_cast_fwd/fused_norm_rope_attn_rope_cast_fwd.py
+digest 0211f752d10e41a49a10bfe366fd310112feef533b3715c5851e26e402ed3300
+reserved_names ['cache', 'cores', 'eps', 'fused_norm_rope_attn_rope_cast_fwd_kernel', 'h', 'have_lengths', 'have_sink', 'indices', 'kv', 'lengths', 'lse', 'maximum', 'optimizations', 'out', 'positions', 'q', 'scale', 'score_mode', 'sf', 'single_launch', 'sink']
+decorator host
+expression 0 subscript 6458:4-6458:52

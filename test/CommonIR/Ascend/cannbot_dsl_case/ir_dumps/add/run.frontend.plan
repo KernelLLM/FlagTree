@@ -1,0 +1,6 @@
+function _AddLauncher.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/add/add.py
+digest 5ff59b39c119b5ec163b7d150d768a7bd3adf716ab8316847cf7968350100858
+reserved_names ['AddDmaKernel', 'core_count', 'input1_gm', 'input2_gm', 'kernel_instance', 'output_gm', 'run', 'self', 'tiling']
+decorator host
+expression 0 subscript 366:4-366:43

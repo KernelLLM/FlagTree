@@ -1,0 +1,6 @@
+function FusedRecurrentKDASnapshot.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/fused_recurrent_kda_snapshot/fused_recurrent_kda_snapshot.py
+digest 564e339a7cefcdf1254e4972f7a6680e793f21d096fc60eadfa99f2072be6d2e
+reserved_names ['FusedRecurrentKDASnapshotKernel', 'a_log', 'accepted_tokens', 'batch_size', 'core_num', 'cu_seqlens', 'dt_bias', 'final_state', 'initial_state', 'layout_mode', 'lower_bound', 'mixedqkv', 'op', 'out', 'raw_beta', 'raw_g', 'run', 'scale', 'self', 'sequence_length', 'state_dtype', 'state_indices']
+decorator host
+expression 0 subscript 938:4-938:16

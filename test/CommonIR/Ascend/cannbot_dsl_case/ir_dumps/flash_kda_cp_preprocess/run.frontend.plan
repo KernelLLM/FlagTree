@@ -1,0 +1,6 @@
+function FlashKDACPPreprocess.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/flash_kda_cp_preprocess/flash_kda_cp_preprocess.py
+digest d5a92ab9d0005e8ba2ffc88b7b88066dc5a93dbf1abe1cbb119bfc7756f515e7
+reserved_names ['A_log', 'FlashKdaCpPreprocessKernel', 'K', 'Q', 'V', 'beta', 'bn_total', 'core_num', 'decay', 'dt_bias', 'g', 'head_dim', 'identity16', 'kg', 'lower_bound', 'metadata', 'mqk', 'op', 'qg', 'qk_exchange', 'run', 'scale_value', 'self', 'seq_len', 'state_ext', 'transition', 'u', 'w']
+decorator host
+expression 0 subscript 2538:4-2538:16

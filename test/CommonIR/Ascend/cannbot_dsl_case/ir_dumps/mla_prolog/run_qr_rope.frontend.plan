@@ -1,0 +1,9 @@
+function MlaPrologLauncher.run_qr_rope
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/mla_prolog/mla_prolog.py
+digest 0a0077298c8b49f8c630a278e968c0837c97d9fd593061bd18e174b353418c73
+reserved_names ['MlaPrologKernel', 'args', 'bm', 'core_num', 'dims', 'nz_active', 'nz_wfront', 'nz_wqb', 'run_qr_rope', 'self']
+decorator host
+decorator _surface_signature(ROPE_QR_HOST_ARGUMENTS, ROPE_QR_HOST_ANNOTATIONS)
+expression 0 subscript 5027:15-5027:23
+expression 1 subscript 5028:9-5028:24
+expression 2 subscript 5029:4-5031:5

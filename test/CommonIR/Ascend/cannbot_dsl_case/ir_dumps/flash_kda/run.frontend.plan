@@ -1,0 +1,6 @@
+function FlashKDA.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/flash_kda/flash_kda.py
+digest 11311214f00ebaadcb9e9f5d9435a755957d6fc699fbb663ba34ed0f47506d92
+reserved_names ['A_log', 'K', 'Q', 'V', 'beta', 'core_num', 'dt_bias', 'flash_kda_kernel', 'g', 'gamma', 'identity', 'kr', 'lower_bound', 'metadata', 'mqk', 'op', 'out', 'qd', 'qk_exchange', 'run', 'scale', 'self', 'state_in', 'state_out', 'u', 'w']
+decorator host
+expression 0 subscript 177:4-177:16

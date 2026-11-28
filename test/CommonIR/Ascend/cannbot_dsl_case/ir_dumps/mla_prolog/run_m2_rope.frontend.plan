@@ -1,0 +1,9 @@
+function MlaPrologLauncher.run_m2_rope
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/mla_prolog/mla_prolog.py
+digest 1fb2546c442faa8f3b2e774affe29736747e3f3bf7ed2ef1edd0829d76ef16ac
+reserved_names ['MlaPrologKernel', 'args', 'bm', 'core_num', 'dims', 'nz_active', 'nz_wfront', 'nz_wqb', 'run_m2_rope', 'self']
+decorator host
+decorator _surface_signature(M2_ROPE_HOST_ARGUMENTS, M2_ROPE_HOST_ANNOTATIONS)
+expression 0 subscript 5045:15-5045:23
+expression 1 subscript 5046:9-5046:24
+expression 2 subscript 5047:4-5049:5

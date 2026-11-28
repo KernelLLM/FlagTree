@@ -1,0 +1,6 @@
+function AttnEpilogueTP1.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/attn_epilogue/attn_epilogue.py
+digest 66fcfe67ca3f8e516a9e22a50502fed6294ad276cea01ab56acca1f3e9c665b4
+reserved_names ['AttnEpilogueTP1Kernel', 'block_num', 'dwa', 'dwb', 'gm_aq', 'gm_asc', 'gm_cos', 'gm_o', 'gm_out', 'gm_sin', 'gm_y', 'gm_yq', 'gm_ysc', 'm_pad', 'op', 'run', 'self', 'shape', 'tiling', 'woaq', 'wobq']
+decorator host
+expression 0 subscript 417:4-417:22

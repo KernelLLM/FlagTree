@@ -1,0 +1,6 @@
+function _Launch.run_non_tail_fused_eager_rng
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/dynamic_mx_quant_sr/dynamic_mx_quant_sr.py
+digest 78f123c06d020af0f77a31030678f08edb4c0483044c4936e6814fbdc0e3f7e1
+reserved_names ['_new_kernel', 'blocks', 'offset_bits', 'op', 'quant_length', 'run_non_tail_fused', 'run_non_tail_fused_eager_rng', 'scales', 'seed_bits', 'self', 'x0', 'x1', 'y']
+decorator host
+expression 0 subscript 7328:4-7328:14

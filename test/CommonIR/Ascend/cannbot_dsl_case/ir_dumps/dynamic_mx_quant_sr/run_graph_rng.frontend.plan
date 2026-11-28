@@ -1,0 +1,6 @@
+function _Launch.run_graph_rng
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/dynamic_mx_quant_sr/dynamic_mx_quant_sr.py
+digest 472c3eba10677410dfdd71a02426d6ec124e6e258b02f508728dcf412603a062
+reserved_names ['_new_kernel', 'blocks', 'intragraph', 'offset_tensor', 'op', 'quant_length', 'run_graph_rng', 'scales', 'seed_tensor', 'self', 'x', 'y']
+decorator host
+expression 0 subscript 7294:4-7294:14

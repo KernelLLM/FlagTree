@@ -1,0 +1,6 @@
+function StemIndexerLauncher.launch
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/stem_indexer/stem_indexer.py
+digest f1025adf35b0d0a455d7babb264ddbdfb87bb3ceaeca7a163fc70b42dfa65ffc
+reserved_names ['StemIndexerKernel', 'alpha', 'attrs', 'bias', 'block_dim', 'group_size', 'indices', 'k', 'kv_heads', 'kv_seq_lens', 'launch', 'lens', 'metadata', 'num_prompt_tokens', 'q', 'q_seq_lens', 'self', 'topk_score_precision']
+decorator host
+expression 0 subscript 2107:4-2110:16

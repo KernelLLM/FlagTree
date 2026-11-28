@@ -1,0 +1,6 @@
+function _QuantMlaPrologProgram.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/quant_mla_prolog/quant_mla_prolog.py
+digest 5c3d399980fd20c697be24169e5dbab5ad25abbda886c91a0502069c2c7aa705
+reserved_names ['cache_index', 'core_num', 'descale_q', 'descale_qr', 'descale_wkva', 'descale_wqa', 'descale_wqb', 'descale_x', 'kv_cache', 'kv_norm_fp32', 'kva_matmul_fp32', 'kvr_scale', 'norm_eps', 'norm_weight_kva', 'norm_weight_qa', 'op', 'q', 'q_fp32', 'q_nope_absorbed_bf16', 'q_nope_bf16', 'q_rope_bf16', 'qa_matmul_fp32', 'qa_norm_fp32', 'qa_partial', 'qr', 'qr_scale', 'quant_scale_kv', 'rope_cos', 'rope_sin', 'run', 'self', 'wkb', 'wkva', 'wqa', 'wqb', 'wqb_matmul_fp32', 'x']
+decorator _dsl.host
+expression 0 subscript 7840:4-7840:21

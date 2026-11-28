@@ -1,0 +1,9 @@
+function IndexerPrologueQw.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/indexer_prologue_qw/indexer_prologue_qw.py
+digest 59d3d1afb31442a1ba4ad1e047cd97df5b0f6ccc06252f97b364c101646c730b
+reserved_names ['IndexerPrologueQwKernel', 'base_m', 'const_expr', 'cube_cores', 'd', 'descale_q_gm', 'descale_qr_gm', 'descale_wqb_gm', 'dim', 'dr', 'grid', 'lut_gm', 'n_head_blocks', 'n_heads', 'p', 'q_gm', 'q_lora', 'qr_gm', 'rope_cos_gm', 'rope_sin_gm', 'run', 'self', 'shape', 'softmax_scale', 't', 't_dyn', 't_live', 'tiles', 'w_gm', 'w_workspace', 'workspace_gm', 'wqb_gm', 'ww_gm', 'x_gm']
+decorator host
+expression 0 subscript 2094:17-2094:30
+expression 1 subscript 2095:15-2095:36
+expression 2 subscript 2097:15-2097:36
+expression 3 subscript 2098:4-2100:11

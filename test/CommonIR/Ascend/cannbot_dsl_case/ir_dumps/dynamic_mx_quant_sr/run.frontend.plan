@@ -1,0 +1,6 @@
+function _Launch.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/dynamic_mx_quant_sr/dynamic_mx_quant_sr.py
+digest ddb90db34fc9cab512aca17d757fd7876637647748ac85d9ee8b1914a36ebd21
+reserved_names ['_new_kernel', 'blocks', 'op', 'quant_length', 'rng_state', 'run', 'scales', 'self', 'x', 'y']
+decorator host
+expression 0 subscript 7235:4-7235:14

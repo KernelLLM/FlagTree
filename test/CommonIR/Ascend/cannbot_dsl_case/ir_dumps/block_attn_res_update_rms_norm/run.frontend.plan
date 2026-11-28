@@ -1,0 +1,6 @@
+function BlockAttnResUpdateRMSNorm.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/block_attn_res_update_rms_norm/block_attn_res_update_rms_norm.py
+digest 65b7ed66e2bb712dc3f5b198a01cc97cf4b49d2df305596ed19f69bc446af019
+reserved_names ['UpdateKernel', 'block_num', 'buffer_depth', 'd', 'delta_dtype', 'epsilon', 'gm_delta', 'gm_gamma', 'gm_h', 'gm_max', 'gm_numerator', 'gm_partial', 'gm_query', 'gm_sum', 'norm_eps', 'op', 'rows_per_core', 'run', 'self', 'tile_t']
+decorator host
+expression 0 subscript 782:4-782:17

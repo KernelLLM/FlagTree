@@ -1,0 +1,6 @@
+function _Launch.run_non_tail_fused_graph_rng
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/dynamic_mx_quant_sr/dynamic_mx_quant_sr.py
+digest 6f95eb60e9f17949072093e0c8077e0fd22ac3baec9c06666800896caa7b8edf
+reserved_names ['_new_kernel', 'blocks', 'intragraph', 'offset_tensor', 'op', 'quant_length', 'run_non_tail_fused', 'run_non_tail_fused_graph_rng', 'scales', 'seed_tensor', 'self', 'x0', 'x1', 'y']
+decorator host
+expression 0 subscript 7346:4-7346:14

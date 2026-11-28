@@ -1,0 +1,6 @@
+function _Launch.run_tail_scalar_rng
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/dynamic_mx_quant_sr/dynamic_mx_quant_sr.py
+digest a2c6f13eba167e26f755596d8865baebb47a9a5d5268dc9f46170f91754088cf
+reserved_names ['_new_kernel', 'block_offset_bits', 'blocks', 'op', 'quant_length', 'run_tail_scalar_rng', 'scales', 'seed_bits', 'self', 'x', 'y']
+decorator host
+expression 0 subscript 7242:4-7242:14

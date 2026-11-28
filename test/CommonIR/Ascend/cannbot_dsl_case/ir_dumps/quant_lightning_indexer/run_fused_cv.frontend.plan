@@ -1,0 +1,6 @@
+function _build_compiled_fused_runner.<locals>.run_fused_cv
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/quant_lightning_indexer/quant_lightning_indexer.py
+digest 0c5f5047b07534b66fec88bf3e44d9c1cdc362f941f90a604ad0fb445719cb1a
+reserved_names ['Quant_lightning_indexer', 'batch_count', 'block_table', 'candidate_indices_address', 'candidate_key_out', 'candidate_length', 'candidate_value_bits_address', 'cmp_residual_k', 'cu_seqlens_q', 'final_candidate_bits_address', 'final_candidate_indices_address', 'final_sparse_bits_address', 'final_sparse_indices_address', 'key_address', 'key_dequant_scale_stride0', 'key_out', 'key_rows', 'key_scale_address', 'key_stride0', 'max_tasks_per_batch', 'merge_workers', 'metadata', 'output_offset_address', 'query_address', 'query_scale', 'return_values', 'run_fused_cv', 'scale_rows', 'seqused_k', 'seqused_q', 'sparse_indices_address', 'sparse_value_bits_address', 'task_count', 'tokens', 'total_q', 'weights', 'worker_count']
+decorator host
+expression 0 subscript 7364:4-7364:41

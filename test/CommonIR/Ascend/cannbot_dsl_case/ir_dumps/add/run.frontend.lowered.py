@@ -1,0 +1,3 @@
+def run(self, input1_gm: Tensor, input2_gm: Tensor, output_gm: Tensor):
+    kernel_instance = __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.call_target(365, 22, __cannbotdsl_runtime.read_integer(AddDmaKernel))(__cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.read_integer(self).tiling)))
+    __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.call_target(366, 4, __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.dynamic_getitem(__cannbotdsl_runtime.read_integer(kernel_instance), __cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.read_integer(__cannbotdsl_runtime.read_integer(self).tiling).core_count))))(__cannbotdsl_runtime.read_integer(input1_gm), __cannbotdsl_runtime.read_integer(input2_gm), __cannbotdsl_runtime.read_integer(output_gm)))

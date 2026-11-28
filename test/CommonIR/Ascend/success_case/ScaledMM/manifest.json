@@ -1,0 +1,100 @@
+{
+  "host": "baai-950",
+  "container": "yuansheng_flagtree",
+  "device": 2,
+  "cann": "9.2.1",
+  "venv": "/home/ricky/venv/triton-ascend-tla",
+  "repos": {
+    "Triton-Ascend-tla": {
+      "head": "008dff39bdcc908d6706946189b0c53c5257e4d4",
+      "status": " M CMakeLists.txt\n M bin/CMakeLists.txt\n M bin/RegisterTritonDialects.h\n M bin/triton-opt.cpp\n M include/triton/Dialect/Triton/IR/TritonAttrDefs.td\n M lib/Dialect/Triton/IR/Traits.cpp\n M python/src/ir.cc\n M python/triton/_utils.py\n M python/triton/compiler/code_generator.py\n M python/triton/compiler/compiler.py\n M python/triton/compiler/errors.py\n M python/triton/language/math.py\n M python/triton/language/semantic.py\n M python/triton/language/standard.py\n M python/triton/runtime/autotuner.py\n M python/triton/runtime/interpreter.py\n M python/triton/runtime/jit.py\n M python/triton/tools/compile.py\n M python/triton/tools/link.py\n M third_party/ascend/AscendNPU-IR\n?? python/triton/_C/triton-opt\n?? third_party/ascend/backend/bin/\n",
+      "tracked_diff_sha256": "0388d0eb08cbd80e1708115dbfdd2674ce9227378868bf304d85b7040849b9ff",
+      "origin": "https://gitcode.com/Ascend/triton-ascend.git"
+    },
+    "AscendNPU-IR-tla": {
+      "head": "cfe3feea3da5cbc603cb71221958cbf6e7bb9f95",
+      "status": " M bishengir/lib/Tools/hivmc/A3/CMakeLists.txt\n M bishengir/lib/Tools/hivmc/A5/CMakeLists.txt\n M bishengir/lib/Tools/hivmc/A5/HIVMCMainA5.cpp\n M bishengir/lib/Tools/hivmc/BishengLlcBridge.cpp\n M bishengir/lib/Tools/hivmc/CMakeLists.txt\n",
+      "tracked_diff_sha256": "08b7f2889cd3468efd69f4326e6ed5650a1d9a0f39b03ae404b35ddb1e0b0b94",
+      "origin": "https://gitcode.com/Ascend/AscendNPU-IR.git"
+    }
+  },
+  "files": {
+    "scaled_mm_original.py": "08965a50332661bb12f167fd08c0cb20433caaf45c6c179bc272e32ce35b0a18",
+    "scaled_mm_tla.py": "5d4a2a6758d293f6694eb335c38260c61a0bf462205b0a3b0737efe709f323ab",
+    "npuir_build_compat.patch": "08b7f2889cd3468efd69f4326e6ed5650a1d9a0f39b03ae404b35ddb1e0b0b94"
+  },
+  "ta_install_patch": {
+    "path": "/home/ricky/git/Triton-Ascend-tla/third_party/ascend/patch/triton-ascend-3.6.0.patch",
+    "sha256": "066c8c5af64bef91734bb70f7f5b6e27478233f844f13e97cb0a8b271f1fde26",
+    "reverse_check_exit": 0
+  },
+  "recorded_at_utc": "2026-11-11T16:31:22.360491+00:00",
+  "scope": "Scaled MM only; measured frontend is Triton Ascend TLA, not FlagTree.",
+  "baseline": {
+    "repository": "https://github.com/flagos-ai/FlagGems-vllm",
+    "commit": "377620c132aea9569275f2bcea27f1aea17ff426",
+    "path": "src/flaggems_vllm/runtime/backend/_ascend/ops/triton_scaled_mm.py",
+    "url": "https://github.com/flagos-ai/FlagGems-vllm/blob/377620c132aea9569275f2bcea27f1aea17ff426/src/flaggems_vllm/runtime/backend/_ascend/ops/triton_scaled_mm.py",
+    "exact_copy": true
+  },
+  "tla_prs": [
+    "https://gitcode.com/Ascend/triton-ascend/pull/3103",
+    "https://gitcode.com/Ascend/triton-ascend/pull/2982"
+  ],
+  "ir": {
+    "original_m1024.mlir": {
+      "source_name": "scaled_original_late.mlir",
+      "phase": "Before ConvertHIVMToStandard",
+      "sha256": "88fab631b227ac43133c56b599106a64ac180a7908d08772c21b67d94a00cd43"
+    },
+    "tla_m32.mlir": {
+      "source_name": "scaled_32_late.mlir",
+      "phase": "Before ConvertHIVMToStandard",
+      "sha256": "1ca508cdfb2ad27140b65603f2b20cd4affc904c6f283dc1d6b5b9aedc702055"
+    },
+    "tla_m128.mlir": {
+      "source_name": "scaled_128_late.mlir",
+      "phase": "Before ConvertHIVMToStandard",
+      "sha256": "8563df825ff5d649d3f10866b6cf9838d75a0bc71a8cef5c755c1d39cab75191"
+    },
+    "tla_m1024.mlir": {
+      "source_name": "scaled_1024_late.mlir",
+      "phase": "Before ConvertHIVMToStandard",
+      "sha256": "4eb275f0f43913c638e69f18e6dd161adedf62b019edd0686ccbbf1dee2c76cf"
+    }
+  },
+  "npuir_cmake_config": {
+    "BISHENGIR_BUILD_HIVMC": "ON",
+    "BISHENGIR_BUILD_TEMPLATE": "ON",
+    "BISHENGIR_ENABLE_PM_CL_OPTIONS": "ON",
+    "BISHENGIR_ENABLE_TRITON_COMPILE": "ON",
+    "BISHENGIR_ENABLE_WERROR": "OFF",
+    "BISHENGIR_SHMEM_RDMA_BACKEND": "IN_DIE",
+    "BISHENGIR_SHMEM_RELAY_SUPPORT": "OFF",
+    "BISHENG_COMPILER_PATH": "/usr/local/Ascend/cann-9.2.1/tools/bisheng_compiler/bin",
+    "BSPUB_DAVINCI_BISHENGIR": "ON",
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
+    "CMAKE_C_COMPILER": "/usr/bin/clang",
+    "LLVM_BSPUB_DAVINCI_BISHENGIR": "ON",
+    "LLVM_BSPUB_DAVINCI_BISHENGIR_A5": "ON",
+    "LLVM_BSPUB_DAVINCI_BISHENGIR_A5_NPUIR": "ON",
+    "LLVM_ENABLE_ASSERTIONS": "OFF",
+    "LLVM_ENABLE_PROJECTS": "mlir",
+    "LLVM_EXTERNAL_BISHENGIR_SOURCE_DIR": "/home/ricky/git/AscendNPU-IR-tla",
+    "LLVM_EXTERNAL_PROJECTS": "bishengir",
+    "LLVM_TARGETS_TO_BUILD": "host",
+    "MLIR_ENABLE_BINDINGS_PYTHON": "OFF"
+  },
+  "llvm": {
+    "path": "/home/ricky/git/AscendNPU-IR/third-party/llvm-project",
+    "commit": "953bd530f84c21763273e5f03a66b95c99465eef"
+  },
+  "package_validation": {
+    "date": "2026-11-12",
+    "script": "benchmark.py",
+    "results": "results.json",
+    "precision_checks_passed": 18,
+    "source_operators_identical_to_previously_measured_files": true
+  }
+}

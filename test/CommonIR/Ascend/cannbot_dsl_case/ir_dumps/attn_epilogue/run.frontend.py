@@ -1,0 +1,33 @@
+@host
+def run(
+    self,
+    gm_o,
+    gm_cos,
+    gm_sin,
+    woaq,
+    dwa,
+    wobq,
+    dwb,
+    gm_aq,
+    gm_asc,
+    gm_y,
+    gm_yq,
+    gm_ysc,
+    gm_out,
+):
+    op = AttnEpilogueTP1Kernel(self.shape, self.m_pad, self.block_num, self.tiling)
+    op[self.block_num](
+        gm_o,
+        gm_cos,
+        gm_sin,
+        woaq,
+        dwa,
+        wobq,
+        dwb,
+        gm_aq,
+        gm_asc,
+        gm_y,
+        gm_yq,
+        gm_ysc,
+        gm_out,
+    )

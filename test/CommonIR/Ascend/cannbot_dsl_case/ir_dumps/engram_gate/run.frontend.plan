@@ -1,0 +1,26 @@
+function EngramGate.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/engram_gate/engram_gate.py
+digest acc9fa723b74ed21829f625f73a4ad9f500533c517175d5fbd95820676cda147
+reserved_names ['EngramGateKernel', 'ValueError', 'block_num', 'clamp_value', 'const_expr', 'dim', 'eps', 'gm_key', 'gm_out', 'gm_value', 'gm_weight', 'gm_x', 'hc_mult', 'len', 'mask', 'max_blocks', 'min', 'op', 'rows', 'run', 'self', 'shape', 'total_tokens', 'tuple']
+decorator host
+region 0 if 1215:4-1235:9 state=[] captures=['op', 'block_num', 'gm_x', 'gm_key', 'gm_value', 'gm_weight', 'gm_out', 'self', 'mask'] locals=[] else=True
+expression 0 subscript 1189:19-1189:32
+expression 1 boolop 1191:8-1193:36
+expression 2 comparison 1191:8-1191:28
+expression 3 comparison 1192:11-1192:40
+expression 4 subscript 1192:11-1192:24
+expression 5 comparison 1193:11-1193:36
+expression 6 subscript 1193:11-1193:24
+expression 7 boolop 1200:8-1203:61
+expression 8 comparison 1200:8-1200:48
+expression 9 comparison 1201:11-1201:51
+expression 10 comparison 1202:11-1202:60
+expression 11 comparison 1203:11-1203:61
+expression 12 boolop 1210:18-1210:68
+expression 13 comparison 1210:18-1210:34
+expression 14 comparison 1210:39-1210:68
+expression 15 subscript 1210:39-1210:52
+expression 16 builtin 1213:16-1213:42 marker=min
+expression 17 comparison 1215:7-1215:23
+expression 18 subscript 1216:8-1216:21
+expression 19 subscript 1227:8-1227:21

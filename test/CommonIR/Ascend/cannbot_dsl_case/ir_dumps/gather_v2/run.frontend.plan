@@ -1,0 +1,6 @@
+function _GatherV2Launcher.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/gather_v2/gather_v2.py
+digest 26aff64f739fbb8ba0edb14c839f18f0eabce367cce7fb6ad37d1d265bf49ad1
+reserved_names ['GatherV2Kernel', 'core_num', 'dim3', 'gm_indices', 'gm_x', 'gm_y', 'op', 'run', 'self', 'thread_num', 'tiling']
+decorator host
+expression 0 subscript 663:4-663:64

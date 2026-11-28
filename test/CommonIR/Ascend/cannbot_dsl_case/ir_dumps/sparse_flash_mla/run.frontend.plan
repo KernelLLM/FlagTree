@@ -1,0 +1,6 @@
+function HighPerfSparseFlashMlaLauncher.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/sparse_flash_mla/sparse_flash_mla_sparse_n64_kernel.py
+digest 4b6885ab0f19a784da5d99df642e8cd63ce6c80bfe6b400cc4f83b00f0f88f38
+reserved_names ['SparseN64Kernel', 'attention_out_gm', 'batch_mode', 'blocks', 'cmp_block_table_gm', 'cmp_kv_gm', 'cmp_kv_physical_rows_gm', 'cmp_residual_kv_gm', 'cmp_sparse_indices_gm', 'cmp_topk_length_gm', 'const_info', 'cu_seqlens_cmp_kv', 'cu_seqlens_ori_kv', 'cu_seqlens_q', 'dtype', 'fd_workspace_gm', 'has_sink', 'is_ori_dense', 'kv_mode', 'metadata_gm', 'ori_block_table_gm', 'ori_kv_gm', 'ori_kv_physical_rows_gm', 'ori_sparse_indices_gm', 'ori_topk_length_gm', 'query_gm', 'query_head_tile_size', 'return_softmax_lse', 'run', 'self', 'seqused_cmp_kv_gm', 'seqused_ori_kv_gm', 'seqused_q_gm', 'sinks_gm', 'softmax_lse_gm']
+decorator host
+expression 0 subscript 4378:4-4386:13

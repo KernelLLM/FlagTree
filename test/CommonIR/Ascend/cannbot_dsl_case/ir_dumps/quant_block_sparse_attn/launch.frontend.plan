@@ -1,0 +1,11 @@
+function QuantBlockSparseAttnLauncher.launch
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/quant_block_sparse_attn/quant_block_sparse_attn.py
+digest ab8f7f8470bf6efc300460482ae022517de28ba15f9db724c254d304129aad2c
+reserved_names ['QuantBlockSparseAttnKernel', 'atten_mask', 'block_dim', 'block_table', 'const_expr', 'cu_seqlens_q', 'k_descale', 'key', 'launch', 'layout_q', 'mask_mode', 'metadata', 'op', 'out', 'p_scale', 'permute', 'q_descale', 'query', 'return_softmax_lse', 'self', 'seqused_kv', 'shape', 'shared_l0a', 'softmax_lse', 'softmax_scale', 'sparse_indices', 'sparse_seq_len', 'v_descale', 'value']
+decorator host
+expression 0 comparison 1781:18-1781:40
+expression 1 subscript 1788:8-1788:22
+expression 2 subscript 1789:8-1789:31
+expression 3 subscript 1790:8-1790:22
+expression 4 subscript 1790:26-1790:38
+expression 5 subscript 1795:4-1795:22

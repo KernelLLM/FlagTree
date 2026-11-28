@@ -1,0 +1,303 @@
+{
+  "created_at_utc": "2026-11-12T08:57:27.514974+00:00",
+  "environment": {
+    "python": "3.12.16 (main, Oct 28 2026, 13:43:18) [GCC 11.4.0]",
+    "python_executable": "/home/ricky/venv/triton-ascend-tla/bin/python",
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0.post7",
+    "triton": "3.6.0",
+    "triton_file": "/home/ricky/git/Triton-Ascend-tla/python/triton/__init__.py",
+    "device_name": "Ascend950DT_9582",
+    "variables": {
+      "ASCEND_RT_VISIBLE_DEVICES": "2",
+      "TRITON_NPU_COMPILER_PATH": "/home/ricky/git/AscendNPU-IR-tla-build/bin",
+      "BISHENG_INSTALL_PATH": "/usr/local/Ascend/cann-9.2.1/tools/bisheng_compiler/bin",
+      "BISHENG_BACKEND": "process",
+      "TRITON_CACHE_DIR": "/home/ricky/.cache/scaledmm-20261112"
+    }
+  },
+  "definitions": {
+    "original": "Unmodified pinned FlagGems-vllm triton_scaled_mm",
+    "tla": "Triton Ascend TLA rewrite with 3 measured specializations",
+    "ascendc": "Official composite: fused_matmul(16cast32) + FP32 row mul + FP32 column mul + cast; four kernels",
+    "reference": "FP32 matmul * (FP32 row_scale * FP32 column_scale), cast to output dtype",
+    "tolerance": {
+      "atol": 0.01,
+      "rtol": 0.01
+    },
+    "timing": "NPU Graph, 10 captured calls, 10 replays, median of 5; repeat in reversed method order; median of both. JIT/host time excluded. Output NaN fill excluded.",
+    "speedup": "baseline microseconds / TLA microseconds; >1 means TLA faster",
+    "input": "A/B = randn * 0.1; FP32 row/column scales = rand + 0.5; N=K=4096; seed=base_seed+M"
+  },
+  "source_sha256": {
+    "scaled_mm_original.py": "08965a50332661bb12f167fd08c0cb20433caaf45c6c179bc272e32ce35b0a18",
+    "scaled_mm_tla.py": "5d4a2a6758d293f6694eb335c38260c61a0bf462205b0a3b0737efe709f323ab",
+    "benchmark.py": "0333a4bed771c01b1787f45af7c4b87fb8df6745a190edcf06b89f15959fc52e"
+  },
+  "rows": [
+    {
+      "m": 32,
+      "n": 4096,
+      "k": 4096,
+      "dtype": "fp16",
+      "seed": 155,
+      "precision": {
+        "original": {
+          "status": "pass",
+          "max_abs": 0.001953125
+        },
+        "tla": {
+          "status": "pass",
+          "max_abs": 0.001953125
+        },
+        "ascendc": {
+          "status": "pass",
+          "max_abs": 0.0009765625
+        }
+      },
+      "us": {
+        "original": 25.110479593276978,
+        "tla": 15.33787488937378,
+        "ascendc": 20.7064151763916
+      },
+      "samples_us": {
+        "original": [
+          25.120999813079834,
+          25.09995937347412
+        ],
+        "tla": [
+          15.338939428329468,
+          15.33681035041809
+        ],
+        "ascendc": [
+          20.719759464263916,
+          20.693070888519287
+        ]
+      },
+      "tla_speedup": {
+        "original": 1.637155067073454,
+        "ascendc": 1.350018521192737
+      }
+    },
+    {
+      "m": 128,
+      "n": 4096,
+      "k": 4096,
+      "dtype": "fp16",
+      "seed": 251,
+      "precision": {
+        "original": {
+          "status": "pass",
+          "max_abs": 0.001953125
+        },
+        "tla": {
+          "status": "pass",
+          "max_abs": 0.001953125
+        },
+        "ascendc": {
+          "status": "pass",
+          "max_abs": 0.001953125
+        }
+      },
+      "us": {
+        "original": 25.689550638198853,
+        "tla": 21.579915285110474,
+        "ascendc": 30.303834676742554
+      },
+      "samples_us": {
+        "original": [
+          25.686750411987305,
+          25.6923508644104
+        ],
+        "tla": [
+          21.57572031021118,
+          21.584110260009766
+        ],
+        "ascendc": [
+          30.288619995117188,
+          30.31904935836792
+        ]
+      },
+      "tla_speedup": {
+        "original": 1.1904379743290239,
+        "ascendc": 1.4042610583208053
+      }
+    },
+    {
+      "m": 1024,
+      "n": 4096,
+      "k": 4096,
+      "dtype": "fp16",
+      "seed": 1147,
+      "precision": {
+        "original": {
+          "status": "pass",
+          "max_abs": 0.001953125
+        },
+        "tla": {
+          "status": "pass",
+          "max_abs": 0.001953125
+        },
+        "ascendc": {
+          "status": "pass",
+          "max_abs": 0.001953125
+        }
+      },
+      "us": {
+        "original": 111.14902973175049,
+        "tla": 86.7067813873291,
+        "ascendc": 108.64504337310791
+      },
+      "samples_us": {
+        "original": [
+          111.15199089050293,
+          111.14606857299805
+        ],
+        "tla": [
+          86.7060375213623,
+          86.7075252532959
+        ],
+        "ascendc": [
+          108.55813980102539,
+          108.73194694519043
+        ]
+      },
+      "tla_speedup": {
+        "original": 1.2818954636919928,
+        "ascendc": 1.253016680296067
+      }
+    },
+    {
+      "m": 32,
+      "n": 4096,
+      "k": 4096,
+      "dtype": "bf16",
+      "seed": 155,
+      "precision": {
+        "original": {
+          "status": "pass",
+          "max_abs": 0.0078125
+        },
+        "tla": {
+          "status": "pass",
+          "max_abs": 0.0078125
+        },
+        "ascendc": {
+          "status": "pass",
+          "max_abs": 0.0078125
+        }
+      },
+      "us": {
+        "original": 24.917160272598267,
+        "tla": 15.270585417747498,
+        "ascendc": 20.936704874038696
+      },
+      "samples_us": {
+        "original": [
+          24.9214506149292,
+          24.912869930267334
+        ],
+        "tla": [
+          15.27711033821106,
+          15.264060497283936
+        ],
+        "ascendc": [
+          20.945029258728027,
+          20.928380489349365
+        ]
+      },
+      "tla_speedup": {
+        "original": 1.6317095639070591,
+        "ascendc": 1.3710479527331039
+      }
+    },
+    {
+      "m": 128,
+      "n": 4096,
+      "k": 4096,
+      "dtype": "bf16",
+      "seed": 251,
+      "precision": {
+        "original": {
+          "status": "pass",
+          "max_abs": 0.0078125
+        },
+        "tla": {
+          "status": "pass",
+          "max_abs": 0.0078125
+        },
+        "ascendc": {
+          "status": "pass",
+          "max_abs": 0.0078125
+        }
+      },
+      "us": {
+        "original": 25.82733988761902,
+        "tla": 21.574145555496216,
+        "ascendc": 31.648855209350586
+      },
+      "samples_us": {
+        "original": [
+          25.835320949554443,
+          25.819358825683594
+        ],
+        "tla": [
+          21.563010215759277,
+          21.585280895233154
+        ],
+        "ascendc": [
+          31.84957981109619,
+          31.44813060760498
+        ]
+      },
+      "tla_speedup": {
+        "original": 1.1971431184230266,
+        "ascendc": 1.4669807028018194
+      }
+    },
+    {
+      "m": 1024,
+      "n": 4096,
+      "k": 4096,
+      "dtype": "bf16",
+      "seed": 1147,
+      "precision": {
+        "original": {
+          "status": "pass",
+          "max_abs": 0.015625
+        },
+        "tla": {
+          "status": "pass",
+          "max_abs": 0.015625
+        },
+        "ascendc": {
+          "status": "pass",
+          "max_abs": 0.015625
+        }
+      },
+      "us": {
+        "original": 111.16020679473877,
+        "tla": 86.7674970626831,
+        "ascendc": 108.64333629608154
+      },
+      "samples_us": {
+        "original": [
+          111.15809440612793,
+          111.16231918334961
+        ],
+        "tla": [
+          86.76424026489258,
+          86.77075386047363
+        ],
+        "ascendc": [
+          109.60283279418945,
+          107.68383979797363
+        ]
+      },
+      "tla_speedup": {
+        "original": 1.281127271822002,
+        "ascendc": 1.2521202059982757
+      }
+    }
+  ]
+}

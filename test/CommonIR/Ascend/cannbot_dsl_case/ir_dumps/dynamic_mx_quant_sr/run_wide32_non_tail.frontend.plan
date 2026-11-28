@@ -1,0 +1,6 @@
+function _Launch.run_wide32_non_tail
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/dynamic_mx_quant_sr/dynamic_mx_quant_sr.py
+digest 4e1e8bac173ce28f9b0e4ee736243578cabd4b6b4407fbdd890768cbd44cf359
+reserved_names ['_new_kernel', 'blocks', 'op', 'quant_length', 'rng_state', 'run_wide32_non_tail', 'scales', 'self', 'width', 'x', 'y']
+decorator host
+expression 0 subscript 7272:4-7272:14

@@ -1,0 +1,9 @@
+function MlaPrologLauncher.run_m3_qr
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/mla_prolog/mla_prolog.py
+digest cb6dacbd7631d1080c6e0f2ba97851aa0a5559f418eb7b3fa5bcffb551bd36a9
+reserved_names ['MlaPrologKernel', 'args', 'bm', 'core_num', 'dims', 'nz_active', 'nz_wfront', 'nz_wqb', 'run_m3_qr', 'self']
+decorator host
+decorator _surface_signature(M3_QR_HOST_ARGUMENTS, M3_QR_HOST_ANNOTATIONS)
+expression 0 subscript 5090:15-5090:23
+expression 1 subscript 5091:9-5091:24
+expression 2 subscript 5092:4-5094:5

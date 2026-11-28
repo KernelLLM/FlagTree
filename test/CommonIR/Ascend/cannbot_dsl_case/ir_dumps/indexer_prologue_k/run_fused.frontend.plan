@@ -1,0 +1,7 @@
+function _FusedIndexerPrologueKPipeline.run_fused
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/indexer_prologue_k/indexer_prologue_k.py
+digest 371a2067ef04f32f78d4aae5a209d95e8cd821aa67d420253e8d6f8dd8e7bf82
+reserved_names ['cache', 'cache_index', 'cube_block_num', 'epsilon', 'gamma', 'kernel', 'latent', 'postprocess', 'projected', 'projection', 'rope_cos', 'rope_sin', 'run_fused', 'scale_cache', 'self', 'vec_block_num', 'weight']
+decorator host
+expression 0 subscript 909:4-909:42
+expression 1 subscript 910:4-910:42

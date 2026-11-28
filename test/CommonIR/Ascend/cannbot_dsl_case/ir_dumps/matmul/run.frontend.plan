@@ -1,0 +1,6 @@
+function _MixQuantLauncher.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/test/matmul/quant_matmul/../../../samples/matmul/quant_matmul/quant_batch_matmul_mxa8w4.py
+digest cea97a8a34c294fc048fe009dc8ae30e6feb4fcc4f755392dfe80b8e3c1cb3a3
+reserved_names ['MixQuantKernel', 'gm_a', 'gm_b', 'gm_bias', 'gm_c', 'gm_sa', 'gm_sb', 'has_bias', 'launch_block_count', 'op', 'run', 'self', 't']
+decorator host
+expression 0 subscript 944:4-944:33

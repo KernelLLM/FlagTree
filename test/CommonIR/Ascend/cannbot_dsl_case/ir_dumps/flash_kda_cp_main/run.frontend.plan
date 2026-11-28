@@ -1,0 +1,6 @@
+function FlashKDACP.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/flash_kda_cp_main/flash_kda_cp_main.py
+digest b684c9296bc6ff5847271c46473fe97d658a485e284899456154ae4a46b2cb05
+reserved_names ['FlashKdaCpKernel', 'batch_head_count', 'core_num', 'decay', 'head_dim', 'kg', 'metadata', 'mqk', 'op', 'output', 'qg', 'run', 'self', 'seq_len', 'state_in', 'state_out', 'u', 'w']
+decorator host
+expression 0 subscript 861:4-861:16

@@ -1,0 +1,6 @@
+function MegaRecurrentKDAKernel.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/mega_recurrent_kda/mega_recurrent_kda.py
+digest 262830862795f6dbd1f185420997a788ba3aaf130f620b3ed1c92eade226651f
+reserved_names ['accepted', 'alog', 'beta', 'bias', 'conv', 'conv_accepted', 'conv_indices', 'decay', 'eps', 'fa', 'final', 'gamma', 'gate', 'indices', 'initial', 'k', 'kernel', 'launch_cores', 'lower', 'norm', 'out', 'plan_policy', 'plan_rows', 'plan_width', 'q', 'run', 'scale', 'self', 'v', 'wa', 'wb12', 'wb24', 'wb6', 'wbeta12', 'wbeta24', 'wbeta6', 'wc', 'wo12', 'wo24', 'wo6', 'wqkv12', 'wqkv24', 'wqkv6', 'wz12', 'wz24', 'wz6', 'x']
+decorator host
+expression 0 subscript 4384:4-4384:29

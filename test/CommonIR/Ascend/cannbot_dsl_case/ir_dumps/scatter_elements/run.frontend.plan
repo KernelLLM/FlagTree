@@ -1,0 +1,6 @@
+function ScatterNativeLauncher.run
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/scatter_elements/scatter_elements.py
+digest dd13b0c743d82f1a892c9e9f5490f2a70b4bfc9a6c04d5b02ef4e393d98ca91d
+reserved_names ['copy_data', 'copy_output', 'core_num', 'indices', 'operator', 'output', 'run', 'self', 'updates']
+decorator host
+expression 0 subscript 1560:4-1560:32

@@ -1,0 +1,6 @@
+function launch_qwen_sparse_attn_block_128_bf16
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/qwen_sparse_attn/qwen_sparse_attn.py
+digest df89c8c7676d114be65dbeb024394aff823abe6acd41b07d50b866448b959cbc
+reserved_names ['QwenSparseAttnBlock128', 'attn_mask', 'bfloat16', 'dtypes', 'group', 'k', 'launch_qwen_sparse_attn_block_128_bf16', 'metadata', 'out', 'pages', 'q', 'queries_per_tile', 'scale', 'tasks', 'used_core_num', 'v']
+decorator host
+expression 0 subscript 1114:4-1121:20

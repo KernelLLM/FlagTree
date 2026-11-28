@@ -1,0 +1,6 @@
+function _launch_axis0_owner_add
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/scatter_elements/scatter_elements.py
+digest a8ac9968eaa9571d2e0336e2ead46f20fb7b85e105a6fe12f779955a5db63527
+reserved_names ['NATIVE_THREAD_COUNT', '_launch_axis0_owner_add', '_scatter_axis0_owner_add_simt', 'axis_inner_elements', 'cb', 'core_num', 'data', 'dim3', 'index_axis_size', 'indices', 'output', 'updates']
+decorator host
+expression 0 subscript 1108:4-1108:82

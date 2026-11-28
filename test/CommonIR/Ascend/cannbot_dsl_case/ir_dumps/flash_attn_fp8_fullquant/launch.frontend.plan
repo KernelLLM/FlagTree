@@ -1,0 +1,6 @@
+function FlashAttnFp8FullQuantLauncher.launch
+source /dev/shm/yuansheng/CANN/cannbot-dsl/samples/flash_attn_fp8_fullquant/flash_attn_fp8_fullquant.py
+digest 9bb7bd3fa720fb2daca0a35cd0e1261a470d707f7b1bf3326f313dcd05d2e7ca
+reserved_names ['FlashAttnFp8FullQuantKernel', 'batch', 'block_dim', 'block_size', 'd', 'depths', 'gm_block_table', 'gm_core_task_ranges', 'gm_key_cache', 'gm_key_value_lengths', 'gm_log_quant_scale_p', 'gm_nz_gather_indices', 'gm_output', 'gm_query', 'gm_query_dequant_scale', 'gm_query_sequence_boundaries', 'gm_value_cache', 'gm_value_dequant_scale', 'head_group', 'launch', 'layout', 'm_base_size', 'mask_tail', 'n_q_heads', 'op', 's2_base_size', 'self']
+decorator host
+expression 0 subscript 1392:4-1392:17
